@@ -121,29 +121,25 @@
              (expected-values (yaml-kit:parse-all
                                (conformance-file-string
                                 (conformance-case-out case))))
-             (single-document
-               (lambda (documents label)
-                 (cond
-                   ((null documents) :missing)
-                   ((cdr documents)
-                    (error "dumper-e2e requires one ~A document, got ~D"
-                           label (length documents)))
-                   (t (car documents)))))
-             (value (funcall single-document values "input"))
-             (expected (funcall single-document expected-values "expected"))
-             (actual (if (eq value :missing)
-                         :missing
-                         (let ((emitted (yaml-kit:emit value)))
-                           (funcall single-document
-                                    (yaml-kit:parse-all emitted)
-                                    "emitted")))))
-        (let ((passed (and (conformance-values-equal-p actual value)
-                           (conformance-values-equal-p actual expected))))
+             (roundtrip-values
+               (mapcar (lambda (value)
+                         (let ((documents
+                                 (yaml-kit:parse-all (yaml-kit:emit value))))
+                           (unless (= (length documents) 1)
+                             (error "dumper-e2e emitted ~D documents for one input value"
+                                    (length documents)))
+                           (car documents)))
+                       values))
+             (value-column (if values values :missing))
+             (actual-column (if roundtrip-values roundtrip-values :missing))
+             (expected-column (if expected-values expected-values :missing)))
+        (let ((passed (and (conformance-values-equal-p actual-column value-column)
+                           (conformance-values-equal-p actual-column expected-column))))
           (values passed
                   (unless passed
-                    (or (unless (conformance-values-equal-p actual value)
-                          (conformance-loader-difference value actual))
-                        (conformance-loader-difference expected actual))))))
+                    (or (unless (conformance-values-equal-p actual-column value-column)
+                          (conformance-loader-difference value-column actual-column))
+                        (conformance-loader-difference expected-column actual-column))))))
     (error (condition) (values nil condition))))
 
 (defun conformance-emitter-isolated-result (case)
