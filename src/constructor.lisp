@@ -48,12 +48,14 @@
             sb-kernel::double-float-positive-infinity)
            ((member text '("-.inf" "-.Inf" "-.INF") :test #'string=)
             sb-kernel::double-float-negative-infinity)
-           (t (multiple-value-bind (number end)
+           (t
+            (let ((*read-default-float-format* 'double-float))
+              (multiple-value-bind (number end)
                   (read-from-string text)
                 (unless (= end (length text))
                   (error 'yaml-compose-error))
                 (coerce number 'double-float))))))
-    (error () (error 'yaml-compose-error))))
+    (error () (error 'yaml-compose-error)))))
 
 (defun %construct-scalar (node schema)
   (let* ((text (scalar-node-value node))
@@ -89,11 +91,18 @@
            (let ((tag (node-tag object)))
              (or (null tag)
                  (member tag '("!" "?") :test #'string=)
+                 (string= tag expected)
                  (and (string= expected "tag:yaml.org,2002:seq")
                       (string= tag "!!seq"))
                  (and (string= expected "tag:yaml.org,2002:map")
                       (string= tag "!!map"))
-                 (string= tag expected))))
+                 (not (member tag
+                              '("!!str" "!!int" "!!float" "!!bool" "!!null"
+                                "tag:yaml.org,2002:str" "tag:yaml.org,2002:int"
+                                "tag:yaml.org,2002:float" "tag:yaml.org,2002:bool"
+                                "tag:yaml.org,2002:null" "!!seq" "!!map"
+                                "tag:yaml.org,2002:seq" "tag:yaml.org,2002:map")
+                              :test #'string=))))))
          (walk (object)
            (cond
              ((scalar-node-p object) (%construct-scalar object schema))
@@ -185,4 +194,4 @@
                                                (eq duplicate-key-policy :first))
                                    (setf (gethash key table) value))))))))))))
              (t (error 'yaml-compose-error)))))
-      (walk node))))
+      (walk node)))
