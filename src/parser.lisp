@@ -168,6 +168,8 @@
 
 (define-parser-state yaml-parser-parse-node-block (parser) "yaml_parser_parse_node."
   (parser-node parser t nil))
+(define-parser-state yaml-parser-parse-node-block-indentless (parser) "yaml_parser_parse_node."
+  (parser-node parser t t))
 (define-parser-state yaml-parser-parse-node-flow (parser) "yaml_parser_parse_node."
   (parser-node parser nil nil))
 
@@ -201,7 +203,7 @@
                (parser-push parser #'yaml-parser-parse-block-mapping-value)
                (if (member (token-kind (parser-peek parser)) '(:value :block-entry :block-end))
                    (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-value)
-                   #'yaml-parser-parse-node-block)))))
+                   #'yaml-parser-parse-node-block-indentless)))))
 
 (define-parser-state yaml-parser-parse-block-mapping-value (parser)
   "yaml_parser_parse_block_mapping_value."
@@ -210,7 +212,7 @@
     (parser-push parser #'yaml-parser-parse-block-mapping-key)
     (if (member (token-kind (parser-peek parser)) '(:key :block-entry :block-end))
         (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-key)
-        #'yaml-parser-parse-node-block)))
+        #'yaml-parser-parse-node-block-indentless)))
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry (parser)
   "yaml_parser_parse_flow_sequence_entry."

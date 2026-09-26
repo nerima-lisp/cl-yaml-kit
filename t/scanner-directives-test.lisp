@@ -24,6 +24,10 @@
 
 (scanner-directive-cases
   ("YAML version" "%YAML 1.2\n" ((:version-directive nil nil nil 1 2)))
+  ("reserved directive 6LVF" "%FOO  bar baz # Should be ignored\n--- \"foo\"\n"
+   ((:document-start nil nil nil nil nil) (:scalar "foo" nil nil nil nil nil)))
+  ("reserved directive 2LFX" "%FOO  bar baz # Should be ignored\n---\n\"foo\"\n"
+   ((:document-start nil nil nil nil nil) (:scalar "foo" nil nil nil nil nil)))
   ("TAG directive" "%TAG !e! tag:example.com,2000:\n"
    ((:tag-directive "tag:example.com,2000:" "!e!" nil nil nil)))
   ("anchors and aliases" "&a *a\n"

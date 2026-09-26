@@ -78,6 +78,7 @@
   '(("Example 8.3 indicator zero" "|0\n  value\n")
     ("invalid block scalar header" "|x\n  value\n")
     ("leading content line is not indented" "- |\ntext\n")
+    ("tab is not valid block indentation" "- |\n\ttext\n")
     ("leading blank line has too much indentation"
      "- |\n   \n  text\n")
     ("following text line is less indented"

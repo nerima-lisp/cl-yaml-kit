@@ -21,10 +21,21 @@
              (make-token :tag-directive start end :handle handle :value prefix))))
         (t
          ;; YAML 1.2.2 reserves unknown directives; consume their line.
-         (scan-directive-end s start)
-         (if (sc-check s #\%) (scan-directive s)
-             (sc-error s "while scanning a directive" start
-                       "found reserved directive name")))))))
+         (loop until (sc-breakz-p s) do (sc-skip s))
+         (when (sc-break-p s) (sc-skip-line s))
+         (cond
+           ((sc-check s #\%) (scan-directive s))
+           ;; A directive must be followed by a document start marker.  The
+           ;; fetcher already has a token slot reserved for this directive, so
+           ;; return the marker here after ignoring the reserved directive.
+           ((and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2)
+                 (sc-blankz-p s 3))
+            (let ((document-start (sc-mark s)))
+              (dotimes (i 3) (sc-skip s))
+              (make-token :document-start document-start (sc-mark s))))
+           (t
+            (sc-error s "while scanning a directive" start
+                      "found reserved directive name"))))))))
 
 (defun scan-directive-end (s start)
   (loop while (sc-blank-p s) do (sc-skip s))

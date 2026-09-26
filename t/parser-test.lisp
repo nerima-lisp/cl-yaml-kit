@@ -42,4 +42,13 @@
   ("parses a scalar token stream"
    ((:stream-start) (:scalar :value "hello" :style :plain) (:stream-end))
    (yaml-kit:stream-start-event yaml-kit:document-start-event
-    yaml-kit:scalar-event yaml-kit:document-end-event yaml-kit:stream-end-event)))
+    yaml-kit:scalar-event yaml-kit:document-end-event yaml-kit:stream-end-event))
+  ("parses an indentless sequence as a mapping value"
+   ((:stream-start) (:block-mapping-start) (:key) (:scalar :value "a" :style :plain)
+    (:value) (:block-entry) (:scalar :value "b" :style :plain) (:block-end)
+    (:block-end) (:stream-end))
+   (yaml-kit:stream-start-event yaml-kit:document-start-event
+    yaml-kit:mapping-start-event yaml-kit:scalar-event
+    yaml-kit:sequence-start-event yaml-kit:scalar-event
+    yaml-kit:sequence-end-event yaml-kit:mapping-end-event
+    yaml-kit:document-end-event yaml-kit:stream-end-event)))

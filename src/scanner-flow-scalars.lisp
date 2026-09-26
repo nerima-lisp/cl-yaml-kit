@@ -39,7 +39,8 @@
   (sc-skip s)
   (let ((c (sc-char s)))
     (cond
-      ((and (< (char-code c) 128) (aref *flow-escape-table* (char-code c)))
+      ((and (< (char-code c) 128)
+            (not (null (aref *flow-escape-table* (char-code c)))))
        (vector-push-extend (code-char (aref *flow-escape-table* (char-code c))) out)
        (sc-skip s))
       ((member c '(#\x #\u #\U))

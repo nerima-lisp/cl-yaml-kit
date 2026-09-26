@@ -60,6 +60,24 @@
 (describe "scanner token kinds"
   (scanner-cases *scanner-token-cases*))
 
+(describe "token payload validation"
+  (it "rejects a non-string value"
+    (let ((mark (yaml-kit:make-mark 0 0 0)))
+      (expect (handler-case (yaml-kit:make-token :scalar mark mark :value 1)
+                (type-error () t)) :to-be-truthy)))
+  (it "rejects a non-string handle"
+    (let ((mark (yaml-kit:make-mark 0 0 0)))
+      (expect (handler-case (yaml-kit:make-token :tag mark mark :handle 1)
+                (type-error () t)) :to-be-truthy)))
+  (it "rejects a non-string suffix"
+    (let ((mark (yaml-kit:make-mark 0 0 0)))
+      (expect (handler-case (yaml-kit:make-token :tag mark mark :suffix 1)
+                (type-error () t)) :to-be-truthy)))
+  (it "rejects an invalid scalar style"
+    (let ((mark (yaml-kit:make-mark 0 0 0)))
+      (expect (handler-case (yaml-kit:make-token :scalar mark mark :style :invalid)
+                (type-error () t)) :to-be-truthy))))
+
 (describe "scanner fixture smoke test"
   (it "tokenizes every available non-error fixture without hanging"
     (let ((root (uiop:getenv "YAML_TEST_SUITE")) (checked 0))

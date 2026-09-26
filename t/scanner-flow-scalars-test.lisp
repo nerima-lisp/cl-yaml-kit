@@ -22,6 +22,8 @@
   ("single quote escape" "'it''s'" (("it's" :single-quoted)))
   ("double quote escapes" "\"\\n\\t\\\\\"" ((#.(format nil "~C~C~C" #\Newline #\Tab #\\) :double-quoted)))
   ("hex escapes" "\"\\x41\\u0042\\U00000043\"" (("ABC" :double-quoted)))
+  ("hex escape for NUL" "\"\\x00A\""
+   ((#.(format nil "~CA" #\Nul) :double-quoted)))
   ("plain colon in word" "a:b" (("a:b" :plain)))
   ("plain folding" "one\ntwo" (("one two" :plain))))
 
