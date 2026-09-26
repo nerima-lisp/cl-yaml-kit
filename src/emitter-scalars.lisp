@@ -90,7 +90,13 @@
 
 (defun %plain-safe-p (value &key flow tag)
   (let ((analysis (%scalar-analysis value)))
-    (and (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
+    (and (or (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
+             (and tag
+                  (member tag '("tag:yaml.org,2002:int"
+                                "tag:yaml.org,2002:float") :test #'string=)
+                  (> (length value) 1)
+                  (char= (char value 0) #\-)
+                  (not (%yaml-blank-p (char value 1)))))
          (or (and tag
                   (string= tag "tag:yaml.org,2002:str")
                   (string= (resolve-plain-scalar-tag value :core)
@@ -111,9 +117,7 @@
     (when (and (eq style :plain)
                (not (and (null tag) (getf analysis :multiline)))
                (or (zerop (length value))
-                   (not (and (if flow (getf analysis :flow-plain)
-                                  (getf analysis :block-plain))
-                             (%plain-safe-p value :flow flow :tag tag)))))
+                   (not (%plain-safe-p value :flow flow :tag tag))))
       (setf style :single-quoted))
     (when (and tag
                (getf analysis :multiline)

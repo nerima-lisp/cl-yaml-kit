@@ -303,11 +303,13 @@
              (setf (caar (cdr stack)) :map))
            (when (flow-p) (%emit-text context "[")))
           ((mapping-start-event-p event)
-           (unless (and stack
-                        (eq (caar stack) :seq)
-                        (zerop (cdar stack))
-                        (not (emitter-context-line-start context)))
-             (start-value))
+           (start-value)
+           (when (and stack
+                      (eq (caar stack) :map)
+                      (oddp (cdar stack))
+                      (eq (mapping-start-event-style event) :block)
+                      (not (emitter-context-line-start context)))
+             (%emit-newline context))
            (%emit-prefix event context)
            (push (cons (if (or (eq (mapping-start-event-style event) :flow)
                                (and (cdr remaining)
