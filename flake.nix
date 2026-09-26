@@ -14,6 +14,10 @@
       url = "github:nerima-lisp/cl-regex-kit/v2.1.1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    cl-codec-kit = {
+      url = "github:nerima-lisp/cl-codec-kit/v0.5.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     cl-json-kit = {
       url = "github:nerima-lisp/cl-json-kit/v1.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -34,6 +38,7 @@
       cl-nix-forge,
       cl-weave,
       cl-regex-kit,
+      cl-codec-kit,
       cl-json-kit,
       yaml-test-suite,
       treefmt-nix,
@@ -47,7 +52,10 @@
       ];
       asd = ./cl-yaml-kit.asd;
       root = ./.;
-      lispDependencies = ctx: [ cl-regex-kit.packages.${ctx.system}.cl-regex-kit ];
+      lispDependencies = ctx: [
+        cl-regex-kit.packages.${ctx.system}.cl-regex-kit
+        cl-codec-kit.packages.${ctx.system}.cl-codec-kit
+      ];
       lispCheckDependencies = ctx: [
         cl-weave.packages.${ctx.system}.cl-weave
         cl-json-kit.packages.${ctx.system}.cl-json-kit
