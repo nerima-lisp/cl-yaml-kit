@@ -193,8 +193,10 @@
 (define-parser-state yaml-parser-parse-block-mapping-key (parser)
   "yaml_parser_parse_block_mapping_key."
   (let ((token (parser-peek parser)))
-    (if (eq (token-kind token) :block-end)
-        (progn (parser-next parser) (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token))) (decf (parser-depth parser)) (parser-pop parser))
+    (if (member (token-kind token) '(:block-end :block-entry))
+        (progn (when (eq (token-kind token) :block-end) (parser-next parser))
+               (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token)))
+               (decf (parser-depth parser)) (parser-pop parser))
         (progn (when (eq (token-kind token) :key) (parser-next parser))
                (parser-push parser #'yaml-parser-parse-block-mapping-value)
                (if (member (token-kind (parser-peek parser)) '(:value :block-entry :block-end))
@@ -295,7 +297,7 @@
 (defun map-events (handler input &key (max-input-length 104857600) (max-depth 256) (max-scalar-length 16777216))
   (let ((text (%parser-input-string input)))
     (when (> (length text) max-input-length) (error 'yaml-resource-limit-error :limit-name "input length" :limit max-input-length :actual (length text)))
-    (let ((parser (make-parser% :scanner (make-scanner text :max-input-length max-input-length)
+    (let ((parser (make-parser% :scanner (make-scanner text)
                                 :state #'yaml-parser-parse-stream-start :states nil :marks nil
                                 :handler handler :directives nil :version nil :depth 0
                                 :max-depth max-depth :max-scalar-length max-scalar-length)))
