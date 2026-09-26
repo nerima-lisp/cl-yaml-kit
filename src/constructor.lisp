@@ -32,10 +32,10 @@
                 (sign (if (and (plusp sign-position)
                                (char= (char text 0) #\-)) -1 1)))
            (cond
-             ((and (< sign-position (length text))
+             ((and (<= (+ sign-position 2) (length text))
                    (string-equal (subseq text sign-position (+ sign-position 2)) "0o"))
               (* sign (parse-integer text :radix 8 :start (+ sign-position 2))))
-             ((and (< sign-position (length text))
+             ((and (<= (+ sign-position 2) (length text))
                    (string-equal (subseq text sign-position (+ sign-position 2)) "0x"))
               (* sign (parse-integer text :radix 16 :start (+ sign-position 2))))
              (t (parse-integer text)))))
@@ -102,7 +102,7 @@
                                 "tag:yaml.org,2002:float" "tag:yaml.org,2002:bool"
                                 "tag:yaml.org,2002:null" "!!seq" "!!map"
                                 "tag:yaml.org,2002:seq" "tag:yaml.org,2002:map")
-                              :test #'string=))))))
+                              :test #'string=)))))
          (walk (object)
            (cond
              ((scalar-node-p object) (%construct-scalar object schema))
@@ -194,4 +194,4 @@
                                                (eq duplicate-key-policy :first))
                                    (setf (gethash key table) value))))))))))))
              (t (error 'yaml-compose-error)))))
-      (walk node)))
+      (walk node))))
