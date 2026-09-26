@@ -104,12 +104,15 @@
   (let* ((analysis (%scalar-analysis value))
          (style (if (eq requested :plain) :plain requested)))
     (when (and (eq style :plain)
+               (not (and (null tag) (getf analysis :multiline)))
                (or (zerop (length value))
-                   (not (%plain-safe-p value :flow flow :tag tag))))
+                   (not (and (if flow (getf analysis :flow-plain)
+                                  (getf analysis :block-plain))
+                             (or (null tag)
+                                 (%plain-safe-p value :flow flow :tag tag))))))
       (setf style :single-quoted))
     (when (and (eq style :single-quoted)
-               (or (not (getf analysis :single-quoted))
-                   (getf analysis :multiline)))
+               (not (getf analysis :single-quoted)))
       (setf style :double-quoted))
     (when (and (member style '(:literal :folded))
                (or flow (not (getf analysis :block))))
@@ -142,13 +145,38 @@
                        (%write-hex-escape stream (if (= code #xfeff) "\\u" "\\x")
                                            code (if (= code #xfeff) 4 2)))
                       (t (write-char character stream))))))
+  (when (and (find #\Newline value)
+             (%yaml-blank-p (char value 0))
+             (not (%yaml-blank-p (char value (1- (length value))))))
+    (write-char #\Space stream))
   (write-char #\" stream))
 
-(defun %write-single-quoted (value stream)
+(defun %write-plain (value stream)
+  (loop for character across value
+        do (if (char= character #\Newline)
+               (progn
+                 (write-char #\Newline stream)
+                 (write-char #\Newline stream))
+               (write-char character stream))))
+
+(defun %write-single-quoted (value stream &optional (indent 0))
   (write-char #\' stream)
-  (loop for character across value do
-    (write-char character stream)
-    (when (char= character #\') (write-char #\' stream)))
+  (let ((breaks nil))
+    (loop for character across value do
+      (if (char= character #\Newline)
+          (progn
+            (unless breaks (write-char #\Newline stream))
+            (write-char #\Newline stream)
+            (setf breaks t))
+          (progn
+            (when breaks
+              (write-string (make-string indent :initial-element #\Space)
+                            stream)
+              (setf breaks nil))
+            (write-char character stream)
+            (when (char= character #\') (write-char #\' stream)))))
+    (when breaks
+      (write-string (make-string indent :initial-element #\Space) stream)))
   (write-char #\' stream))
 
 (defun %write-block-scalar (value stream folded indent)
@@ -158,16 +186,25 @@
                                (%yaml-line-break-p (char value (- (length value) 2)))) "+" ""))
                      (t "-"))))
     (write-char (if folded #\> #\|) stream)
-    (when (and (plusp (length value))
-               (or (%yaml-blank-p (char value 0))
-                   (%yaml-line-break-p (char value 0))))
-      (write-char #\2 stream))
+    (let ((first-content
+            (loop for start = 0 then (1+ end)
+                  for end = (position #\Newline value :start start)
+                  for line = (subseq value start (or end (length value)))
+                  unless (zerop (length line))
+                    do (return line)
+                  when (null end) do (return nil))))
+      (when (and first-content
+                 (or (%yaml-blank-p (char first-content 0))
+                     (char= (char first-content 0) #\#)))
+        (write-char #\2 stream)))
     (write-string chomp stream)
     (write-char #\Newline stream)
     (loop for start = 0 then (1+ end)
           for end = (position #\Newline value :start start)
           do (when (>= start (length value)) (return))
-             (write-string (make-string indent :initial-element #\Space) stream)
+             (unless (or (= start (length value))
+                         (and end (= start end)))
+               (write-string (make-string indent :initial-element #\Space) stream))
              (when end
                (write-string value stream :start start :end end)
                (write-char #\Newline stream))
@@ -181,8 +218,8 @@
 
 (defun %write-scalar (value style stream &optional (indent 0))
   (case style
-    (:plain (write-string value stream))
-    (:single-quoted (%write-single-quoted value stream))
+    (:plain (%write-plain value stream))
+    (:single-quoted (%write-single-quoted value stream indent))
     (:double-quoted (%write-double-quoted value stream))
     (:literal (%write-block-scalar value stream nil indent))
     (:folded (%write-block-scalar value stream t indent))))
