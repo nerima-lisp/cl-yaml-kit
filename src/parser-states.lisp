@@ -1,5 +1,29 @@
-;;;; src/parser-states.lisp
 (in-package #:yaml-kit)
 
-(defstruct (reader-parser (:constructor make-reader-parser%))
-  state depth)
+(defstruct (parser (:constructor make-parser%))
+  scanner state states marks handler directives version depth
+  max-depth max-scalar-length)
+
+(defmacro define-parser-state (name (parser &rest arguments) &body body)
+  `(defun ,name (,parser ,@arguments)
+     (declare (optimize (speed 3) (safety 1)))
+     ,@body))
+
+(declaim (inline parser-peek parser-next parser-push parser-pop parser-emit))
+(defun parser-peek (parser) (scanner-peek-token (parser-scanner parser)))
+(defun parser-next (parser) (scanner-next-token (parser-scanner parser)))
+(defun parser-push (parser state) (push state (parser-states parser)))
+(defun parser-finish (parser)
+  (declare (ignore parser))
+  nil)
+(defun parser-pop (parser)
+  (or (pop (parser-states parser)) #'parser-finish))
+(defun parser-emit (parser event)
+  (funcall (parser-handler parser) event)
+  nil)
+(defun parser-error (token context)
+  (let ((mark (and token (token-start-mark token))))
+    (error 'yaml-parse-error :line (if mark (mark-line mark) 1)
+           :column (if mark (mark-column mark) 1)
+           :offset (if mark (mark-offset mark) 0)
+           :context context)))

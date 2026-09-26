@@ -41,7 +41,7 @@
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
                (:file "nodes-test") (:file "reader-test")
-               (:file "scanner-test")
+               (:file "scanner-test") (:file "parser-test")
                (:file "scanner-flow-scalars-test")
                (:file "loader-test") (:file "dumper-test")
                (:file "conformance/events") (:file "conformance/values")
