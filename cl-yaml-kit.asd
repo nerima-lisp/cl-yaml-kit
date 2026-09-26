@@ -19,6 +19,7 @@
                (:file "tokens")
                (:file "scanner-state") (:file "scanner-directives")
                (:file "scanner-block-scalars") (:file "scanner-flow-scalars")
+               (:file "scanner-fetch")
                (:file "scanner")
                (:file "parser-states") (:file "parser")
                (:file "composer") (:file "schema") (:file "constructor")
