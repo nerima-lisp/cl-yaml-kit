@@ -34,13 +34,13 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-yaml-kit" "cl-weave")
+  :depends-on ("cl-yaml-kit" "cl-weave" "cl-json-kit")
   :pathname "t"
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
                (:file "nodes-test") (:file "reader-test")
                (:file "loader-test") (:file "dumper-test")
-               (:file "conformance-test"))
+               (:file "conformance/values") (:file "conformance-test"))
   :perform (test-op (operation component)
              (declare (ignore operation component))
              (unless (uiop:symbol-call :cl-yaml-kit/test :run-tests)
