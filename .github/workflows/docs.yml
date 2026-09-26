@@ -1,0 +1,17 @@
+name: Documentation
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "flake.nix", "flake.lock"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/nix-setup
+      - name: Build documentation
+        run: nix build .#docs --print-build-logs

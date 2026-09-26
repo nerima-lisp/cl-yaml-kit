@@ -1,0 +1,11 @@
+# Compiled Lisp and generated outputs
+*.fasl
+*.dfsl
+*.fas
+*.lib
+/result
+/result-*
+/site/
+tmp/
+.serena/cache/
+.worktrees/

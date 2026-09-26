@@ -1,0 +1,21 @@
+site_name: cl-yaml-kit
+site_description: YAML 1.2.2 reader and writer for Common Lisp
+site_author: cl-yaml-kit contributors
+site_url: https://nerima-lisp.github.io/cl-yaml-kit/
+repo_name: nerima-lisp/cl-yaml-kit
+repo_url: https://github.com/nerima-lisp/cl-yaml-kit
+docs_dir: src
+site_dir: ../site
+strict: true
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Guide:
+      - Pipeline: guide/pipeline.md
+  - Reference:
+      - API: reference/api.md
+      - Architecture: reference/architecture.md
+  - Project:
+      - Development: project/development.md
