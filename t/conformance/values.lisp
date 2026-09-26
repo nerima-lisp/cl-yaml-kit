@@ -47,15 +47,27 @@
   (equal (conformance-canonical-value actual)
          (conformance-canonical-value expected)))
 
-(defun conformance-loader-result (case)
+(defun conformance-loader-isolated-result (case)
+  (handler-case
+      (let* ((events (conformance-events
+                      (conformance-file-string (conformance-case-event case))))
+             (actual (yaml-kit:parse-all events))
+             (expected (conformance-json-value
+                        (conformance-case-json case))))
+        (let ((passed (conformance-values-equal-p actual (list expected))))
+          (values passed (unless passed "isolated loader value mismatch"))))
+    (error (condition) (values nil condition))))
+
+(defun conformance-loader-e2e-result (case)
   (handler-case
       (let ((actual (conformance-loader-value case))
             (expected (conformance-json-value
                        (conformance-case-json case))))
-        (values (conformance-values-equal-p actual (list expected)) nil))
+        (let ((passed (conformance-values-equal-p actual (list expected))))
+          (values passed (unless passed "end-to-end loader value mismatch"))))
     (error (condition) (values nil condition))))
 
-(defun conformance-output-result (case)
+(defun conformance-dumper-e2e-result (case)
   (handler-case
       (let* ((value (conformance-loader-value case))
              (emitted (yaml-kit:emit value))
@@ -63,15 +75,18 @@
              (expected (yaml-kit:parse-all
                         (conformance-file-string
                          (conformance-case-out case)))))
-        (values (and (conformance-values-equal-p actual value)
-                     (conformance-values-equal-p actual expected)) nil))
+        (let ((passed (and (conformance-values-equal-p actual value)
+                           (conformance-values-equal-p actual expected))))
+          (values passed (unless passed "dumper semantic value mismatch"))))
     (error (condition) (values nil condition))))
 
-(defun conformance-emitter-result (case)
+(defun conformance-emitter-isolated-result (case)
   (handler-case
-      (let* ((value (conformance-loader-value case))
-             (emitted (yaml-kit:emit value))
+      (let* ((events (conformance-events
+                      (conformance-file-string (conformance-case-event case))))
+             (emitted (yaml-kit:emit-events events))
              (expected (conformance-file-string
                         (conformance-case-emit case))))
-        (values (string= emitted expected) nil))
+        (let ((passed (string= emitted expected)))
+          (values passed (unless passed "isolated emitter text mismatch"))))
     (error (condition) (values nil condition))))

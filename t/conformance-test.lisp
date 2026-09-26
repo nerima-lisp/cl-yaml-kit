@@ -9,7 +9,8 @@
 
 (defvar *conformance-exclusions* nil)
 
-(defparameter *conformance-stage-names* '(:reader :loader :dumper :emitter))
+(defparameter *conformance-stage-names*
+  '(:reader :loader-isolated :loader-e2e :emitter-isolated :dumper-e2e))
 
 (defun conformance-source-root ()
   (handler-case
@@ -91,98 +92,6 @@
   (member stage (cdr (assoc (conformance-case-id case) exclusions
                             :test #'string-equal))))
 
-(defun conformance-unescape (text)
-  (with-output-to-string (out)
-    (loop for i from 0 below (length text)
-          for character = (char text i)
-          do (if (and (char= character #\\) (< (1+ i) (length text)))
-                 (progn
-                   (incf i)
-                   (write-char (case (char text i)
-                                 (#\n #\Newline) (#\t #\Tab) (#\r #\Return)
-                                 (#\b #\Backspace) (otherwise (char text i))) out))
-                 (write-char character out)))))
-
-(defun conformance-bracket-fields (text)
-  (loop with position = 0
-        while (and (< position (length text))
-                   (char= (char text position) #\Space))
-        do (incf position)
-        when (and (< position (length text))
-                  (char= (char text position) #\[))
-          collect (let ((end (or (position #\] text :start position)
-                                 (error "Malformed conformance event field: ~S" text))))
-                    (prog1 (subseq text (1+ position) end)
-                      (setf position (1+ end))))))
-
-(defun conformance-event-line (line)
-  (let* ((text (string-trim '(#\Space #\Tab #\Return) line))
-         (kind (subseq text 0 (min 4 (length text)))))
-    (cond
-      ((string= kind "+STR") '(:stream-start))
-      ((string= kind "-STR") '(:stream-end))
-      ((string= kind "+DOC") (list :document-start (not (null (search "---" text)))))
-      ((string= kind "-DOC") (list :document-end (not (null (search "..." text)))))
-      ((or (string= kind "+SEQ") (string= kind "+MAP"))
-       (let ((fields (conformance-bracket-fields (subseq text 4))))
-         (list (if (char= (char kind 1) #\S) :sequence-start :mapping-start)
-               (not (null (search (if (char= (char kind 1) #\S) "[]" "{}") text)))
-               (and (first (rest fields))
-                    (subseq (first (rest fields)) 1))
-               (and (second (rest fields))
-                    (subseq (second (rest fields)) 1
-                            (1- (length (second (rest fields)))))))))
-      ((or (string= kind "-SEQ") (string= kind "-MAP"))
-       (list (if (char= (char kind 1) #\S) :sequence-end :mapping-end)))
-      ((string= kind "=ALI")
-       (list :alias (string-left-trim '(#\Space #\*) (subseq text 4))))
-      ((string= kind "=VAL")
-       (let* ((rest (subseq text 4))
-              (fields (conformance-bracket-fields rest))
-              (start (or (position-if (lambda (character)
-                                        (member character '(#\: #\' #\" #\| #\>)))
-                                      rest)
-                          (length rest)))
-              (value (string-left-trim '(#\Space) (subseq rest start))))
-         (list :scalar (first fields) (second fields)
-               (when (plusp (length value)) (char value 0))
-               (conformance-unescape (if (plusp (length value))
-                                         (subseq value 1) "")))))
-      (t (error "Unknown conformance event line: ~S" line)))))
-
-(defun conformance-event-signatures (text)
-  (loop for line in (uiop:split-string text :separator '(#\Newline))
-        unless (zerop (length (string-trim '(#\Space #\Tab #\Return) line)))
-          collect (conformance-event-line line)))
-
-(defun conformance-event (event)
-  (cond
-    ((yaml-kit:stream-start-event-p event) '(:stream-start))
-    ((yaml-kit:stream-end-event-p event) '(:stream-end))
-    ((yaml-kit:document-start-event-p event)
-     (list :document-start (yaml-kit:document-start-event-explicit-p event)))
-    ((yaml-kit:document-end-event-p event)
-     (list :document-end (yaml-kit:document-end-event-explicit-p event)))
-    ((yaml-kit:sequence-start-event-p event)
-     (list :sequence-start (eq (yaml-kit:sequence-start-event-style event) :flow)
-           (yaml-kit:sequence-start-event-anchor event)
-           (yaml-kit:sequence-start-event-tag event)))
-    ((yaml-kit:mapping-start-event-p event)
-     (list :mapping-start (eq (yaml-kit:mapping-start-event-style event) :flow)
-           (yaml-kit:mapping-start-event-anchor event)
-           (yaml-kit:mapping-start-event-tag event)))
-    ((yaml-kit:sequence-end-event-p event) '(:sequence-end))
-    ((yaml-kit:mapping-end-event-p event) '(:mapping-end))
-    ((yaml-kit:alias-event-p event)
-     (list :alias (yaml-kit:alias-event-anchor event)))
-    ((yaml-kit:scalar-event-p event)
-     (list :scalar (yaml-kit:scalar-event-anchor event)
-           (yaml-kit:scalar-event-tag event)
-           (case (yaml-kit:scalar-event-style event)
-             (:plain #\:) (:single-quoted #\') (:double-quoted #\")
-             (:literal #\|) (:folded #\>) (otherwise #\:))
-           (yaml-kit:scalar-event-value event)))))
-
 (defun conformance-reader-result (case)
   (handler-case
       (let ((events nil))
@@ -190,14 +99,13 @@
          (lambda (event) (push event events))
          (conformance-file-string (conformance-case-input case)))
         (setf events (nreverse events))
-        (values (if (conformance-case-error case)
-                    nil
-                    (and (conformance-case-event case)
-                         (equal (mapcar #'conformance-event events)
-                                (conformance-event-signatures
-                                 (conformance-file-string
-                                  (conformance-case-event case))))))
-                nil))
+        (let ((passed (and (not (conformance-case-error case))
+                           (conformance-case-event case)
+                           (equal (mapcar #'conformance-event-signature events)
+                                  (conformance-event-signatures
+                                   (conformance-file-string
+                                    (conformance-case-event case)))))))
+          (values passed (unless passed "event signature mismatch"))))
     (error (condition) (values (and (conformance-case-error case) t) condition))))
 
 (defun conformance-load-result (case)
@@ -218,36 +126,91 @@
      (when (or (conformance-case-event case) (conformance-case-error case))
        (multiple-value-bind (passed condition) (conformance-reader-result case)
          (values t passed condition))))
-    (:loader
+    (:loader-isolated
+     (when (and (conformance-case-event case) (conformance-case-json case))
+       (multiple-value-bind (passed condition) (conformance-loader-isolated-result case)
+         (values t passed condition))))
+    (:loader-e2e
      (when (conformance-case-json case)
-       (multiple-value-bind (passed condition) (conformance-loader-result case)
+       (multiple-value-bind (passed condition) (conformance-loader-e2e-result case)
          (values t passed condition))))
-    (:dumper
+    (:dumper-e2e
      (when (conformance-case-out case)
-       (multiple-value-bind (passed condition) (conformance-output-result case)
+       (multiple-value-bind (passed condition) (conformance-dumper-e2e-result case)
          (values t passed condition))))
-    (:emitter
-     (when (conformance-case-emit case)
-       (multiple-value-bind (passed condition) (conformance-emitter-result case)
+    (:emitter-isolated
+     (when (and (conformance-case-event case) (conformance-case-emit case))
+       (multiple-value-bind (passed condition) (conformance-emitter-isolated-result case)
          (values t passed condition))))))
 
 (defun conformance-stage-summary (cases stage exclusions)
   (let ((summary (list :stage stage :total 0 :passed 0 :failed 0 :skipped 0
-                       :excluded 0 :drift 0)))
+                       :excluded 0 :drift 0 :failure-ids nil :drift-ids nil
+                       :failure-causes nil)))
     (dolist (case cases summary)
-      (incf (getf summary :total))
       (multiple-value-bind (applicable passedp condition)
           (conformance-stage-result case stage)
         (declare (ignore condition))
-        (cond
-          ((not applicable) (incf (getf summary :skipped)))
-          ((conformance-excluded-p case stage exclusions)
-           (incf (getf summary :excluded))
-           (if passedp
-               (incf (getf summary :drift))
-               (incf (getf summary :skipped))))
-          (passedp (incf (getf summary :passed)))
-          (t (incf (getf summary :failed))))))))
+        (if (not applicable)
+            (incf (getf summary :skipped))
+            (progn
+              (incf (getf summary :total))
+              (cond
+                ((conformance-excluded-p case stage exclusions)
+                 (incf (getf summary :excluded))
+                 (if passedp
+                     (progn
+                       (incf (getf summary :drift))
+                       (push (conformance-case-id case) (getf summary :drift-ids)))
+                     (progn
+                       (incf (getf summary :failed))
+                       (push (conformance-case-id case) (getf summary :failure-ids))
+                       (push (list (conformance-case-id case)
+                                   (princ-to-string condition))
+                             (getf summary :failure-causes)))))
+                (passedp (incf (getf summary :passed)))
+                (t
+                 (incf (getf summary :failed))
+                 (push (conformance-case-id case) (getf summary :failure-ids))
+                 (push (list (conformance-case-id case)
+                             (princ-to-string condition))
+                       (getf summary :failure-causes))))))))))
+
+(defun conformance-cause-category (condition)
+  (let ((text (string-downcase (or condition ""))))
+    (cond ((search "event" text) :event-conversion)
+          ((or (search "compose" text) (search "construct" text)
+               (search "yaml" text)) :loader-or-schema)
+          ((or (search "emit" text) (search "stream" text)) :emitter-format)
+          ((search "json" text) :expected-value)
+          (t :other))))
+
+(defun conformance-write-status (summaries)
+  (let ((pathname (merge-pathnames ".mediator/research/conformance-status.md"
+                                   (conformance-source-root))))
+    (ensure-directories-exist pathname)
+    (with-open-file (stream pathname :direction :output :if-exists :supersede
+                            :if-does-not-exist :create :external-format :utf-8)
+      (format stream "# Conformance status~%~%")
+      (format stream "Generated by the conformance test run. Re-run with the command in `docs/src/project/development.md`.~%~%")
+      (format stream "| stage | applicable | passed | failed | excluded | drift |~%|---|---:|---:|---:|---:|---:|~%")
+      (dolist (summary summaries)
+        (format stream "| ~A | ~D | ~D | ~D | ~D | ~D |~%"
+                (getf summary :stage) (getf summary :total)
+                (getf summary :passed) (getf summary :failed)
+                (getf summary :excluded) (getf summary :drift)))
+      (dolist (summary summaries)
+        (format stream "~%## ~A failures~%~%IDs: ~{~A~^, ~}~%"
+                (getf summary :stage)
+                (sort (copy-list (getf summary :failure-ids)) #'string<)))
+        (when (member (getf summary :stage) '(:loader-isolated :emitter-isolated))
+          (let ((groups (make-hash-table)))
+            (dolist (failure (getf summary :failure-causes))
+              (push (first failure) (gethash (conformance-cause-category (second failure) ) groups)))
+            (maphash (lambda (category ids)
+                       (format stream "~%### ~A~%~{~A~^, ~}~%"
+                               category (sort ids #'string<)))
+                     groups))))))
 
 (describe "yaml-test-suite conformance harness"
   (it "keeps fixture and exclusion metadata loadable"
@@ -262,7 +225,13 @@
            (summaries (mapcar (lambda (stage)
                                 (conformance-stage-summary cases stage exclusions))
                               *conformance-stage-names*)))
-      (expect (length summaries) :to-be 4)
+      (conformance-write-status summaries)
+      (dolist (summary summaries)
+        (format t "~&conformance ~A: applicable=~D passed=~D failed=~D excluded=~D drift=~D~%"
+                (getf summary :stage) (getf summary :total)
+                (getf summary :passed) (getf summary :failed)
+                (getf summary :excluded) (getf summary :drift)))
+      (expect (length summaries) :to-be 5)
       (expect (every (lambda (summary)
                        (and (zerop (getf summary :failed))
                             (zerop (getf summary :drift))))
