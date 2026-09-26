@@ -86,7 +86,11 @@
               ((and (not single-p) (sc-check s #\\))
                (%flow-escape s out start))
               (t (sc-read s out))))
-      (when (sc-check s quote) (return))
+      (when (sc-check s quote)
+        (when leading-blanks
+          (%flow-fold out leading trailing)
+          (setf leading-blanks nil))
+        (return))
       (loop while (or (sc-blank-p s) (sc-break-p s)) do
         (if (sc-blank-p s)
             (if leading-blanks (sc-skip s) (sc-read s spaces))
@@ -114,6 +118,10 @@
                  (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
                      (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
                  (sc-blankz-p s 3)) (return))
+      (when (and (zerop (scanner-flow-level s))
+                 (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)
+                 (sc-blankz-p s 3))
+        (return))
       ;; A block indicator at the current indentation starts a new node;
       ;; it is not a continuation line of the preceding plain scalar.
       (when (and (zerop (scanner-flow-level s))

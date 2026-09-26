@@ -52,7 +52,7 @@
       ((and (zerop (scanner-column s)) (char= c #\-) (char= c1 #\-)
             (char= c2 #\-) (sc-blankz-p s 3))
        (fetch-document-indicator s :document-start))
-      ((and (zerop (scanner-column s)) (char= c #\.) (char= c1 #\.)
+      ((and (zerop (scanner-flow-level s)) (char= c #\.) (char= c1 #\.)
             (char= c2 #\.) (sc-blankz-p s 3))
        (fetch-document-indicator s :document-end))
       ((char= c #\[) (fetch-flow-collection-start s :flow-sequence-start))

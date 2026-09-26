@@ -149,7 +149,7 @@
              (when (> (parser-depth parser) (parser-max-depth parser))
                (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
              (parser-emit parser (make-mapping-start-event :start-mark start :end-mark (token-end-mark token)
-                                                           :anchor anchor :tag tag :implicit-p (parser-implicit-tag-p tag) :style :flow))
+                                                           :anchor anchor :tag tag :implicit-p (parser-implicit-tag-p tag) :style :block))
              #'yaml-parser-parse-flow-mapping-key)
             (:block-sequence-start
              (unless block (parser-error token "did not find expected node content"))
