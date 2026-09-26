@@ -1,14 +1,13 @@
 ;;;; t/conformance-test.lisp
 (in-package #:cl-yaml-kit/test)
 
-;;;; The yaml-test-suite is intentionally an external fixture.  Keeping the
-;;;; runner useful without the fixture is important for normal package tests,
-;;;; while setting YAML_TEST_SUITE makes the same code exercise the suite.
+;;;; The yaml-test-suite is a required fixture for this test system.  The
+;;;; flake and direct runner both provide YAML_TEST_SUITE explicitly.
 
 (defstruct conformance-case
-  id name directory input event json output error)
+  id name directory input event json out emit error)
 
-(defparameter *conformance-stage-names* '(:reader :loader :dumper))
+(defparameter *conformance-stage-names* '(:reader :loader :dumper :emitter))
 
 (defun conformance-source-root ()
   (handler-case
@@ -51,19 +50,17 @@
      :input (conformance-file directory "in.yaml")
      :event (conformance-file directory "test.event")
      :json (conformance-file directory "in.json")
-     :output (or (conformance-file directory "out.yaml")
-                 (conformance-file directory "emit.yaml"))
+     :out (conformance-file directory "out.yaml")
+     :emit (conformance-file directory "emit.yaml")
      :error (conformance-file directory "error"))))
 
 (defun conformance-cases ()
   (let ((root (conformance-suite-root)))
-    (if root
-        (sort (loop for directory in (directory (merge-pathnames "*/" root))
-                    when (and (uiop:directory-exists-p directory)
-                              (conformance-file directory "in.yaml"))
-                      collect (conformance-case-from-directory directory))
-              #'string< :key #'conformance-case-id)
-        nil)))
+    (sort (loop for directory in (directory (merge-pathnames "*/" root))
+                when (and (uiop:directory-exists-p directory)
+                          (conformance-file directory "in.yaml"))
+                  collect (conformance-case-from-directory directory))
+          #'string< :key #'conformance-case-id)))
 
 (defun conformance-read-exclusions ()
   (let ((pathname (merge-pathnames "t/data/conformance-exclusions.lisp"
@@ -135,7 +132,7 @@
       ((or (string= kind "-SEQ") (string= kind "-MAP"))
        (list (if (char= (char kind 1) #\S) :sequence-end :mapping-end)))
       ((string= kind "=ALI")
-       (list :alias (string-left-trim '(#\Space) (subseq text 4))))
+       (list :alias (string-left-trim '(#\Space #\*) (subseq text 4))))
       ((string= kind "=VAL")
        (let* ((rest (subseq text 4))
               (fields (conformance-bracket-fields rest))
@@ -185,8 +182,11 @@
 
 (defun conformance-reader-result (case)
   (handler-case
-      (let ((events (yaml-kit:parse-events
-                     (conformance-file-string (conformance-case-input case)))))
+      (let ((events nil))
+        (yaml-kit:map-events
+         (lambda (event) (push event events))
+         (conformance-file-string (conformance-case-input case)))
+        (setf events (nreverse events))
         (values (if (conformance-case-error case)
                     nil
                     (and (conformance-case-event case)
@@ -209,30 +209,42 @@
       (values (funcall (symbol-function 'yaml-kit:emit) value) t)
     (error (condition) (values nil condition))))
 
+(defun conformance-stage-result (case stage)
+  (case stage
+    (:reader
+     (when (or (conformance-case-event case) (conformance-case-error case))
+       (multiple-value-bind (passed condition) (conformance-reader-result case)
+         (values t passed condition))))
+    (:loader
+     (when (conformance-case-json case)
+       (multiple-value-bind (passed condition) (conformance-loader-result case)
+         (values t passed condition))))
+    (:dumper
+     (when (conformance-case-out case)
+       (multiple-value-bind (passed condition) (conformance-output-result case)
+         (values t passed condition))))
+    (:emitter
+     (when (conformance-case-emit case)
+       (multiple-value-bind (passed condition) (conformance-emitter-result case)
+         (values t passed condition))))))
+
 (defun conformance-stage-summary (cases stage exclusions)
-  (let ((summary (list :stage stage :total 0 :passed 0 :failed 0 :skipped 0)))
+  (let ((summary (list :stage stage :total 0 :passed 0 :failed 0 :skipped 0
+                       :excluded 0 :drift 0)))
     (dolist (case cases summary)
       (incf (getf summary :total))
-      (cond
-        ((conformance-excluded-p case stage exclusions) (incf (getf summary :skipped)))
-        ((and (eq stage :reader) (fboundp 'yaml-kit:parse-events)
-              (or (conformance-case-event case) (conformance-case-error case)))
-         (multiple-value-bind (passedp condition) (conformance-reader-result case)
-           (declare (ignore condition))
-           (incf (getf summary (if passedp :passed :failed)))))
-        ((and (eq stage :loader) (conformance-case-json case)
-              (fboundp 'yaml-kit:parse))
-         (multiple-value-bind (value result) (conformance-load-result case)
-           (incf (getf summary (if result :passed :failed))))
-        ((and (eq stage :dumper) (conformance-case-output case)
-              (fboundp 'yaml-kit:emit) (fboundp 'yaml-kit:parse))
-         (multiple-value-bind (value loaded) (conformance-load-result case)
-           (if loaded
-               (multiple-value-bind (output dumped) (conformance-dump-result value)
-                 (declare (ignore output))
-                 (incf (getf summary (if dumped :passed :failed))))
-               (incf (getf summary :failed))))
-        (t (incf (getf summary :skipped)))))))
+      (multiple-value-bind (applicable passedp condition)
+          (conformance-stage-result case stage)
+        (declare (ignore condition))
+        (cond
+          ((not applicable) (incf (getf summary :skipped)))
+          ((conformance-excluded-p case stage exclusions)
+           (incf (getf summary :excluded))
+           (if passedp
+               (incf (getf summary :drift))
+               (incf (getf summary :skipped))))
+          (passedp (incf (getf summary :passed)))
+          (t (incf (getf summary :failed)))))))
 
 (describe "yaml-test-suite conformance harness"
   (it "keeps fixture and exclusion metadata loadable"
@@ -241,11 +253,15 @@
       (expect (conformance-exclusions-valid-p cases exclusions) :to-be-truthy)
       (expect (listp (conformance-event-signatures "+STR\n+DOC [---]\n=VAL :hello\n-DOC\n-STR\n"))
               :to-be-truthy)))
-  (it "aggregates reader, loader, and dumper stages"
+  (it "gates reader, loader, dumper, and emitter stages"
     (let* ((cases (conformance-cases))
            (exclusions (conformance-read-exclusions))
            (summaries (mapcar (lambda (stage)
                                 (conformance-stage-summary cases stage exclusions))
                               *conformance-stage-names*)))
-      (expect (length summaries) :to-be 3)
-      (expect (every #'listp summaries) :to-be-truthy))))))
+      (expect (length summaries) :to-be 4)
+      (expect (every (lambda (summary)
+                       (and (zerop (getf summary :failed))
+                            (zerop (getf summary :drift))))
+                     summaries)
+              :to-be-truthy)))))
