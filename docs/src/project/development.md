@@ -16,8 +16,19 @@ The test run fails when the fixture is absent; it never silently skips
 conformance cases. `test.event` is compared at the reader stage, `in.json`
 is compared as a JSON/YAML data model at the loader stage, `out.yaml` is
 compared semantically after dumping, and `emit.yaml` is a separate emitter
-expectation. JSON object key order and whitespace are ignored, while YAML
-null, false, integer, and floating-point values remain distinct.
+expectation. The loader reader accepts one or more consecutive JSON values in
+`in.json`, because multi-document YAML cases use one JSON value per document.
+JSON object key order and whitespace are ignored, while YAML null, false,
+integer, and floating-point values remain distinct.
+
+The `emitter-isolated` stage feeds `test.event` to the emitter and requires
+string equality with `emit.yaml`. The yaml-test-suite defines `emit.yaml` as
+the output an emitter would produce and its fixtures are based on libyaml
+style output, so whitespace, line breaks, quoting, indentation, and flow/block
+style are part of this emitter contract. Comparing only parsed YAML meaning
+would allow representation differences and would no longer test that contract.
+An event-to-emit-to-parse round trip may be useful as a supplementary
+diagnostic, but it is not a replacement for the independent text comparison.
 
 Each registered test receives a 120-second default per-test timeout from
 `cl-weave`; set `CL_YAML_TEST_TIMEOUT_MS` to change it. The outer `perl`

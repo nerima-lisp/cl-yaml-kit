@@ -35,9 +35,22 @@
     (t (list :other (princ-to-string value)))))
 
 (defun conformance-json-value (pathname)
-  (json-kit:parse (conformance-file-string pathname)
-                  :object-type :hash-table
-                  :array-type :vector))
+  (let ((text (conformance-file-string pathname))
+        (index 0)
+        (values nil))
+    (loop
+      (loop while (and (< index (length text))
+                       (find (char text index)
+                             '(#\Space #\Tab #\Return #\Newline)))
+            do (incf index))
+      (if (= index (length text))
+          (return (nreverse values))
+          (multiple-value-bind (value end-index)
+              (json-kit:parse-prefix text :index index
+                                     :object-type :hash-table
+                                     :array-type :vector)
+            (push value values)
+            (setf index end-index))))))
 
 (defun conformance-loader-value (case)
   (yaml-kit:parse-all (conformance-file-string
@@ -54,8 +67,11 @@
              (actual (yaml-kit:parse-all events))
              (expected (conformance-json-value
                         (conformance-case-json case))))
-        (let ((passed (conformance-values-equal-p actual (list expected))))
-          (values passed (unless passed "isolated loader value mismatch"))))
+        (let ((passed (conformance-values-equal-p actual expected)))
+          (values passed
+                  (unless passed
+                    (conformance-first-difference expected actual
+                                                   :label "loader value")))))
     (error (condition) (values nil condition))))
 
 (defun conformance-loader-e2e-result (case)
@@ -63,8 +79,11 @@
       (let ((actual (conformance-loader-value case))
             (expected (conformance-json-value
                        (conformance-case-json case))))
-        (let ((passed (conformance-values-equal-p actual (list expected))))
-          (values passed (unless passed "end-to-end loader value mismatch"))))
+        (let ((passed (conformance-values-equal-p actual expected)))
+          (values passed
+                  (unless passed
+                    (conformance-first-difference expected actual
+                                                   :label "loader value")))))
     (error (condition) (values nil condition))))
 
 (defun conformance-dumper-e2e-result (case)
@@ -88,5 +107,8 @@
              (expected (conformance-file-string
                         (conformance-case-emit case))))
         (let ((passed (string= emitted expected)))
-          (values passed (unless passed "isolated emitter text mismatch"))))
+          (values passed
+                  (unless passed
+                    (conformance-first-line-difference expected emitted
+                                                        :label "emitter")))))
     (error (condition) (values nil condition))))

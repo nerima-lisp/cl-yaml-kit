@@ -38,6 +38,36 @@
       (loop for character = (read-char stream nil nil)
             while character do (write-char character out)))))
 
+(defun conformance-first-difference (expected actual &key (label "value"))
+  (let ((expected-items (if (listp expected) expected (list expected)))
+        (actual-items (if (listp actual) actual (list actual))))
+    (loop for expected-item in expected-items
+          for actual-item in actual-items
+          for position from 0
+          unless (equal expected-item actual-item)
+            do (return (format nil "~A mismatch at position ~D: expected ~S, actual ~S"
+                               label position expected-item actual-item))
+          finally
+             (unless (= (length expected-items) (length actual-items))
+               (return (format nil "~A length mismatch: expected ~D, actual ~D"
+                               label (length expected-items) (length actual-items)))))))
+
+(defun conformance-lines (text)
+  (uiop:split-string text :separator '(#\Newline)))
+
+(defun conformance-first-line-difference (expected actual &key (label "text"))
+  (let ((expected-lines (conformance-lines expected))
+        (actual-lines (conformance-lines actual)))
+    (or (loop for expected-line in expected-lines
+              for actual-line in actual-lines
+              for line-number from 1
+              unless (string= expected-line actual-line)
+                do (return (format nil "~A mismatch at line ~D: expected ~S, actual ~S"
+                                   label line-number expected-line actual-line)))
+        (unless (= (length expected-lines) (length actual-lines))
+          (format nil "~A line count mismatch: expected ~D, actual ~D"
+                  label (length expected-lines) (length actual-lines))))))
+
 (defun conformance-file (directory name)
   (let ((pathname (merge-pathnames name directory)))
     (and (probe-file pathname) pathname)))
@@ -99,14 +129,18 @@
          (lambda (event) (push event events))
          (conformance-file-string (conformance-case-input case)))
         (setf events (nreverse events))
-        (let ((passed (and (not (conformance-case-error case))
-                           (conformance-case-event case)
-                           (equal (mapcar #'conformance-event-signature events)
-                                  (conformance-event-signatures
-                                   (conformance-file-string
-                                    (conformance-case-event case)))))))
-          (values passed (unless passed "event signature mismatch"))))
-    (error (condition) (values (and (conformance-case-error case) t) condition))))
+        (let* ((actual (mapcar #'conformance-event-signature events))
+               (expected (conformance-event-signatures
+                          (conformance-file-string
+                           (conformance-case-event case))))
+               (passed (and (not (conformance-case-error case))
+                            (conformance-case-event case)
+                            (equal actual expected))))
+          (values passed
+                  (unless passed
+                    (conformance-first-difference expected actual
+                                                   :label "event"))))
+    (error (condition) (values (and (conformance-case-error case) t) condition)))))
 
 (defun conformance-load-result (case)
   (handler-case
@@ -150,7 +184,6 @@
     (dolist (case cases summary)
       (multiple-value-bind (applicable passedp condition)
           (conformance-stage-result case stage)
-        (declare (ignore condition))
         (if (not applicable)
             (incf (getf summary :skipped))
             (progn
@@ -202,15 +235,15 @@
       (dolist (summary summaries)
         (format stream "~%## ~A failures~%~%IDs: ~{~A~^, ~}~%"
                 (getf summary :stage)
-                (sort (copy-list (getf summary :failure-ids)) #'string<)))
+                (sort (copy-list (getf summary :failure-ids)) #'string<))
         (when (member (getf summary :stage) '(:loader-isolated :emitter-isolated))
           (let ((groups (make-hash-table)))
             (dolist (failure (getf summary :failure-causes))
               (push (first failure) (gethash (conformance-cause-category (second failure) ) groups)))
             (maphash (lambda (category ids)
-                       (format stream "~%### ~A~%~{~A~^, ~}~%"
+                     (format stream "~%### ~A~%~{~A~^, ~}~%"
                                category (sort ids #'string<)))
-                     groups))))))
+                     groups)))))))
 
 (describe "yaml-test-suite conformance harness"
   (it "keeps fixture and exclusion metadata loadable"
