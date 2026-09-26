@@ -1,10 +1,35 @@
 ;;;; src/char-classes.lisp
 (in-package #:yaml-kit)
 
-(define-yaml-production indicator "-?:,[]{}#&*!|>'\"%@`")
-(define-yaml-production flow-indicator "[],{}")
-(define-yaml-production line-break '(#\Return #\Newline))
-(define-yaml-production whitespace '(#\Space #\Tab))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro %define-character-production (name characters)
+    (let* ((suffix (string-upcase (string name)))
+           (table-name (intern (format nil "+YAML-~A-BITS+" suffix)))
+           (predicate-name (intern (format nil "YAML-~A-P" suffix)))
+           (characters (if (and (consp characters)
+                                (eq (first characters) 'quote))
+                           (second characters)
+                           characters))
+           (bits (make-array 128 :element-type '(unsigned-byte 8)
+                             :initial-element 0)))
+      (loop for character across (if (stringp characters)
+                                     characters
+                                     (coerce characters 'string))
+            do (setf (aref bits (char-code character)) 1))
+      `(progn
+         (defparameter ,table-name
+           (make-array 128 :element-type '(unsigned-byte 8)
+                       :initial-contents ',(coerce bits 'list)))
+         (declaim (type (simple-array (unsigned-byte 8) (128)) ,table-name)
+                  (inline ,predicate-name))
+         (defun ,predicate-name (character)
+           (and (characterp character) (< (char-code character) 128)
+                (= 1 (aref ,table-name (char-code character))))))))
+
+  (%define-character-production indicator "-?:,[]{}#&*!|>'\"%@`")
+  (%define-character-production flow-indicator "[],{}")
+  (%define-character-production line-break '(#\Return #\Newline))
+  (%define-character-production whitespace '(#\Space #\Tab)))
 
 (declaim (inline sc-blank-p sc-break-p sc-blankz-p sc-breakz-p
                  sc-alpha-p sc-digit-p sc-hex-p sc-space-p sc-tab-p
@@ -19,10 +44,12 @@
 (defun sc-breakz-p (s &optional (k 0))
   (or (sc-break-p s k) (sc-z-p s k)))
 (defun sc-alpha-p (s &optional (k 0))
-  (let ((character (sc-char s k)))
-    (and (characterp character)
-         (or (alphanumericp character)
-             (char= character #\_) (char= character #\-)))))
+  (let ((code (char-code (sc-char s k))))
+    (or (<= (char-code #\0) code (char-code #\9))
+        (<= (char-code #\A) code (char-code #\Z))
+        (<= (char-code #\a) code (char-code #\z))
+        (= code (char-code #\_))
+        (= code (char-code #\-)))))
 (defun sc-digit-p (s &optional (k 0))
   (not (null (digit-char-p (sc-char s k) 10))))
 (defun sc-hex-p (s &optional (k 0))

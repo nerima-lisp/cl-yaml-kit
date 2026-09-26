@@ -4,9 +4,13 @@
 (defmacro with-reader-speed (&body body)
   `(locally (declare (optimize (speed 3) (safety 1) (debug 0))) ,@body))
 
-(defmacro define-yaml-production (name characters)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro define-yaml-production (name characters)
   "Define a compile-time ASCII character production lookup table."
-  (let* ((suffix (string-upcase (string name)))
+  (let* ((name (if (and (consp name) (eq (first name) 'quote))
+                   (second name)
+                   name))
+         (suffix (string-upcase (string name)))
          (package (symbol-package 'define-yaml-production))
          (table-name (intern (format nil "+YAML-~A-BITS+" suffix) package))
          (predicate-name (intern (format nil "YAML-~A-P" suffix) package))
@@ -36,7 +40,7 @@
          (and (characterp character)
               (< (char-code character) 128)
               (= 1 (aref ,table-name (char-code character)))))
-       ',predicate-name)))
+       ',predicate-name))))
 
 (defmacro reader-char (string index)
   `(char ,string ,index))

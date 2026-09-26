@@ -1,5 +1,7 @@
 # Compiled Lisp and generated outputs
 *.fasl
+cl-yaml-kit.coverage
+cl-yaml-kit-coverage-report/
 *.dfsl
 *.fas
 *.lib
