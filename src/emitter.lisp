@@ -16,36 +16,39 @@
   (let ((context (make-emitter-context stream indent width))
         (stack nil)
         (first-document t))
-    (labels ((flow-p () (and stack (eq (caar stack) :flow)))
+    (labels ((flow-p () (and stack (member (caar stack) '(:flow :flow-map))))
+             (map-p () (and stack (member (caar stack) '(:map :flow-map))))
              (separator ()
                (when (and stack (flow-p) (plusp (cdar stack)))
                  (%emit-text context ", ")))
              (start-value ()
                (when stack
                  (let ((frame (car stack)))
-                   (if (eq (car frame) :map)
-                       (if (oddp (cdr frame))
-                           (%emit-text context ": ")
-                           (progn
-                             (unless (emitter-context-line-start context)
-                               (%emit-newline context))
-                             (%emit-text context
-                                         (make-string (* (1- (length stack)) indent)
-                                                      :initial-element #\Space))))
-                       (if (emitter-context-line-start context)
-                           (progn
-                             (%emit-text context
-                                         (make-string (* (1- (length stack)) indent)
-                                                      :initial-element #\Space))
-                             (%emit-text context "- "))
-                           (if (flow-p)
-                               (separator)
-                               (progn
-                                 (%emit-newline context)
-                                 (%emit-text context
-                                             (make-string (* (1- (length stack)) indent)
-                                                          :initial-element #\Space))
-                                 (%emit-text context "- ")))))))))
+                   (cond
+                     ((map-p)
+                      (if (oddp (cdr frame))
+                          (%emit-text context ": ")
+                          (if (flow-p)
+                              (separator)
+                              (progn
+                                (unless (emitter-context-line-start context)
+                                  (%emit-newline context))
+                                (%emit-text context
+                                            (make-string (* (1- (length stack)) indent)
+                                                         :initial-element #\Space))))))
+                     ((emitter-context-line-start context)
+                      (%emit-text context
+                                  (make-string (* (1- (length stack)) indent)
+                                               :initial-element #\Space))
+                      (%emit-text context "- "))
+                     ((flow-p)
+                      (separator))
+                     (t
+                      (%emit-newline context)
+                      (%emit-text context
+                                  (make-string (* (1- (length stack)) indent)
+                                               :initial-element #\Space))
+                      (%emit-text context "- ")))))))
       (dolist (event events)
         (cond
           ((stream-start-event-p event))
@@ -80,7 +83,7 @@
            (when (flow-p) (%emit-text context "[")))
           ((mapping-start-event-p event)
            (start-value)
-           (push (cons (if (eq (mapping-start-event-style event) :flow) :flow :map) 0)
+           (push (cons (if (eq (mapping-start-event-style event) :flow) :flow-map :map) 0)
                  stack)
            (when (flow-p) (%emit-text context "{")))
           ((sequence-end-event-p event)
@@ -89,6 +92,6 @@
              (when stack (incf (cdr (car stack))))))
           ((mapping-end-event-p event)
            (let ((frame (pop stack)))
-             (when (eq (car frame) :flow) (%emit-text context "}"))
+             (when (eq (car frame) :flow-map) (%emit-text context "}"))
              (when stack (incf (cdr (car stack))))))))
     stream)))

@@ -92,7 +92,11 @@
            (reader-advance state)
            (when (char= (or (reader-peek state) #\Null) #\<)
              (reader-advance state)
-             (loop until (char= (or (reader-peek state) #\Null) #\>) do (reader-advance state))
+             (loop
+               (when (reader-eof-p state)
+                 (reader-parse-error state "unterminated verbatim tag"))
+               (when (char= (reader-peek state) #\>) (return))
+               (reader-advance state))
              (reader-advance state))
            (loop while (and (reader-peek state) (not (yaml-whitespace-p (reader-peek state)))) do (reader-advance state))
            (setf tag (subseq (reader-state-text state) start (reader-state-position state)))))

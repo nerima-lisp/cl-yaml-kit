@@ -62,7 +62,7 @@
              (actual (yaml-kit:parse-all emitted))
              (expected (yaml-kit:parse-all
                         (conformance-file-string
-                         (conformance-case-output case)))))
+                         (conformance-case-out case)))))
         (values (and (conformance-values-equal-p actual value)
                      (conformance-values-equal-p actual expected)) nil))
     (error (condition) (values nil condition))))

@@ -48,9 +48,9 @@
                     ((or (search "null" regexp) (search "true" regexp)
                          (search "false" regexp))
                      (concatenate 'string
-                                  (if (search "null" regexp) "n~" "")
-                                  (if (search "true" regexp) "t" "")
-                                  (if (search "false" regexp) "f" "")))
+                                  (if (search "null" regexp) "nN~" "")
+                                  (if (search "true" regexp) "tT" "")
+                                  (if (search "false" regexp) "fF" "")))
                     ((search "inf" regexp) ".-+iI")
                     ((search "nan" regexp) ".nNaA")
                     ((char= (char regexp 0) #\[) "-+0123456789.")

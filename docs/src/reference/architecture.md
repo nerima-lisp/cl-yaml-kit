@@ -27,3 +27,26 @@ Event delivery uses continuation-passing style (CPS): each stage accepts the
 next stage as a continuation and sends each produced item to it. This permits
 streaming consumers and keeps parser, composer, and emitter boundaries
 independently testable.
+
+## Performance and coverage policy
+
+`benchmark/run.lisp` generates six deterministic corpus cases: large block
+mapping, large block sequence, deep nesting, long scalar, anchor-heavy input,
+and multi-document input. It measures every case through the public
+`yaml-kit:parse`, `yaml-kit:emit`, and `yaml-kit:map-events` paths. Each TSV row
+reports the case, operation, input size, throughput in MB/s, bytes consed, and
+the time used by the full GC immediately before the sample. Timing uses
+`cl-weave:measure`; warmups and sample counts are controlled by
+`BENCH_WARMUP`, `BENCH_SAMPLES`, and `BENCH_ITERATIONS`. Case sizes are
+controlled by the `BENCH_*` variables in the script. The TSV is observational,
+not a CI timing gate: compare runs only with the same implementation, runtime,
+corpus settings, and machine conditions. Unsupported case/operation pairs are
+reported as `error` rows and do not suppress the remaining measurements.
+
+Coverage is collected by `scripts/run-coverage.lisp`, which forces compilation
+with SB-COVER instrumentation before invoking cl-weave's runner. Validate its
+HTML report with `scripts/check-coverage.pl REPORT SOURCE_DIRECTORY
+EXPRESSION_THRESHOLD BRANCH_THRESHOLD`. Coverage thresholds are quality gates;
+benchmark timings are not. A partial implementation remains measurable when
+its public entry points and corpus preflight are available, so failures in one
+operation should not be hidden by changing the corpus or the measurement unit.

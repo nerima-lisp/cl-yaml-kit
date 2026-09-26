@@ -1,13 +1,15 @@
 ;;;; src/data.lisp
 (in-package #:yaml-kit)
 
-(defstruct (yaml-sentinel (:constructor make-yaml-sentinel (name))
-                          (:copier nil) (:predicate nil))
-  (name nil :read-only t))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defstruct (yaml-sentinel (:constructor make-yaml-sentinel (name))
+                            (:copier nil) (:predicate nil))
+    (name nil :read-only t)))
 
-(defparameter +yaml-null+ (make-yaml-sentinel :null))
-(defparameter +yaml-false+ (make-yaml-sentinel :false))
+(defvar +yaml-null+ (make-yaml-sentinel :null))
+(defvar +yaml-false+ (make-yaml-sentinel :false))
 
+(declaim (inline yaml-null-p yaml-false-p))
 (defun yaml-null-p (value) (eq value +yaml-null+))
 (defun yaml-false-p (value) (eq value +yaml-false+))
 
