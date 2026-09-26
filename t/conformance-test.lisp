@@ -71,10 +71,10 @@
 
 (defun conformance-exclusion-valid-p (entry ids)
   (and (consp entry)
+       (= (length entry) 3)
        (member (string-downcase (princ-to-string (car entry))) ids :test #'string=)
-       (listp (cdr entry))
-       (every (lambda (stage) (member stage *conformance-stage-names*))
-              (cdr entry))))
+       (member (second entry) *conformance-stage-names*)
+       (stringp (third entry))))
 
 (defun conformance-exclusions-valid-p (cases exclusions)
   (let ((ids (mapcar #'conformance-case-id cases)))
