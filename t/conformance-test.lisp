@@ -12,6 +12,8 @@
 (defparameter *conformance-stage-names*
   '(:reader :loader-isolated :loader-e2e :emitter-isolated :dumper-e2e))
 
+(defvar *conformance-last-summaries* nil)
+
 (defun conformance-source-root ()
   (handler-case
       (asdf:system-source-directory :cl-yaml-kit)
@@ -139,8 +141,8 @@
           (values passed
                   (unless passed
                     (conformance-first-difference expected actual
-                                                   :label "event"))))
-    (error (condition) (values (and (conformance-case-error case) t) condition)))))
+                                                   :label "event")))))
+    (error (condition) (values (and (conformance-case-error case) t) condition))))
 
 (defun conformance-load-result (case)
   (handler-case
@@ -155,27 +157,30 @@
     (error (condition) (values nil condition))))
 
 (defun conformance-stage-result (case stage)
-  (case stage
-    (:reader
-     (when (or (conformance-case-event case) (conformance-case-error case))
-       (multiple-value-bind (passed condition) (conformance-reader-result case)
-         (values t passed condition))))
-    (:loader-isolated
-     (when (and (conformance-case-event case) (conformance-case-json case))
-       (multiple-value-bind (passed condition) (conformance-loader-isolated-result case)
-         (values t passed condition))))
-    (:loader-e2e
-     (when (conformance-case-json case)
-       (multiple-value-bind (passed condition) (conformance-loader-e2e-result case)
-         (values t passed condition))))
-    (:dumper-e2e
-     (when (conformance-case-out case)
-       (multiple-value-bind (passed condition) (conformance-dumper-e2e-result case)
-         (values t passed condition))))
-    (:emitter-isolated
-     (when (and (conformance-case-event case) (conformance-case-emit case))
-       (multiple-value-bind (passed condition) (conformance-emitter-isolated-result case)
-         (values t passed condition))))))
+  (handler-case
+      (case stage
+        (:reader
+         (when (or (conformance-case-event case) (conformance-case-error case))
+           (multiple-value-bind (passed condition) (conformance-reader-result case)
+             (values t passed condition))))
+        (:loader-isolated
+         (when (and (conformance-case-event case) (conformance-case-json case))
+           (multiple-value-bind (passed condition) (conformance-loader-isolated-result case)
+             (values t passed condition))))
+        (:loader-e2e
+         (when (conformance-case-json case)
+           (multiple-value-bind (passed condition) (conformance-loader-e2e-result case)
+             (values t passed condition))))
+        (:dumper-e2e
+         (when (conformance-case-out case)
+           (multiple-value-bind (passed condition) (conformance-dumper-e2e-result case)
+             (values t passed condition))))
+        (:emitter-isolated
+         (when (and (conformance-case-event case) (conformance-case-emit case))
+           (multiple-value-bind (passed condition) (conformance-emitter-isolated-result case)
+             (values t passed condition)))))
+    (error (condition)
+      (values t nil condition))))
 
 (defun conformance-stage-summary (cases stage exclusions)
   (let ((summary (list :stage stage :total 0 :passed 0 :failed 0 :skipped 0
@@ -245,28 +250,38 @@
                                category (sort ids #'string<)))
                      groups)))))))
 
+(defun conformance-run-report ()
+  (let* ((cases (conformance-cases))
+         (exclusions (conformance-read-exclusions))
+         (summaries (mapcar (lambda (stage)
+                              (conformance-stage-summary cases stage exclusions))
+                            *conformance-stage-names*)))
+    (conformance-write-status summaries)
+    (dolist (summary summaries)
+      (format t "~&conformance ~A: applicable=~D passed=~D failed=~D excluded=~D drift=~D~%"
+              (getf summary :stage) (getf summary :total)
+              (getf summary :passed) (getf summary :failed)
+              (getf summary :excluded) (getf summary :drift)))
+    (setf *conformance-last-summaries* summaries)
+    (values summaries
+            (every (lambda (summary)
+                    (and (zerop (getf summary :failed))
+                         (zerop (getf summary :drift))))
+                   summaries))))
+
 (describe "yaml-test-suite conformance harness"
   (it "keeps fixture and exclusion metadata loadable"
     (let ((cases (conformance-cases))
           (exclusions (conformance-read-exclusions)))
       (expect (conformance-exclusions-valid-p cases exclusions) :to-be-truthy)
-      (expect (listp (conformance-event-signatures "+STR\n+DOC [---]\n=VAL :hello\n-DOC\n-STR\n"))
+      (expect (equal '((:stream-start) (:document-start t) (:scalar nil nil #\: "hello")
+                       (:document-end nil) (:stream-end))
+                     (conformance-event-signatures
+                      (format nil "+STR~%+DOC ---~%=VAL :hello~%-DOC~%-STR~%")))
               :to-be-truthy)))
   (it "gates reader, loader, dumper, and emitter stages"
-    (let* ((cases (conformance-cases))
-           (exclusions (conformance-read-exclusions))
-           (summaries (mapcar (lambda (stage)
-                                (conformance-stage-summary cases stage exclusions))
-                              *conformance-stage-names*)))
-      (conformance-write-status summaries)
-      (dolist (summary summaries)
-        (format t "~&conformance ~A: applicable=~D passed=~D failed=~D excluded=~D drift=~D~%"
-                (getf summary :stage) (getf summary :total)
-                (getf summary :passed) (getf summary :failed)
-                (getf summary :excluded) (getf summary :drift)))
+    (multiple-value-bind (summaries passedp)
+        (conformance-run-report)
       (expect (length summaries) :to-be 5)
-      (expect (every (lambda (summary)
-                       (and (zerop (getf summary :failed))
-                            (zerop (getf summary :drift))))
-                     summaries)
+      (expect passedp
               :to-be-truthy))))

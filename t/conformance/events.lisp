@@ -48,10 +48,14 @@
       ((string= kind "-STR") (yaml-kit:make-stream-end-event))
       ((string= kind "+DOC")
        (yaml-kit:make-document-start-event
-        :explicit-p (not (null (search "[---]" text)))))
+        :explicit-p (string= (string-trim '(#\Space #\Tab)
+                                          (subseq text 4))
+                             "---")))
       ((string= kind "-DOC")
        (yaml-kit:make-document-end-event
-        :explicit-p (not (null (search "[...]" text)))))
+        :explicit-p (string= (string-trim '(#\Space #\Tab)
+                                          (subseq text 4))
+                             "...")))
       ((member kind '("+SEQ" "+MAP") :test #'string=)
        (let* ((fields (conformance-event-fields (subseq text 4)))
               (sequence-p (string= kind "+SEQ")))

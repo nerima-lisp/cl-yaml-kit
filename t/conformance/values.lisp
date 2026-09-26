@@ -60,6 +60,61 @@
   (equal (conformance-canonical-value actual)
          (conformance-canonical-value expected)))
 
+(defun conformance-loader-difference (expected actual)
+  (let ((expected-items (if (listp expected) expected (list expected)))
+        (actual-items (if (listp actual) actual (list actual))))
+    (loop for position from 0
+          for expected-item in expected-items
+          for actual-item in actual-items
+          unless (equal expected-item actual-item)
+            do (return (format nil
+                               "loader value mismatch at position ~D: expected ~S, actual ~S"
+                               position expected-item actual-item))
+          finally
+             (unless (= (length expected-items) (length actual-items))
+               (let ((position (min (length expected-items)
+                                    (length actual-items))))
+                 (return (format nil
+                                 "loader value mismatch at position ~D: expected ~S, actual ~S"
+                                 position
+                                 (if (< position (length expected-items))
+                                     (nth position expected-items)
+                                     :missing)
+                                 (if (< position (length actual-items))
+                                     (nth position actual-items)
+                                     :missing))))))))
+
+(defun conformance-emitter-difference (expected actual)
+  (let* ((expected-lines (conformance-lines expected))
+         (actual-lines (conformance-lines actual))
+         (line-count (max (length expected-lines) (length actual-lines)))
+         (first-difference
+           (loop for index below line-count
+                 for expected-line = (if (< index (length expected-lines))
+                                         (nth index expected-lines)
+                                         :missing)
+                 for actual-line = (if (< index (length actual-lines))
+                                       (nth index actual-lines)
+                                       :missing)
+                 unless (and (stringp expected-line)
+                             (stringp actual-line)
+                             (string= expected-line actual-line))
+                   do (return index))))
+    (when first-difference
+      (with-output-to-string (out)
+        (format out "emitter mismatch around line ~D:~%"
+                (1+ first-difference))
+        (loop for index from (max 0 (1- first-difference))
+              to (min (1- line-count) (1+ first-difference))
+              do (format out "line ~D: expected ~S, actual ~S~%"
+                          (1+ index)
+                          (if (< index (length expected-lines))
+                              (nth index expected-lines)
+                              :missing)
+                          (if (< index (length actual-lines))
+                              (nth index actual-lines)
+                              :missing)))))))
+
 (defun conformance-loader-isolated-result (case)
   (handler-case
       (let* ((events (conformance-events
@@ -70,8 +125,7 @@
         (let ((passed (conformance-values-equal-p actual expected)))
           (values passed
                   (unless passed
-                    (conformance-first-difference expected actual
-                                                   :label "loader value")))))
+                    (conformance-loader-difference expected actual)))))
     (error (condition) (values nil condition))))
 
 (defun conformance-loader-e2e-result (case)
@@ -82,8 +136,7 @@
         (let ((passed (conformance-values-equal-p actual expected)))
           (values passed
                   (unless passed
-                    (conformance-first-difference expected actual
-                                                   :label "loader value")))))
+                    (conformance-loader-difference expected actual)))))
     (error (condition) (values nil condition))))
 
 (defun conformance-dumper-e2e-result (case)
@@ -109,6 +162,5 @@
         (let ((passed (string= emitted expected)))
           (values passed
                   (unless passed
-                    (conformance-first-line-difference expected emitted
-                                                        :label "emitter")))))
+                    (conformance-emitter-difference expected emitted)))))
     (error (condition) (values nil condition))))
