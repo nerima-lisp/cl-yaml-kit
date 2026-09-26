@@ -117,12 +117,26 @@
 
 (defun conformance-dumper-e2e-result (case)
   (handler-case
-      (let* ((value (first (conformance-loader-value case)))
-             (emitted (yaml-kit:emit value))
-             (actual (first (yaml-kit:parse-all emitted)))
-             (expected (first (yaml-kit:parse-all
+      (let* ((values (conformance-loader-value case))
+             (expected-values (yaml-kit:parse-all
                                (conformance-file-string
-                                (conformance-case-out case))))))
+                                (conformance-case-out case))))
+             (single-document
+               (lambda (documents label)
+                 (cond
+                   ((null documents) :missing)
+                   ((cdr documents)
+                    (error "dumper-e2e requires one ~A document, got ~D"
+                           label (length documents)))
+                   (t (car documents)))))
+             (value (funcall single-document values "input"))
+             (expected (funcall single-document expected-values "expected"))
+             (actual (if (eq value :missing)
+                         :missing
+                         (let ((emitted (yaml-kit:emit value)))
+                           (funcall single-document
+                                    (yaml-kit:parse-all emitted)
+                                    "emitted")))))
         (let ((passed (and (conformance-values-equal-p actual value)
                            (conformance-values-equal-p actual expected))))
           (values passed
