@@ -84,7 +84,9 @@
               :to-equal "last")
       (expect (handler-case
                   (progn (yaml-kit:parse events) nil)
-                (yaml-kit:yaml-compose-error t))
+                (yaml-kit:yaml-compose-error (condition)
+                  (declare (ignore condition))
+                  t))
               :to-be-truthy)))
 
   (it "enforces loader limits for event lists"
@@ -95,5 +97,7 @@
                         (loader-event :stream-end))))
       (expect (handler-case
                   (progn (yaml-kit:parse events :max-scalar-length 3) nil)
-                (yaml-kit:yaml-resource-limit-error t))
+                (yaml-kit:yaml-resource-limit-error (condition)
+                  (declare (ignore condition))
+                  t))
               :to-be-truthy)))

@@ -4,9 +4,9 @@
 (defun %loader-compose-options (input max-input-length max-depth max-scalar-length
                                 max-nodes max-alias-expansions)
   (append (unless (listp input)
-            (list :max-input-length max-input-length
-                  :max-scalar-length max-scalar-length))
+            (list :max-input-length max-input-length))
           (list :max-depth max-depth
+                :max-scalar-length max-scalar-length
                 :max-nodes max-nodes
                 :max-alias-expansions max-alias-expansions)))
 
