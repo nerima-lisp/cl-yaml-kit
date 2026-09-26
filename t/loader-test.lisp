@@ -38,6 +38,35 @@
         (expect (yaml-kit::resolve-plain-scalar-tag text schema)
                 :to-equal expected))))
 
+  (it "constructs signed base-prefixed integers"
+    (dolist (case '(("-0o17" -15) ("+0o17" 15)
+                    ("-0x10" -16) ("+0x10" 16)))
+      (destructuring-bind (text expected) case
+        (expect (yaml-kit:parse
+                 (list (loader-event :stream-start)
+                       (loader-event :document-start)
+                       (loader-event :scalar :value text)
+                       (loader-event :document-end)
+                       (loader-event :stream-end)))
+                :to-equal expected))))
+
+  (it "rejects incompatible explicit collection tags"
+    (dolist (case '((:sequence "!!str") (:mapping "!!seq")))
+      (destructuring-bind (kind tag) case
+        (let ((events (list (loader-event :stream-start)
+                            (loader-event :document-start)
+                            (if (eq kind :sequence)
+                                (loader-event :sequence-start :tag tag)
+                                (loader-event :mapping-start :tag tag))
+                            (if (eq kind :sequence)
+                                (loader-event :sequence-end)
+                                (loader-event :mapping-end))
+                            (loader-event :document-end)
+                            (loader-event :stream-end))))
+          (expect (handler-case (progn (yaml-kit:parse events) nil)
+                    (yaml-kit:yaml-compose-error () t))
+                  :to-be-truthy)))))
+
   (it "constructs a scalar from events"
     (let ((value (yaml-kit:parse
                   (list (loader-event :stream-start)

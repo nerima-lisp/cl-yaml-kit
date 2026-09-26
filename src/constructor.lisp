@@ -26,15 +26,18 @@
   (handler-case
       (case kind
         (:int
-         (let ((sign (if (and (> (length text) 0)
-                              (member (char text 0) '(#\+ #\-))) 1 0)))
+         (let* ((sign-position (if (and (> (length text) 0)
+                                        (member (char text 0) '(#\+ #\-)))
+                                   1 0))
+                (sign (if (and (plusp sign-position)
+                               (char= (char text 0) #\-)) -1 1)))
            (cond
-             ((and (< sign (length text))
-                   (string-equal (subseq text sign (+ sign 2)) "0o"))
-              (parse-integer text :radix 8 :start (+ sign 2)))
-             ((and (< sign (length text))
-                   (string-equal (subseq text sign (+ sign 2)) "0x"))
-              (parse-integer text :radix 16 :start (+ sign 2)))
+             ((and (< sign-position (length text))
+                   (string-equal (subseq text sign-position (+ sign-position 2)) "0o"))
+              (* sign (parse-integer text :radix 8 :start (+ sign-position 2))))
+             ((and (< sign-position (length text))
+                   (string-equal (subseq text sign-position (+ sign-position 2)) "0x"))
+              (* sign (parse-integer text :radix 16 :start (+ sign-position 2))))
              (t (parse-integer text)))))
         (:float
          (cond
@@ -82,10 +85,21 @@
     (error 'yaml-compose-error))
   (let ((memo (make-hash-table :test #'eq)))
     (labels
-        ((walk (object)
+        ((collection-tag-compatible-p (object expected)
+           (let ((tag (node-tag object)))
+             (or (null tag)
+                 (member tag '("!" "?") :test #'string=)
+                 (and (string= expected "tag:yaml.org,2002:seq")
+                      (string= tag "!!seq"))
+                 (and (string= expected "tag:yaml.org,2002:map")
+                      (string= tag "!!map"))
+                 (string= tag expected))))
+         (walk (object)
            (cond
              ((scalar-node-p object) (%construct-scalar object schema))
              ((sequence-node-p object)
+              (unless (collection-tag-compatible-p object "tag:yaml.org,2002:seq")
+                (error 'yaml-compose-error))
               (multiple-value-bind (cached presentp) (gethash object memo)
                 (if presentp
                     cached
@@ -109,6 +123,8 @@
                                 do (setf (aref result i) (walk item)))
                           result)))))
              ((mapping-node-p object)
+              (unless (collection-tag-compatible-p object "tag:yaml.org,2002:map")
+                (error 'yaml-compose-error))
               (multiple-value-bind (cached presentp) (gethash object memo)
                 (if presentp
                     cached

@@ -27,8 +27,8 @@
      ("tag:yaml.org,2002:bool"
       "true|True|TRUE|false|False|FALSE" %schema-return-tag "10.3.2")
      ("tag:yaml.org,2002:int" "[-+]?[0-9]+" %schema-return-tag "10.3.2")
-     ("tag:yaml.org,2002:int" "0o[0-7]+" %schema-return-tag "10.3.2")
-     ("tag:yaml.org,2002:int" "0x[0-9a-fA-F]+" %schema-return-tag "10.3.2")
+     ("tag:yaml.org,2002:int" "[-+]?0o[0-7]+" %schema-return-tag "10.3.2")
+     ("tag:yaml.org,2002:int" "[-+]?0x[0-9a-fA-F]+" %schema-return-tag "10.3.2")
      ("tag:yaml.org,2002:float"
       "[-+]?((\\.[0-9]+)|([0-9]+(\\.[0-9]*)?))([eE][-+]?[0-9]+)?"
       %schema-return-tag "10.3.2")
