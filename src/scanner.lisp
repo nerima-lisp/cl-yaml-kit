@@ -33,7 +33,12 @@
         (stale-simple-keys s)
         (dolist (key (scanner-simple-keys s))
           (when (and (simple-key-possible key)
-                     (= (simple-key-token-number key) (scanner-tokens-parsed s)))
+                     ;; The token number denotes the token immediately after
+                     ;; the current queue head in this compact queue.  Keep
+                     ;; one-token lookahead so a pending ':' is fetched
+                     ;; before the candidate scalar is handed to the parser.
+                     (<= (simple-key-token-number key)
+                         (1+ (scanner-tokens-parsed s))))
             (setf need-more t) (return))))
       (unless need-more (return (setf (scanner-token-available s) t)))
       (fetch-next-token s))))
