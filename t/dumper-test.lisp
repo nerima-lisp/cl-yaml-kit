@@ -33,3 +33,24 @@
     "quotes plain-scalar boundary value ~S"
     (value expected)
     (expect (dump-to-string-with-newline value) :to-equal expected)))
+
+(defmacro test-dumper-boundaries (cases)
+  `(cl-weave:it-each ,cases
+     "emits scalar boundary ~S as ~S"
+     (value expected)
+     (expect (dump-to-string-with-newline value)
+             :to-equal (format nil "~A~%" expected))))
+
+(test-dumper-boundaries
+ (("true" "'true'")
+  ("1.5" "'1.5'")
+  ("0x1F" "'0x1F'")
+  ("~" "'~'")
+  ("" "''")
+  (": " "': '")
+  ("- a" "'- a'")
+  ("#x" "'#x'")
+  (" lead" "' lead'")
+  ("trail " "'trail '")
+  (#.(format nil "a~%b") "\"a\\nb\"")
+  (#.(string (code-char 1)) "\"\\x01\"")))

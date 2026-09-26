@@ -1,11 +1,17 @@
 ;;;; src/representer.lisp
 (in-package #:yaml-kit)
 
+(defvar *representer-cache* nil)
+(declaim (ftype function %represent-dispatch))
+
 (defun %represent-scalar (value)
   (make-scalar-node :value value))
 
 (defun %represent-number (value)
-  (make-scalar-node :value
+  (make-scalar-node :tag (if (integerp value)
+                             "tag:yaml.org,2002:int"
+                             "tag:yaml.org,2002:float")
+                    :value
                     (cond ((and (floatp value) (sb-ext:float-infinity-p value))
                            (if (minusp value) "-.inf" ".inf"))
                           ((and (floatp value) (sb-ext:float-nan-p value)) ".nan")
@@ -13,21 +19,45 @@
                                (string-downcase (princ-to-string value)))))))
 
 (defun %represent-list (value)
-  (make-sequence-node :items (mapcar #'represent value)))
+  (or (gethash value *representer-cache*)
+      (let ((node (make-sequence-node :items nil)))
+        (setf (gethash value *representer-cache*) node
+              (sequence-node-items node) (mapcar #'%represent-dispatch value))
+        node)))
 
 (defun %represent-vector (value)
-  (make-sequence-node :items (loop for item across value collect (represent item))))
+  (or (gethash value *representer-cache*)
+      (let ((node (make-sequence-node :items nil)))
+        (setf (gethash value *representer-cache*) node
+              (sequence-node-items node)
+              (loop for item across value collect (%represent-dispatch item)))
+        node)))
 
 (defun %represent-mapping (value)
-  (make-mapping-node
-   :pairs (loop for (key . item) in (yaml-mapping-entries value)
-                collect (cons (represent key) (represent item)))))
+  (or (gethash value *representer-cache*)
+      (let ((node (make-mapping-node :pairs nil)))
+        (setf (gethash value *representer-cache*) node
+              (mapping-node-pairs node)
+              (loop for (key . item) in (yaml-mapping-entries value)
+                    collect (cons (%represent-dispatch key)
+                                  (%represent-dispatch item))))
+        node)))
 
 (defun %represent-hash-table (value)
-  (let ((pairs nil))
-    (maphash (lambda (key item)
-              (push (cons (represent key) (represent item)) pairs)) value)
-    (make-mapping-node :pairs (nreverse pairs))))
+  (or (gethash value *representer-cache*)
+      (let ((node (make-mapping-node :pairs nil))
+            (pairs nil))
+        (setf (gethash value *representer-cache*) node)
+        (maphash (lambda (key item)
+                   (push (cons (%represent-dispatch key)
+                               (%represent-dispatch item)) pairs)) value)
+        (setf (mapping-node-pairs node) (nreverse pairs))
+        node)))
+
+(defun %represent-unsupported (value)
+  (error 'yaml-emit-error
+         :context "unsupported value type"
+         :message (format nil "~S" (type-of value))))
 
 (defmacro define-representer-dispatch (name clauses)
   "Define NAME from a declarative type/function table."
@@ -36,15 +66,19 @@
      (typecase value
        ,@(loop for (type function) in clauses
                collect `(,type (,function value)))
-       (t (error 'yaml-emit-error)))))
+       (t (%represent-unsupported value)))))
 
-(define-representer-dispatch represent
+(define-representer-dispatch %represent-dispatch
   ((null (lambda (value) (declare (ignore value))
            (make-sequence-node :items nil)))
    ((eql t) (lambda (value) (declare (ignore value))
-              (%represent-scalar "true")))
+              (make-scalar-node :tag "tag:yaml.org,2002:bool" :value "true")))
    (yaml-sentinel (lambda (value)
-                    (%represent-scalar (if (yaml-null-p value) "null" "false"))))
+                    (make-scalar-node
+                     :tag (if (yaml-null-p value)
+                              "tag:yaml.org,2002:null"
+                              "tag:yaml.org,2002:bool")
+                     :value (if (yaml-null-p value) "null" "false"))))
    (yaml-mapping %represent-mapping)
    (hash-table %represent-hash-table)
    (string %represent-scalar)
@@ -53,3 +87,8 @@
    (float %represent-number)
    (vector %represent-vector)
    (cons %represent-list)))
+
+(defun represent (value)
+  (let ((*representer-cache* (or *representer-cache*
+                                (make-hash-table :test #'eq))))
+    (%represent-dispatch value)))

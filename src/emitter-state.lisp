@@ -11,13 +11,14 @@
 
 (defun %emit-text (context text)
   (write-string text (emitter-context-stream context))
-  (let ((last (and (plusp (length text)) (char text (1- (length text))))))
-    (if (and last (char= last #\Newline))
-        (setf (emitter-context-column context) 0
-              (emitter-context-line-start context) t)
+  (let* ((length (length text))
+         (newline (position #\Newline text :from-end t)))
+    (if newline
+        (setf (emitter-context-column context) (- length newline 1)
+              (emitter-context-line-start context) (= newline (1- length)))
         (setf (emitter-context-line-start context) nil
               (emitter-context-column context)
-              (+ (emitter-context-column context) (length text))))))
+              (+ (emitter-context-column context) length)))))
 
 (defun %emit-newline (context)
   (%emit-text context (string #\Newline)))
