@@ -39,7 +39,8 @@ CANONICAL is reserved for canonical marker selection."
           (serialize root (lambda (event) (push event events))
                      :explicit-document-start explicit-document-start)
           (emit-event-stream (nreverse events) stream :indent indent :width width
-                             :explicit-document-start explicit-document-start))))))
+                             :explicit-document-start explicit-document-start
+                             :suppress-empty-document-marker t))))))
 
 (defun write-yaml (value stream &key (indent 2) (width 80)
                                     (default-flow-style :block)

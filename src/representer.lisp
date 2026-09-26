@@ -5,7 +5,9 @@
 (declaim (ftype function %represent-dispatch))
 
 (defun %represent-scalar (value)
-  (make-scalar-node :value value))
+  (make-scalar-node :tag "tag:yaml.org,2002:str"
+                    :value value
+                    :style (when (zerop (length value)) :single-quoted)))
 
 (defun %represent-number (value)
   (make-scalar-node :tag (if (integerp value)
@@ -57,16 +59,17 @@
 (defun %represent-unsupported (value)
   (error 'yaml-emit-error
          :context "unsupported value type"
-         :message (format nil "~S" (type-of value))))
+         :message (princ-to-string (type-of value))))
 
 (defmacro define-representer-dispatch (name clauses)
   "Define NAME from a declarative type/function table."
   `(defun ,name (value)
      (declare (optimize (speed 3) (safety 1)))
-     (typecase value
-       ,@(loop for (type function) in clauses
-               collect `(,type (,function value)))
-       (t (%represent-unsupported value)))))
+     (handler-case
+         (etypecase value
+           ,@(loop for (type function) in clauses
+                   collect `(,type (,function value))))
+       (type-error () (%represent-unsupported value)))))
 
 (define-representer-dispatch %represent-dispatch
   ((null (lambda (value) (declare (ignore value))

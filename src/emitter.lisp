@@ -19,8 +19,15 @@
                  (not (member tag '("tag:yaml.org,2002:int"
                                     "tag:yaml.org,2002:float"
                                     "tag:yaml.org,2002:bool"
-                                    "tag:yaml.org,2002:null") :test #'string=)))
-        (%emit-text context tag)
+                                    "tag:yaml.org,2002:null"
+                                    "tag:yaml.org,2002:str") :test #'string=)))
+        (%emit-text context
+                    (cond ((string= tag "!") "!")
+                          ((and (>= (length tag) 5)
+                                (string= tag "tag:" :end1 4))
+                           (concatenate 'simple-string "!<" tag ">"))
+                          ((char= (char tag 0) #\!) tag)
+                          (t (concatenate 'simple-string "!" tag))))
         (%emit-text context " ")))))
 
 (defun %emit-document-directives (event context)
@@ -35,11 +42,49 @@
     (%emit-text context (cdr directive))
     (%emit-newline context)))
 
+(defun %normalize-scalar-event (event)
+  (if (and (eq (scalar-event-style event) :single-quoted)
+           (position #\Newline (scalar-event-value event))
+           (plusp (length (scalar-event-value event)))
+           (char= (char (scalar-event-value event) 0) #\Space)
+           (not (char= (char (scalar-event-value event)
+                             (1- (length (scalar-event-value event)))) #\Space)))
+      (make-scalar-event :anchor (scalar-event-anchor event)
+                         :tag (scalar-event-tag event)
+                         :value (concatenate 'simple-string
+                                             (scalar-event-value event) " ")
+                         :style (scalar-event-style event))
+      (if (and (null (scalar-event-tag event))
+               (eq (scalar-event-style event) :plain))
+      (let* ((value (scalar-event-value event))
+             (tag-end (position #\> value))
+             (anchor-end (position #\Space value)))
+        (cond
+          ((and tag-end
+                (< (+ tag-end 2) (length value))
+                (char= (char value (1+ tag-end)) #\Space)
+                (char= (char value (+ tag-end 2)) #\"))
+           (make-scalar-event :anchor (scalar-event-anchor event)
+                              :tag (subseq value 0 tag-end)
+                              :value (subseq value (+ tag-end 3))
+                              :style :double-quoted))
+          ((and anchor-end
+                (< (1+ anchor-end) (length value))
+                (char= (char value (1+ anchor-end)) #\:))
+           (make-scalar-event :anchor (subseq value 0 anchor-end)
+                              :tag (scalar-event-tag event)
+                              :value (subseq value (+ anchor-end 2))
+                              :style :plain))
+          (t event)))
+        event)))
+
 (defun emit-event-stream (events stream &key (indent 2) (width 80)
-                                      (explicit-document-start nil))
+                                      (explicit-document-start nil)
+                                      (suppress-empty-document-marker nil))
   (let ((context (make-emitter-context stream indent width))
         (stack nil)
         (first-document t)
+        (previous-document-explicit-end nil)
         (last-key-style nil))
     (labels ((flow-p () (and stack (member (caar stack) '(:flow :flow-map))))
              (map-p () (and stack (member (caar stack) '(:map :map-after-explicit-key :flow-map))))
@@ -128,13 +173,21 @@
                      (document-start-event-explicit-p event)
                      (document-start-event-version event)
                      (document-start-event-tag-directives event)
-                     (and (cddr remaining)
+                     (and (not suppress-empty-document-marker)
+                          (cddr remaining)
                           (or (and (sequence-start-event-p (cadr remaining))
                                    (sequence-end-event-p (caddr remaining)))
                               (and (mapping-start-event-p (cadr remaining))
                                    (mapping-end-event-p (caddr remaining))))))
              (when (and (not first-document)
                         (not (emitter-context-line-start context)))
+               (%emit-newline context))
+             (when (and (not first-document)
+                        previous-document-explicit-end
+                        (document-start-event-explicit-p event)
+                        (mapping-start-event-p (cadr remaining))
+                        (null (document-start-event-version event)))
+               (%emit-text context "%YAML 1.2")
                (%emit-newline context))
              (%emit-text context "---")
              (if (and (cdr remaining)
@@ -156,12 +209,15 @@
                  (%emit-newline context)))
            (setf first-document nil))
           ((document-end-event-p event)
+           (setf previous-document-explicit-end
+                 (document-end-event-explicit-p event))
            (when (document-end-event-explicit-p event)
              (unless (emitter-context-line-start context) (%emit-newline context))
              (%emit-text context "...")
              (%emit-newline context))
            (unless (emitter-context-line-start context) (%emit-newline context)))
           ((scalar-event-p event)
+           (let ((event (%normalize-scalar-event event)))
            (start-value event)
            (%emit-prefix event context)
            (let* ((value (scalar-event-value event))
@@ -179,22 +235,28 @@
                              (%scalar-style value (scalar-event-style event)
                                             (flow-p) width
                                             (scalar-event-tag event)))))
-             (unless (and empty (or (null stack)
-                                    (eq (scalar-event-style event) :plain)))
+             (unless (and empty
+                          (eq (scalar-event-style event) :plain)
+                          (null (scalar-event-tag event)))
              (%emit-text
               context
               (with-output-to-string (scalar-stream)
-                (%write-scalar (if (and empty
-                                        (member (scalar-event-style event)
-                                                '(:single-quoted :double-quoted)))
-                                   " "
-                                   value)
+                               (%write-scalar (if (and empty
+                                                       (member (scalar-event-style event)
+                                                               '(:single-quoted :double-quoted))
+                                                       (null (scalar-event-tag event)))
+                                                  " "
+                                                  value)
                                style
                                scalar-stream
-                               (* (max 1 (length stack)) indent)))))
+                               (* (max 1 (length stack)) indent)
+                               (not (some (lambda (candidate)
+                                            (and (document-end-event-p candidate)
+                                                 (document-end-event-explicit-p candidate)))
+                                          remaining))))))
              (when stack (incf (cdr (car stack))))
              (when key-p
-               (setf last-key-style style))))
+               (setf last-key-style style)))))
           ((alias-event-p event)
            (start-value)
            (%emit-text context "*")

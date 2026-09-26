@@ -92,12 +92,17 @@
   (let ((analysis (%scalar-analysis value)))
     (and (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
          (or (and tag
+                  (string= tag "tag:yaml.org,2002:str")
+                  (string= (resolve-plain-scalar-tag value :core)
+                           "tag:yaml.org,2002:str"))
+             (and tag
                   (member tag '("tag:yaml.org,2002:int"
                                 "tag:yaml.org,2002:float"
                                 "tag:yaml.org,2002:bool"
                                 "tag:yaml.org,2002:null") :test #'string=))
-             (string= (resolve-plain-scalar-tag value :core)
-                      "tag:yaml.org,2002:str")))))
+             (or (null tag)
+                 (string= (resolve-plain-scalar-tag value :core)
+                          "tag:yaml.org,2002:str"))))))
 
 (defun %scalar-style (value requested flow width &optional tag)
   (declare (ignore width))
@@ -108,9 +113,12 @@
                (or (zerop (length value))
                    (not (and (if flow (getf analysis :flow-plain)
                                   (getf analysis :block-plain))
-                             (or (null tag)
-                                 (%plain-safe-p value :flow flow :tag tag))))))
+                             (%plain-safe-p value :flow flow :tag tag)))))
       (setf style :single-quoted))
+    (when (and tag
+               (getf analysis :multiline)
+               (member style '(:plain :single-quoted)))
+      (setf style :double-quoted))
     (when (and (eq style :single-quoted)
                (not (getf analysis :single-quoted)))
       (setf style :double-quoted))
@@ -179,7 +187,7 @@
       (write-string (make-string indent :initial-element #\Space) stream)))
   (write-char #\' stream))
 
-(defun %write-block-scalar (value stream folded indent)
+(defun %write-block-scalar (value stream folded indent &optional (preserve-blank-indentation t))
   (let ((chomp (cond ((and (plusp (length value))
                            (%yaml-line-break-p (char value (1- (length value)))))
                       (if (and (> (length value) 1)
@@ -203,7 +211,16 @@
           for end = (position #\Newline value :start start)
           do (when (>= start (length value)) (return))
              (unless (or (= start (length value))
-                         (and end (= start end)))
+                         (and (not preserve-blank-indentation)
+                              end (= start end))
+                         (and end (= start end)
+                              (let* ((next-start (1+ end))
+                                     (next-end (and (< next-start (length value))
+                                                   (position #\Newline value :start next-start))))
+                                (or (null next-end)
+                                    (= next-start next-end)
+                                    (not (loop for index from next-start below next-end
+                                               always (%yaml-blank-p (char value index))))))))
                (write-string (make-string indent :initial-element #\Space) stream))
              (when end
                (write-string value stream :start start :end end)
@@ -216,10 +233,11 @@
                  (write-char #\Newline stream))
                (return)))))
 
-(defun %write-scalar (value style stream &optional (indent 0))
+(defun %write-scalar (value style stream &optional (indent 0)
+                                             (preserve-blank-indentation t))
   (case style
     (:plain (%write-plain value stream))
     (:single-quoted (%write-single-quoted value stream indent))
     (:double-quoted (%write-double-quoted value stream))
-    (:literal (%write-block-scalar value stream nil indent))
-    (:folded (%write-block-scalar value stream t indent))))
+    (:literal (%write-block-scalar value stream nil indent preserve-blank-indentation))
+    (:folded (%write-block-scalar value stream t indent preserve-blank-indentation))))

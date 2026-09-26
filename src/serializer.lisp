@@ -17,7 +17,7 @@
                            (mapping-node-p node))
                  (error 'yaml-emit-error
                         :context "unsupported representation node"
-                        :message (format nil "~S" (type-of node))))
+                        :message (princ-to-string (type-of node))))
                (incf (gethash node counts 0))
                (unless (gethash node seen)
                  (setf (gethash node seen) t)
@@ -30,7 +30,9 @@
                      (setf (gethash node seen) t)
                      (setf (node-anchor node)
                            (when (> (gethash node counts 0) 1)
-                             (format nil "id~3,'0D" (incf counter))))
+                             (concatenate 'simple-string
+                                          "id"
+                                          (write-to-string (incf counter)))))
                      (dolist (child (%node-children node)) (mark-node child)))))
           (mark-node root)))))
   root)
@@ -50,7 +52,7 @@
                            (mapping-node-p node))
                  (error 'yaml-emit-error
                         :context "unsupported representation node"
-                        :message (format nil "~S" (type-of node))))
+                        :message (princ-to-string (type-of node))))
                (when (gethash node emitted) (return-from walk (alias node)))
                (when (gethash node active) (return-from walk (alias node)))
                (when (or (sequence-node-p node) (mapping-node-p node))
