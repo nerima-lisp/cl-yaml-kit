@@ -16,6 +16,17 @@
          options))
 
 (describe "loader"
+  (it "resolves the YAML 1.2.2 scalar tables"
+    (dolist (case '((:core "" "tag:yaml.org,2002:null")
+                    (:core "0o17" "tag:yaml.org,2002:int")
+                    (:core "1.25" "tag:yaml.org,2002:float")
+                    (:core "true" "tag:yaml.org,2002:bool")
+                    (:json "1.25" "tag:yaml.org,2002:float")
+                    (:json "01" "tag:yaml.org,2002:str")
+                    (:failsafe "true" "tag:yaml.org,2002:str")))
+      (destructuring-bind (schema text expected) case
+        (expect (yaml-kit::resolve-plain-scalar-tag text schema) :to-equal expected))))
+
   (it "constructs a scalar from events"
     (let ((value (yaml-kit:parse
                   (list (loader-event :stream-start)
@@ -44,3 +55,19 @@
                   (yaml-kit:sequence-node-items
                    (cdr (second (yaml-kit:mapping-node-pairs node)))))
               :to-be-truthy))))
+
+  (it "applies duplicate-key policies"
+    (let ((events (list (loader-event :stream-start)
+                        (loader-event :document-start)
+                        (loader-event :mapping-start)
+                        (loader-event :scalar :value "key")
+                        (loader-event :scalar :value "first")
+                        (loader-event :scalar :value "key")
+                        (loader-event :scalar :value "last")
+                        (loader-event :mapping-end)
+                        (loader-event :document-end)
+                        (loader-event :stream-end))))
+      (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :first))
+              :to-equal "first")
+      (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :last))
+              :to-equal "last")))
