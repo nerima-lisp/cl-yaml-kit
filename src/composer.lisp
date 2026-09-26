@@ -111,4 +111,4 @@
       (nreverse documents)))
 
 (defun compose-events (events &rest options)
-  (car (apply #'compose-all-events events options)))
+  (car (apply #'compose-all-events (cons events options))))

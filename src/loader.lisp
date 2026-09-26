@@ -19,9 +19,10 @@
 INPUT may be an event list for compatibility, or a reader input accepted by
 MAP-EVENTS.  Non-list input is passed to the composer without materializing
 an intermediate event list."
-  (apply #'compose-events input
-         (%loader-compose-options input max-input-length max-depth max-scalar-length
-                                  max-nodes max-alias-expansions)))
+  (apply #'compose-events
+         (cons input
+               (%loader-compose-options input max-input-length max-depth max-scalar-length
+                                        max-nodes max-alias-expansions))))
 
 (defun compose-all (input &key (max-input-length 104857600) (max-depth 1000)
                                  (max-scalar-length 16777216)
@@ -32,9 +33,10 @@ an intermediate event list."
 INPUT may be an event list for compatibility, or a reader input accepted by
 MAP-EVENTS.  Non-list input is passed to the composer without materializing
 an intermediate event list."
-  (apply #'compose-all-events input
-         (%loader-compose-options input max-input-length max-depth max-scalar-length
-                                  max-nodes max-alias-expansions)))
+  (apply #'compose-all-events
+         (cons input
+               (%loader-compose-options input max-input-length max-depth max-scalar-length
+                                        max-nodes max-alias-expansions))))
 
 (defun parse (input &key (schema :core) (mapping-type :hash-table)
                             (sequence-type :vector)
@@ -48,9 +50,10 @@ an intermediate event list."
 Non-list input is consumed by MAP-EVENTS through the composer, so no
 intermediate event list is created."
   (construct
-   (apply #'compose input
-          (%loader-compose-options input max-input-length max-depth max-scalar-length
-                                   max-nodes max-alias-expansions))
+   (apply #'compose
+          (cons input
+                (%loader-compose-options input max-input-length max-depth max-scalar-length
+                                         max-nodes max-alias-expansions)))
    :schema schema :mapping-type mapping-type :sequence-type sequence-type
    :duplicate-key-policy duplicate-key-policy))
 
@@ -69,10 +72,11 @@ intermediate event list is created."
             (construct node :schema schema :mapping-type mapping-type
                             :sequence-type sequence-type
                             :duplicate-key-policy duplicate-key-policy))
-          (apply #'compose-all input
-                 (%loader-compose-options input max-input-length max-depth
-                                          max-scalar-length max-nodes
-                                          max-alias-expansions))))
+          (apply #'compose-all
+                 (cons input
+                       (%loader-compose-options input max-input-length max-depth
+                                                max-scalar-length max-nodes
+                                                max-alias-expansions)))))
 
 (defun read-yaml (stream &key (schema :core) (mapping-type :hash-table)
                               (sequence-type :vector)

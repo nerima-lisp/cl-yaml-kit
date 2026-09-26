@@ -8,7 +8,7 @@
            (if (member schema '(:core :json))
                (intern (string-upcase
                         (subseq (resolve-tag node :schema schema)
-                                (1+ (length +yaml-tag-prefix+)))) :keyword)
+                                (length +yaml-tag-prefix+))) :keyword)
                :str)
            :str))
       ((member tag '("!!str" "tag:yaml.org,2002:str") :test #'string=) :str)
@@ -130,7 +130,8 @@
                          (dolist (pair pairs table)
                            (let ((key (walk (car pair)))
                                  (value (walk (cdr pair))))
-                             (when (or (consp key) (vectorp key)
+                             (when (or (consp key)
+                                       (and (vectorp key) (not (stringp key)))
                                        (yaml-mapping-p key))
                                (error 'yaml-compose-error))
                              (multiple-value-bind (old presentp) (gethash key table)

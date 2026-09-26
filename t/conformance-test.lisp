@@ -7,6 +7,8 @@
 (defstruct conformance-case
   id name directory input event json out emit error)
 
+(defvar *conformance-exclusions* nil)
+
 (defparameter *conformance-stage-names* '(:reader :loader :dumper :emitter))
 
 (defun conformance-source-root ()
@@ -21,7 +23,8 @@
   (let* ((root (conformance-source-root))
          (configured (uiop:getenv "YAML_TEST_SUITE"))
          (candidates (if configured
-                         (list (pathname configured))
+                         (list (uiop:ensure-directory-pathname
+                                (pathname configured)))
                          (list (merge-pathnames "yaml-test-suite/" root)
                                (merge-pathnames "yaml-test-suite-data/" root)
                                (merge-pathnames "data/yaml-test-suite/" root)))))
@@ -244,7 +247,7 @@
                (incf (getf summary :drift))
                (incf (getf summary :skipped))))
           (passedp (incf (getf summary :passed)))
-          (t (incf (getf summary :failed)))))))
+          (t (incf (getf summary :failed))))))))
 
 (describe "yaml-test-suite conformance harness"
   (it "keeps fixture and exclusion metadata loadable"
@@ -264,4 +267,4 @@
                        (and (zerop (getf summary :failed))
                             (zerop (getf summary :drift))))
                      summaries)
-              :to-be-truthy)))))
+              :to-be-truthy))))

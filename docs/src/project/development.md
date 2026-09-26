@@ -19,7 +19,7 @@ compared semantically after dumping, and `emit.yaml` is a separate emitter
 expectation. JSON object key order and whitespace are ignored, while YAML
 null, false, integer, and floating-point values remain distinct.
 
-Each registered test receives a 5-second default per-test timeout from
+Each registered test receives a 120-second default per-test timeout from
 `cl-weave`; set `CL_YAML_TEST_TIMEOUT_MS` to change it. The outer `perl`
 alarm is also required for local and CI commands so a process-level deadlock
 cannot hold the job indefinitely. The flake check and development shell export

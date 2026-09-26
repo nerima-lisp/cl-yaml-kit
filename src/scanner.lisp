@@ -129,28 +129,6 @@
                (t (reader-send state (reader-scalar-event state (reader-plain-value state t) :plain anchor tag start))))))
       (decf (reader-state-depth state)))))
 
-(defun reader-single-quoted (state)
-  (let ((out (make-array 32 :element-type 'character :adjustable t :fill-pointer 0)))
-    (reader-advance state)
-    (loop
-      (when (reader-eof-p state) (reader-parse-error state "unterminated single-quoted scalar"))
-      (let ((c (reader-peek state)))
-        (reader-advance state)
-        (cond ((char= c #\') (if (char= (or (reader-peek state) #\Null) #\') (progn (vector-push-extend #\' out) (reader-advance state)) (return (coerce out 'simple-string))))
-              (t (vector-push-extend c out)))))))
-
-(defun reader-plain-value (state flow-p)
-  (let ((out (make-array 64 :element-type 'character :adjustable t :fill-pointer 0)))
-    (loop while (and (reader-peek state)
-                     (not (yaml-line-break-p (reader-peek state)))
-                     (not (and flow-p (member (reader-peek state) '(#\, #\] #\}))))
-                     (not (reader-colon-here-p state)))
-          do (vector-push-extend (reader-peek state) out) (reader-advance state))
-    (let ((end (fill-pointer out)))
-      (loop while (and (> end 0) (member (aref out (1- end)) '(#\Space #\Tab))) do (decf end))
-      (setf (fill-pointer out) end))
-    (coerce out 'simple-string)))
-
 (defun reader-flow-sequence (state start anchor tag)
   (reader-advance state) (reader-send state (make-sequence-start-event :start-mark start :end-mark (reader-mark state) :anchor anchor :tag tag :implicit-p nil :style :flow))
   (loop
