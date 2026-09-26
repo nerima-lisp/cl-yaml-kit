@@ -4,6 +4,7 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (defparameter *flow-escape-table*
+  ;; YAML 1.2.2 retains libyaml's \/ escape and accepts a literal tab escape.
   (let ((table (make-array 128 :initial-element nil)))
     (dolist (entry '((#\0 . 0) (#\a . 7) (#\b . 8) (#\t . 9) (#\Tab . 9)
                      (#\n . 10) (#\v . 11) (#\f . 12) (#\r . 13) (#\e . 27)
@@ -114,6 +115,7 @@
                  (sc-blankz-p s 3)) (return))
       (when (sc-check s #\#) (return))
       (loop while (not (sc-blankz-p s)) do
+        ;; YAML 1.2.2 ends plain scalars at colon + blank, not at every colon.
         (when (or (and (sc-check s #\:) (sc-blankz-p s 1))
                   (and (plusp (scanner-flow-level s))
                        (member (sc-char s) '(#\, #\[ #\] #\{ #\}))))
