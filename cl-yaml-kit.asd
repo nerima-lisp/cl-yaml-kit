@@ -10,7 +10,7 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ()
+  :depends-on ("cl-regex-kit") ; Core schema resolution uses the pinned regex engine.
   :pathname "src"
   :serial t
   :components ((:file "package") (:file "data") (:file "events")
