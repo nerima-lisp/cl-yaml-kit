@@ -19,13 +19,14 @@
         do (loop while (and (< position (length text))
                             (member (char text position) '(#\Space #\Tab)))
                  do (incf position))
-           (if (and (< position (length text))
-                    (char= (char text position) #\[))
-               (let ((end (position #\] text :start position)))
-                 (unless end (error "Malformed conformance event field: ~S" text))
-                 (push (subseq text (1+ position) end) fields)
-                 (setf position (1+ end)))
-               (return (nreverse fields)))))
+           (if (or (= position (length text))
+                   (member (char text position) '(#\: #\' #\" #\| #\>)))
+               (return (values (nreverse fields) position))
+               (let ((end (or (position #\Space text :start position)
+                              (position #\Tab text :start position)
+                              (length text))))
+                 (push (subseq text position end) fields)
+                 (setf position end)))))
 
 (defun conformance-field-value (field prefix suffix)
   (when (and field (>= (length field) (+ (length prefix) (length suffix)))
@@ -40,8 +41,21 @@
   (or (conformance-field-value field "<" ">")
       (conformance-field-value field "!" "")))
 
+(defun conformance-event-anchor (fields)
+  (loop for field in fields
+        for anchor = (conformance-anchor field)
+        when anchor do (return anchor)))
+
+(defun conformance-event-tag (fields)
+  (loop for field in fields
+        for tag = (conformance-tag field)
+        when tag do (return tag)))
+
+(defun conformance-event-flow-p (fields)
+  (member "[]" fields :test #'string=))
+
 (defun conformance-event-line (line)
-  (let* ((text (string-trim '(#\Space #\Tab #\Return) line))
+  (let* ((text (string-right-trim '(#\Return) line))
          (kind (if (>= (length text) 4) (subseq text 0 4) text)))
     (cond
       ((string= kind "+STR") (yaml-kit:make-stream-start-event))
@@ -61,13 +75,13 @@
               (sequence-p (string= kind "+SEQ")))
          (if sequence-p
              (yaml-kit:make-sequence-start-event
-              :style (if (string= (first fields) "[]") :flow :block)
-              :anchor (conformance-anchor (second fields))
-              :tag (conformance-tag (third fields)))
+              :style (if (conformance-event-flow-p fields) :flow :block)
+              :anchor (conformance-event-anchor fields)
+              :tag (conformance-event-tag fields))
              (yaml-kit:make-mapping-start-event
-              :style (if (string= (first fields) "{}") :flow :block)
-              :anchor (conformance-anchor (second fields))
-              :tag (conformance-tag (third fields))))))
+              :style (if (conformance-event-flow-p fields) :flow :block)
+              :anchor (conformance-event-anchor fields)
+              :tag (conformance-event-tag fields)))))
       ((member kind '("-SEQ" "-MAP") :test #'string=)
        (if (string= kind "-SEQ")
            (yaml-kit:make-sequence-end-event)
@@ -77,25 +91,21 @@
         :anchor (string-left-trim '(#\Space #\*) (subseq text 4))))
       ((string= kind "=VAL")
        (let* ((rest (string-left-trim '(#\Space #\Tab) (subseq text 4)))
-              (fields (conformance-event-fields rest))
-              (field-end (if fields
-                             (loop with start = 0
-                                   repeat (length fields)
-                                   do (setf start (position #\] rest :start start))
-                                      (incf start)
-                                   finally (return start))
-                             0))
-              (tail (string-left-trim '(#\Space #\Tab)
-                                      (subseq rest field-end)))
+              (fields nil)
+              (field-end 0))
+         (multiple-value-setq (fields field-end)
+           (conformance-event-fields rest))
+         (let* ((tail (string-left-trim '(#\Space #\Tab)
+                                         (subseq rest field-end)))
               (style (and (plusp (length tail)) (char tail 0))))
-         (yaml-kit:make-scalar-event
-          :anchor (conformance-anchor (first fields))
-          :tag (conformance-tag (second fields))
-          :style (case style
-                   (#\' :single-quoted) (#\" :double-quoted)
-                   (#\| :literal) (#\> :folded) (otherwise :plain))
-          :value (conformance-unescape (if (plusp (length tail))
-                                           (subseq tail 1) "")))))
+           (yaml-kit:make-scalar-event
+            :anchor (conformance-event-anchor fields)
+            :tag (conformance-event-tag fields)
+            :style (case style
+                     (#\' :single-quoted) (#\" :double-quoted)
+                     (#\| :literal) (#\> :folded) (otherwise :plain))
+            :value (conformance-unescape (if (plusp (length tail))
+                                             (subseq tail 1) ""))))))
       (t (error "Unknown conformance event line: ~S" line)))))
 
 (defun conformance-events (text)
@@ -133,3 +143,15 @@
 
 (defun conformance-event-signatures (text)
   (mapcar #'conformance-event-signature (conformance-events text)))
+
+(describe "conformance event construction"
+  (it "parses event prefixes and preserves scalar payloads"
+    (dolist (case '(("=VAL &a <tag:yaml.org,2002:str> :value"
+                     (:scalar "a" "tag:yaml.org,2002:str" #\: "value"))
+                    ("=VAL ' " (:scalar nil nil #\' " "))
+                    ("=VAL :" (:scalar nil nil #\: ""))
+                    ("+MAP {} &node <tag:yaml.org,2002:map>"
+                     (:mapping-start nil "node" "tag:yaml.org,2002:map"))))
+      (destructuring-bind (line expected) case
+        (expect (conformance-event-signature (conformance-event-line line))
+                :to-equal expected)))))

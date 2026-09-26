@@ -59,7 +59,8 @@
 
 (defun %construct-scalar (node schema)
   (let* ((text (scalar-node-value node))
-         (kind (%scalar-kind node schema)))
+         (kind (%scalar-kind node schema))
+         (tag (node-tag node)))
     (case kind
       (:invalid-collection (error 'yaml-compose-error))
       (:null (unless (member text '("" "~" "null" "Null" "NULL")
@@ -70,7 +71,15 @@
                    ((member text '("false" "False" "FALSE") :test #'string=)
                     +yaml-false+)
                    (t (error 'yaml-compose-error))))
-      ((:int :float) (%parse-number text kind))
+      (:int (%parse-number text kind))
+      (:float
+       (let ((number (%parse-number text kind)))
+         (if (and (or (null tag) (string= tag "?")))
+             (handler-case
+                 (multiple-value-bind (integer remainder) (truncate number)
+                   (if (zerop remainder) integer number))
+               (arithmetic-error () number))
+             number)))
       (t text))))
 
 (defun construct (node &key (schema :core) (mapping-type :hash-table)

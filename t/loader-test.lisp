@@ -59,6 +59,18 @@
                         (loader-event :stream-end)))))
       (expect value :to-equal 0.278d0)))
 
+  (it "normalizes implicit integral decimal floats"
+    (dolist (case '(("450.00" 450) ("2392.00" 2392)
+                    ("450.25" 450.25d0)))
+      (destructuring-bind (text expected) case
+        (expect (yaml-kit:parse
+                 (list (loader-event :stream-start)
+                       (loader-event :document-start)
+                       (loader-event :scalar :value text)
+                       (loader-event :document-end)
+                       (loader-event :stream-end)))
+                :to-equal expected))))
+
   (it "rejects incompatible explicit collection tags"
     (dolist (case '((:sequence "!!str") (:mapping "!!seq")))
       (destructuring-bind (kind tag) case

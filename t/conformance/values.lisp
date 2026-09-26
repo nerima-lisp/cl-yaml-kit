@@ -117,12 +117,12 @@
 
 (defun conformance-dumper-e2e-result (case)
   (handler-case
-      (let* ((value (conformance-loader-value case))
+      (let* ((value (first (conformance-loader-value case)))
              (emitted (yaml-kit:emit value))
-             (actual (yaml-kit:parse-all emitted))
-             (expected (yaml-kit:parse-all
-                        (conformance-file-string
-                         (conformance-case-out case)))))
+             (actual (first (yaml-kit:parse-all emitted)))
+             (expected (first (yaml-kit:parse-all
+                               (conformance-file-string
+                                (conformance-case-out case))))))
         (let ((passed (and (conformance-values-equal-p actual value)
                            (conformance-values-equal-p actual expected))))
           (values passed
