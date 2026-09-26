@@ -193,26 +193,93 @@
     (coerce out 'simple-string)))
 
 (defun reader-block-scalar (state parent-indent style)
-  (reader-skip-line state)
-  (let ((lines nil) (content-indent nil))
-    (loop while (not (reader-eof-p state)) do
-      (let ((line-start (reader-state-position state)) (indent 0))
-        (loop while (char= (or (reader-peek state) #\Null) #\Space) do (incf indent) (reader-advance state))
-        (when (<= indent parent-indent)
-          (setf (reader-state-position state) line-start (reader-state-column state) 1)
-          (return))
-        (unless content-indent (setf content-indent indent))
-        (let ((begin (+ line-start (min indent content-indent))))
-          (loop while (and (reader-peek state) (not (yaml-line-break-p (reader-peek state)))) do (reader-advance state))
-          (push (subseq (reader-state-text state) begin (reader-state-position state)) lines)
-          (reader-skip-line state))))
-    (setf lines (nreverse lines))
-    (let ((value (with-output-to-string (out)
-                   (loop for line in lines for first = t then nil do
-                     (unless first (write-char #\Newline out)) (write-string line out)))))
-      (when lines (setf value (concatenate 'string value "\n")))
-      (when (eq style :folded) (setf value (substitute #\Space #\Newline value)))
-      value)))
+  (let ((chomping :clip) (indent-indicator nil) (header-ended-p nil))
+    ;; The indicators may occur in either order.  A comment is part of the
+    ;; header, not the scalar, and the line must be consumed before scanning
+    ;; the content.
+    (loop while (and (reader-peek state)
+                     (not (yaml-line-break-p (reader-peek state)))) do
+      (let ((character (reader-peek state)))
+        (cond
+          ((member character '(#\Space #\Tab)) (reader-advance state))
+          ((char= character #\#) (reader-skip-line state)
+           (setf header-ended-p t)
+           (return))
+          ((member character '(#\- #\+))
+           (when (not (eq chomping :clip))
+             (reader-parse-error state "duplicate block scalar chomping indicator"))
+           (setf chomping (if (char= character #\-) :strip :keep))
+           (reader-advance state))
+          ((digit-char-p character 10)
+           (when (or indent-indicator (zerop (digit-char-p character 10)))
+             (reader-parse-error state "invalid block scalar indentation indicator"))
+           (setf indent-indicator (digit-char-p character 10))
+           (reader-advance state))
+          (t (reader-parse-error state "invalid block scalar header")))))
+    (unless (or header-ended-p
+                (and (reader-peek state) (yaml-line-break-p (reader-peek state))))
+      (reader-skip-line state))
+    (let ((lines nil) (content-indent (and indent-indicator
+                                           (+ parent-indent indent-indicator)))
+          (saw-break nil))
+      (loop while (not (reader-eof-p state)) do
+        (let ((line-start (reader-state-position state))
+              (line-column (reader-state-column state))
+              (indent 0))
+          (loop while (char= (or (reader-peek state) #\Null) #\Space)
+                do (incf indent) (reader-advance state))
+          (let* ((line-content-start (reader-state-position state))
+                 (line-break (yaml-line-break-p (or (reader-peek state) #\Null)))
+                 (blank-p (or line-break (reader-eof-p state))))
+            (unless blank-p
+              (when (and content-indent (< indent content-indent))
+                (setf (reader-state-position state) line-start
+                      (reader-state-column state) line-column)
+                (return))
+              (when (<= indent parent-indent)
+                (setf (reader-state-position state) line-start
+                      (reader-state-column state) line-column)
+                (return))
+              (unless content-indent (setf content-indent indent)))
+            (let ((begin (if blank-p line-content-start
+                            (+ line-start content-indent))))
+              (loop while (and (reader-peek state)
+                               (not (yaml-line-break-p (reader-peek state))))
+                    do (reader-advance state))
+              (push (list (subseq (reader-state-text state) begin
+                                  (reader-state-position state))
+                          (and (not blank-p) (> indent content-indent))
+                          blank-p)
+                    lines)
+              (when (and (reader-peek state)
+                         (yaml-line-break-p (reader-peek state)))
+                (setf saw-break t)
+                (reader-skip-line state)))))
+      (setf lines (nreverse lines))
+      (let ((value
+              (with-output-to-string (out)
+                (loop for (line more-p blank-p) in lines
+                      for previous = nil then (list line more-p blank-p)
+                      do (when previous
+                           (destructuring-bind (previous-line previous-more-p previous-blank-p)
+                               previous
+                             (declare (ignore previous-line))
+                             (if (and (eq style :folded)
+                                      (not previous-blank-p) (not blank-p)
+                                      (not previous-more-p) (not more-p))
+                                 (write-char #\Space out)
+                                 (write-char #\Newline out))))
+                         (write-string line out)))))
+            (when (and (eq chomping :clip) saw-break)
+              (loop while (and (plusp (length value))
+                               (char= (char value (1- (length value))) #\Newline))
+                    do (setf value (subseq value 0 (1- (length value)))))
+              (setf value (concatenate 'string value (string #\Newline))))
+            (when (eq chomping :strip)
+              (loop while (and (plusp (length value))
+                               (char= (char value (1- (length value))) #\Newline))
+                    do (setf value (subseq value 0 (1- (length value))))))
+            value)))))
 
 (defun reader-empty-scalar (state)
   (reader-send state (make-scalar-event :start-mark (reader-mark state) :end-mark (reader-mark state)
@@ -234,7 +301,12 @@
           ((char= c #\") (reader-send state (reader-scalar-event state (reader-decode-double-quoted state) :double-quoted anchor tag start)))
           ((char= c #\') (reader-send state (reader-scalar-event state (reader-single-quoted state) :single-quoted anchor tag start)))
           ((member c '(#\| #\>))
-           (reader-advance state) (reader-send state (reader-scalar-event state (reader-block-scalar state (reader-current-indent state) (if (char= c #\|) :literal :folded)) (if (char= c #\|) :literal :folded) anchor tag start)))
+           (let ((parent-indent (reader-current-indent state))
+                 (block-style (if (char= c #\|) :literal :folded)))
+             (reader-advance state)
+             (reader-send state (reader-scalar-event state
+                                                     (reader-block-scalar state parent-indent block-style)
+                                                     block-style anchor tag start))))
           (t (reader-send state (reader-scalar-event state (reader-plain-value state nil) :plain anchor tag start))))))))
 
 (defun reader-block-node (state indent)
