@@ -44,16 +44,17 @@
        (vector-push-extend (code-char (aref *flow-escape-table* (char-code c))) out)
        (sc-skip s))
       ((member c '(#\x #\u #\U))
-       (let ((n (case c (#\x 2) (#\u 4) (t 8))) (value 0))
-         (dotimes (i n)
-           (unless (sc-hex-p s i)
+         (let ((n (case c (#\x 2) (#\u 4) (t 8))) (value 0))
+           (dotimes (i n)
+           (unless (sc-hex-p s (1+ i))
              (sc-error s "while parsing a quoted scalar" start
                        "did not find expected hexadecimal number"))
-           (setf value (+ (* value 16) (sc-hex-value s i))))
+           (setf value (+ (* value 16) (sc-hex-value s (1+ i)))))
          (unless (%flow-valid-code-point-p value)
            (sc-error s "while parsing a quoted scalar" start
                      "found invalid Unicode character escape code"))
          (vector-push-extend (code-char value) out)
+         (sc-skip s)
          (loop repeat n do (sc-skip s))))
       ((sc-break-p s) (%flow-escaped-break s))
       (t (sc-error s "while parsing a quoted scalar" start

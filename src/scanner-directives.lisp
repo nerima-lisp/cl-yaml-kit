@@ -90,10 +90,10 @@
   "yaml_parser_scan_anchor."
   (let ((start (sc-mark s)) (b (make-scan-buffer)))
     (sc-skip s)
-    ;; YAML 1.2.2 ns-anchor-char is broader than libyaml's ASCII IS_ALPHA.
+    ;; YAML 1.2.2 ns-anchor-char excludes only flow indicators and blanks.
+    ;; In particular, ':' is valid inside an anchor name (for example &a:).
     (loop for c = (sc-char s) while (and (not (sc-blankz-p s))
-                                         (not (yaml-flow-indicator-p c))
-                                         (not (yaml-indicator-p c)))
+                                         (not (yaml-flow-indicator-p c)))
           do (sc-read s b))
     (when (zerop (fill-pointer b)) (sc-error s (if (eq kind :anchor)
                                                    "while scanning an anchor"
