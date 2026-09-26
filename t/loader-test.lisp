@@ -25,7 +25,18 @@
                     (:json "01" "tag:yaml.org,2002:str")
                     (:failsafe "true" "tag:yaml.org,2002:str")))
       (destructuring-bind (schema text expected) case
-        (expect (yaml-kit::resolve-plain-scalar-tag text schema) :to-equal expected))))
+      (expect (yaml-kit::resolve-plain-scalar-tag text schema) :to-equal expected))))
+
+  (it "keeps the schema resolution table data-driven"
+    (dolist (case '((:failsafe "true" "tag:yaml.org,2002:str")
+                    (:json "null" "tag:yaml.org,2002:null")
+                    (:json "01" "tag:yaml.org,2002:str")
+                    (:core "1_000" "tag:yaml.org,2002:str")
+                    (:core "0x10" "tag:yaml.org,2002:int")
+                    (:core ".NaN" "tag:yaml.org,2002:float")))
+      (destructuring-bind (schema text expected) case
+        (expect (yaml-kit::resolve-plain-scalar-tag text schema)
+                :to-equal expected))))
 
   (it "constructs a scalar from events"
     (let ((value (yaml-kit:parse
@@ -70,4 +81,19 @@
       (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :first))
               :to-equal "first")
       (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :last))
-              :to-equal "last")))
+              :to-equal "last")
+      (expect (handler-case
+                  (progn (yaml-kit:parse events) nil)
+                (yaml-kit:yaml-compose-error t))
+              :to-be-truthy)))
+
+  (it "enforces loader limits for event lists"
+    (let ((events (list (loader-event :stream-start)
+                        (loader-event :document-start)
+                        (loader-event :scalar :value "long")
+                        (loader-event :document-end)
+                        (loader-event :stream-end))))
+      (expect (handler-case
+                  (progn (yaml-kit:parse events :max-scalar-length 3) nil)
+                (yaml-kit:yaml-resource-limit-error t))
+              :to-be-truthy)))
