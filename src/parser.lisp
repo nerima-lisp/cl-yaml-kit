@@ -114,7 +114,6 @@
               (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
             (parser-emit parser (make-sequence-start-event :start-mark start :end-mark (token-end-mark token)
                                                            :anchor anchor :tag tag :implicit-p (null tag) :style :block))
-            (parser-push parser #'yaml-parser-parse-indentless-sequence-entry)
             #'yaml-parser-parse-indentless-sequence-entry)
           (case (token-kind token)
             (:scalar
@@ -135,7 +134,7 @@
                (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
              (parser-emit parser (make-sequence-start-event :start-mark start :end-mark (token-end-mark token)
                                                             :anchor anchor :tag tag :implicit-p (null tag) :style :flow))
-             (parser-push parser #'yaml-parser-parse-flow-sequence-entry) #'yaml-parser-parse-flow-sequence-entry)
+             #'yaml-parser-parse-flow-sequence-entry)
             (:flow-mapping-start
              (parser-next parser)
              (incf (parser-depth parser))
@@ -143,7 +142,7 @@
                (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
              (parser-emit parser (make-mapping-start-event :start-mark start :end-mark (token-end-mark token)
                                                            :anchor anchor :tag tag :implicit-p (null tag) :style :flow))
-             (parser-push parser #'yaml-parser-parse-flow-mapping-key) #'yaml-parser-parse-flow-mapping-key)
+             #'yaml-parser-parse-flow-mapping-key)
             (:block-sequence-start
              (unless block (parser-error token "did not find expected node content"))
              (parser-next parser)
@@ -152,7 +151,7 @@
                (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
              (parser-emit parser (make-sequence-start-event :start-mark start :end-mark (token-end-mark token)
                                                             :anchor anchor :tag tag :implicit-p (null tag) :style :block))
-             (parser-push parser #'yaml-parser-parse-block-sequence-entry) #'yaml-parser-parse-block-sequence-entry)
+             #'yaml-parser-parse-block-sequence-entry)
             (:block-mapping-start
              (unless block (parser-error token "did not find expected node content"))
              (parser-next parser)
@@ -161,7 +160,7 @@
                (parser-resource-error parser "depth" (parser-max-depth parser) (parser-depth parser) start))
              (parser-emit parser (make-mapping-start-event :start-mark start :end-mark (token-end-mark token)
                                                            :anchor anchor :tag tag :implicit-p (null tag) :style :block))
-             (parser-push parser #'yaml-parser-parse-block-mapping-key) #'yaml-parser-parse-block-mapping-key)
+             #'yaml-parser-parse-block-mapping-key)
             (otherwise
              (if (or anchor tag) (progn (parser-empty-scalar parser start) (parser-pop parser))
                  (parser-error token "did not find expected node content"))))))))
@@ -195,24 +194,29 @@
 (define-parser-state yaml-parser-parse-block-mapping-key (parser)
   "yaml_parser_parse_block_mapping_key."
   (let ((token (parser-peek parser)))
-    (if (member (token-kind token) '(:block-end :block-entry))
-        (progn (when (eq (token-kind token) :block-end) (parser-next parser))
+    (if (eq (token-kind token) :block-end)
+        (progn (parser-next parser)
                (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token)))
                (decf (parser-depth parser)) (parser-pop parser))
+        (if (eq (token-kind token) :block-entry)
+            (progn
+              ;; The scanner emits BLOCK-END before a sibling sequence entry.
+              ;; Leave the entry for the enclosing sequence state.
+              (parser-pop parser))
         (progn (when (eq (token-kind token) :key) (parser-next parser))
                (parser-push parser #'yaml-parser-parse-block-mapping-value)
                (if (member (token-kind (parser-peek parser)) '(:value :block-entry :block-end))
                    (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-value)
-                   #'yaml-parser-parse-node-block-indentless)))))
+                   #'yaml-parser-parse-node-block-indentless))))))
 
 (define-parser-state yaml-parser-parse-block-mapping-value (parser)
   "yaml_parser_parse_block_mapping_value."
   (let ((token (parser-peek parser)))
     (when (eq (token-kind token) :value) (parser-next parser))
-    (parser-push parser #'yaml-parser-parse-block-mapping-key)
     (if (member (token-kind (parser-peek parser)) '(:key :block-entry :block-end))
         (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-key)
-        #'yaml-parser-parse-node-block-indentless)))
+        (progn (parser-push parser #'yaml-parser-parse-block-mapping-key)
+               #'yaml-parser-parse-node-block-indentless))))
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry (parser)
   "yaml_parser_parse_flow_sequence_entry."
@@ -257,10 +261,10 @@
   "yaml_parser_parse_flow_mapping_value."
   (let ((token (parser-peek parser)))
     (when (eq (token-kind token) :value) (parser-next parser))
-    (parser-push parser #'yaml-parser-parse-flow-mapping-key)
     (if (member (token-kind (parser-peek parser)) '(:flow-entry :flow-mapping-end))
         (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-flow-mapping-key)
-        #'yaml-parser-parse-node-flow)))
+        (progn (parser-push parser #'yaml-parser-parse-flow-mapping-key)
+               #'yaml-parser-parse-node-flow))))
 
 (defun yaml-parser-parse (parser)
   "yaml_parser_parse."

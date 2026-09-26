@@ -114,6 +114,13 @@
                  (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
                      (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
                  (sc-blankz-p s 3)) (return))
+      ;; A block indicator at the current indentation starts a new node;
+      ;; it is not a continuation line of the preceding plain scalar.
+      (when (and (zerop (scanner-flow-level s))
+                 (zerop (mark-column (sc-mark s)))
+                 (member (sc-char s) '(#\- #\? #\:))
+                 (sc-blankz-p s 1))
+        (return))
       (when (sc-check s #\#) (return))
       (loop while (not (sc-blankz-p s)) do
         ;; YAML 1.2.2 ends plain scalars at colon + blank, not at every colon.
