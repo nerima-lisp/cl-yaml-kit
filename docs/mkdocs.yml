@@ -13,9 +13,13 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Guide:
+      - Data Model: guide/data-model.md
       - Pipeline: guide/pipeline.md
+      - Writing: guide/writing.md
   - Reference:
       - API: reference/api.md
       - Architecture: reference/architecture.md
+      - Conditions: reference/conditions.md
+      - Conformance: reference/conformance.md
   - Project:
       - Development: project/development.md
