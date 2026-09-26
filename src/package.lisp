@@ -10,6 +10,10 @@
    #:make-yaml-mapping #:yaml-mapping-p #:yaml-mapping-entries
    ;; Marks, nodes, and node accessors
    #:mark #:make-mark #:mark-line #:mark-column #:mark-offset
+   #:token #:make-token #:token-kind #:token-start-mark #:token-end-mark
+   #:token-value #:token-handle #:token-suffix #:token-style
+   #:token-major #:token-minor
+   #:make-scanner #:scanner-peek-token #:scanner-next-token
    #:scalar-node #:make-scalar-node #:scalar-node-p
    #:sequence-node #:make-sequence-node #:sequence-node-p
    #:mapping-node #:make-mapping-node #:mapping-node-p

@@ -16,6 +16,7 @@
   :components ((:file "package") (:file "data") (:file "events")
                (:file "nodes") (:file "conditions")
                (:file "reader-macros") (:file "char-classes")
+               (:file "tokens")
                (:file "scanner-state") (:file "scanner-scalars")
                (:file "scanner-structure") (:file "scanner")
                (:file "parser-states") (:file "parser")
