@@ -54,3 +54,31 @@
   ("trail " "'trail '")
   (#.(format nil "a~%b") "\"a\\nb\"")
   (#.(string (code-char 1)) "\"\\x01\"")))
+
+(defun emit-events-to-string (events)
+  (yaml-kit:emit-events events))
+
+(defun regression-events (value sequence-p)
+  (append (list (yaml-kit:make-stream-start-event)
+                (yaml-kit:make-document-start-event))
+          (when sequence-p (list (yaml-kit:make-sequence-start-event)))
+          (list (yaml-kit:make-scalar-event :value value :style :literal))
+          (when sequence-p (list (yaml-kit:make-sequence-end-event)))
+          (list (yaml-kit:make-document-end-event)
+                (yaml-kit:make-stream-end-event))))
+
+(cl-weave:it-each
+    ((block-scalar-indentation
+       #.(format nil "detected~%")
+       t
+       #.(format nil "- |~%  detected~%"))
+     (literal-preserves-trailing-space
+       #.(format nil "ab~%~% ~%")
+       nil
+       #.(format nil "|~%  ab~%  ~%   ~%")))
+  "emits dumper event regression ~S"
+  (name value sequence-p expected)
+  (declare (ignore name))
+  (expect (emit-events-to-string
+           (regression-events value sequence-p))
+          :to-equal expected))

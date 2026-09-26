@@ -117,7 +117,7 @@
                                             (flow-p) width
                                             (scalar-event-tag event))
                              scalar-stream
-                             (* (1+ (length stack)) indent))))
+                             (* (max 1 (length stack)) indent))))
            (when stack (incf (cdr (car stack)))))
           ((alias-event-p event)
            (start-value)
