@@ -7,9 +7,10 @@
 (defun %represent-number (value)
   (make-scalar-node :value
                     (cond ((and (floatp value) (sb-ext:float-infinity-p value))
-                           (if (plusp (float-sign value)) ".inf" "-.inf"))
+                           (if (minusp value) "-.inf" ".inf"))
                           ((and (floatp value) (sb-ext:float-nan-p value)) ".nan")
-                          (t (princ-to-string value)))))
+                          (t (let ((*read-default-float-format* 'double-float))
+                               (string-downcase (princ-to-string value)))))))
 
 (defun %represent-list (value)
   (make-sequence-node :items (mapcar #'represent value)))
@@ -29,23 +30,26 @@
     (make-mapping-node :pairs (nreverse pairs))))
 
 (defmacro define-representer-dispatch (name clauses)
-  "Define NAME from a declarative ordered predicate/function table."
+  "Define NAME from a declarative type/function table."
   `(defun ,name (value)
      (declare (optimize (speed 3) (safety 1)))
-     (cond
-       ,@(loop for (predicate function) in clauses
-               collect `((,predicate value) (,function value))))))
+     (typecase value
+       ,@(loop for (type function) in clauses
+               collect `(,type (,function value)))
+       (t (error 'yaml-emit-error)))))
 
 (define-representer-dispatch represent
-  ((yaml-null-p (lambda (value) (%represent-scalar "null")))
-   (yaml-false-p (lambda (value) (%represent-scalar "false")))
-   ((lambda (value) (null value)) (lambda (value) (%represent-scalar "null")))
-   ((lambda (value) (eq value t)) (lambda (value) (%represent-scalar "true")))
-   ((lambda (value) (typep value 'yaml-mapping)) %represent-mapping)
-   ((lambda (value) (hash-table-p value)) %represent-hash-table)
-   ((lambda (value) (stringp value)) %represent-scalar)
-   ((lambda (value) (integerp value)) %represent-number)
-   ((lambda (value) (floatp value)) %represent-number)
-   ((lambda (value) (vectorp value)) %represent-vector)
-   ((lambda (value) (consp value)) %represent-list)
-   ((lambda (value) t) (lambda (value) (%represent-scalar (princ-to-string value))))))
+  ((null (lambda (value) (declare (ignore value))
+           (make-sequence-node :items nil)))
+   ((eql t) (lambda (value) (declare (ignore value))
+              (%represent-scalar "true")))
+   (yaml-sentinel (lambda (value)
+                    (%represent-scalar (if (yaml-null-p value) "null" "false"))))
+   (yaml-mapping %represent-mapping)
+   (hash-table %represent-hash-table)
+   (string %represent-scalar)
+   (character (lambda (value) (%represent-scalar (string value))))
+   (integer %represent-number)
+   (float %represent-number)
+   (vector %represent-vector)
+   (cons %represent-list)))

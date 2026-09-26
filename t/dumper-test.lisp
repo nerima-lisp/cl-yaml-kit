@@ -8,7 +8,7 @@
 (describe
   "dumper"
   (cl-weave:it-each
-    ((nil "null\n")
+    ((nil "[]\n")
      (t "true\n")
      (42 "42\n")
      ("hello" "hello\n")

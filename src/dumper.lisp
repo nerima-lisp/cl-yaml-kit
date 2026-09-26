@@ -14,12 +14,21 @@
                          :explicit-document-start explicit-document-start))))
 
 (defun emit (value &key (indent 2) (width 80) (default-flow-style :block)
-                        (explicit-document-start nil))
-  "Return YAML text representing VALUE. NIL is represented as the null scalar."
+                        (explicit-document-start nil) canonical)
+  "Return YAML text representing VALUE. NIL is an empty sequence; +YAML-NULL+ is null.
+CANONICAL is reserved for canonical marker selection."
+  (declare (ignore canonical))
   (let ((root (represent value)))
     (labels ((apply-style (node)
                (when (or (sequence-node-p node) (mapping-node-p node))
-                 (setf (node-style node) default-flow-style)
+                 (setf (node-style node)
+                       (if (and (eq default-flow-style :block)
+                                (or (and (sequence-node-p node)
+                                         (null (sequence-node-items node)))
+                                    (and (mapping-node-p node)
+                                         (null (mapping-node-pairs node)))))
+                           :flow
+                           default-flow-style))
                  (dolist (child (%node-children node)) (apply-style child)))) )
       (apply-style root))
     (with-output-to-string (stream)
@@ -31,10 +40,11 @@
 
 (defun write-yaml (value stream &key (indent 2) (width 80)
                                     (default-flow-style :block)
-                                    (explicit-document-start nil))
+                                    (explicit-document-start nil) canonical)
   "Write YAML representing VALUE to STREAM and return VALUE."
   (write-string (emit value :indent indent :width width
                       :default-flow-style default-flow-style
-                      :explicit-document-start explicit-document-start)
+                      :explicit-document-start explicit-document-start
+                      :canonical canonical)
                 stream)
   value)
