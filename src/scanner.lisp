@@ -8,7 +8,7 @@
 (defun scanner-peek-token (s)
   "yaml_parser_scan queue peek."
   (when (scanner-stream-end-produced s) (return-from scanner-peek-token nil))
-  (unless (scanner-queue-nonempty-p s) (fetch-more-tokens s))
+  (unless (scanner-token-available s) (fetch-more-tokens s))
   (when (scanner-queue-nonempty-p s)
     (aref (scanner-tokens s) (scanner-tokens-head s))))
 
@@ -18,8 +18,7 @@
     (when token
       (incf (scanner-tokens-head s))
       (incf (scanner-tokens-parsed s))
-      (when (= (scanner-tokens-head s) (fill-pointer (scanner-tokens s)))
-        (setf (scanner-token-available s) nil))
+      (setf (scanner-token-available s) nil)
       (when (eq (token-kind token) :stream-end)
         (setf (scanner-stream-end-produced s) t))
       token)))
@@ -33,12 +32,8 @@
         (stale-simple-keys s)
         (dolist (key (scanner-simple-keys s))
           (when (and (simple-key-possible key)
-                     ;; The token number denotes the token immediately after
-                     ;; the current queue head in this compact queue.  Keep
-                     ;; one-token lookahead so a pending ':' is fetched
-                     ;; before the candidate scalar is handed to the parser.
-                     (<= (simple-key-token-number key)
-                         (1+ (scanner-tokens-parsed s))))
+                     (= (simple-key-token-number key)
+                        (scanner-tokens-parsed s)))
             (setf need-more t) (return))))
       (unless need-more (return (setf (scanner-token-available s) t)))
       (fetch-next-token s))))
@@ -103,6 +98,7 @@
 (defun save-simple-key (s)
   "yaml_parser_save_simple_key."
   (when (scanner-simple-key-allowed s)
+    (remove-simple-key s)
     (let ((key (first (scanner-simple-keys s))))
       (when key
         (setf (simple-key-possible key) t

@@ -23,6 +23,16 @@
          ;; YAML 1.2.2 reserves unknown directives; consume their line.
          (loop until (sc-breakz-p s) do (sc-skip s))
          (when (sc-break-p s) (sc-skip-line s))
+         ;; Comments and blank lines between a reserved directive and the
+         ;; document marker are still part of the scanner's inter-token gap.
+         (loop
+           (loop while (sc-blank-p s) do (sc-skip s))
+           (cond
+             ((sc-break-p s) (sc-skip-line s))
+             ((sc-check s #\#)
+              (loop until (sc-breakz-p s) do (sc-skip s))
+              (when (sc-break-p s) (sc-skip-line s)))
+             (t (return))))
          (cond
            ((sc-check s #\%) (scan-directive s))
            ;; A directive must be followed by a document start marker.  The

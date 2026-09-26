@@ -77,7 +77,6 @@
       (when (sc-z-p s)
         (sc-error s "while scanning a quoted scalar" start
                   "found unexpected end of stream"))
-      (setf leading-blanks nil)
       (loop while (not (sc-blankz-p s)) do
         (cond ((and single-p (sc-check s #\') (sc-check s #\' 1))
                (vector-push-extend #\' out) (sc-skip s) (sc-skip s))
@@ -125,10 +124,20 @@
       (when (sc-check s #\#) (return))
       (loop while (not (sc-blankz-p s)) do
         ;; YAML 1.2.2 ends plain scalars at colon + blank, not at every colon.
-        (when (or (and (sc-check s #\:) (sc-blankz-p s 1))
-                  (and (plusp (scanner-flow-level s))
-                       (member (sc-char s) '(#\, #\[ #\] #\{ #\}))))
-          (return))
+        (cond
+          ((and (plusp (scanner-flow-level s))
+                (sc-check s #\:)
+                (or (sc-check s #\, 1) (sc-check s #\? 1)
+                    (sc-check s #\[ 1) (sc-check s #\] 1)
+                    (sc-check s #\{ 1) (sc-check s #\} 1)))
+           (sc-error s "while scanning a plain scalar" start
+                     "found unexpected ':'"))
+          ((or (and (sc-check s #\:) (sc-blankz-p s 1))
+               (and (plusp (scanner-flow-level s))
+                    (or (sc-check s #\,)
+                        (sc-check s #\[) (sc-check s #\])
+                        (sc-check s #\{) (sc-check s #\}))))
+           (return)))
         (when (or leading-blanks (plusp (fill-pointer spaces)))
           (if leading-blanks (%flow-fold out leading trailing)
               (progn (loop for i below (fill-pointer spaces) do
@@ -139,7 +148,15 @@
       (unless (or (sc-blank-p s) (sc-break-p s)) (return))
       (loop while (or (sc-blank-p s) (sc-break-p s)) do
         (if (sc-blank-p s)
-            (if leading-blanks (sc-skip s) (sc-read s spaces))
+            (if leading-blanks
+                (progn
+                  (when (and (zerop (scanner-flow-level s))
+                             (< (mark-column (sc-mark s)) indent)
+                             (sc-tab-p s))
+                    (sc-error s "while scanning a plain scalar" start
+                              "found a tab character that violates indentation"))
+                  (sc-skip s))
+                (sc-read s spaces))
             (if leading-blanks (sc-read-line s trailing)
                 (progn (setf (fill-pointer spaces) 0)
                        (sc-read-line s leading) (setf leading-blanks t)))))
