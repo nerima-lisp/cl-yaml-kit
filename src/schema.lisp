@@ -43,25 +43,25 @@
     (dolist (row rows (the simple-bit-vector bits))
       (let ((regexp (second row)))
         (when (and regexp (plusp (length regexp)))
+          ;; This is deliberately conservative.  The previous implementation
+          ;; treated every regexp beginning with '-' as matching only '-',
+          ;; which rejected all JSON numbers before FULL-MATCH-P ran.
           (let ((characters
-                  (cond
-                    ((or (search "null" regexp) (search "true" regexp)
-                         (search "false" regexp))
-                     (concatenate 'string
-                                  (if (search "null" regexp) "nN~" "")
-                                  (if (search "true" regexp) "tT" "")
-                                  (if (search "false" regexp) "fF" "")))
-                    ((search "inf" regexp) ".-+iI")
-                    ((search "nan" regexp) ".nNaA")
-                    ((char= (char regexp 0) #\[) "-+0123456789.")
-                    ((char= (char regexp 0) #\\) ".")
-                    ((and (char= (char regexp 0) #\-)
-                          (string= "-?" regexp :end2 2))
-                     "-0123456789")
-                    (t (string (char regexp 0))))))
+                  (concatenate 'string
+                               (when (or (search "0-9" regexp)
+                                         (search "[1-9]" regexp))
+                                 "0123456789")
+                               (when (or (search "[-+]" regexp)
+                                         (search "-?" regexp))
+                                 "-+")
+                               (when (search "null" regexp) "nN~")
+                               (when (search "true" regexp) "tT")
+                               (when (search "false" regexp) "fF")
+                               (when (search "inf" regexp) ".iI")
+                               (when (search "nan" regexp) ".nNaA")
+                               (when (search "\\." regexp) "."))))
             (loop for character across characters
-                  when (< (char-code character) 128)
-                    do (setf (sbit bits (char-code character)) 1))))))))
+                  do (setf (sbit bits (char-code character)) 1))))))))
 
 (defun %compile-schema-table (rows)
   (let ((compiled
@@ -138,4 +138,6 @@ a plain scalar. Quoted and block scalars must not call this resolver."
               ((string= tag "!!seq") "tag:yaml.org,2002:seq")
               ((string= tag "!!map") "tag:yaml.org,2002:map")
               (t tag))
-        (%implicit-node-tag node schema))))
+        (if (and tag (scalar-node-p node) (string= tag "!"))
+            "tag:yaml.org,2002:str"
+            (%implicit-node-tag node schema)))))

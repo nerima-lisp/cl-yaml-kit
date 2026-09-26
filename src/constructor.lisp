@@ -3,7 +3,7 @@
 (defun %scalar-kind (node schema)
   (let ((tag (node-tag node)))
     (cond
-      ((null tag)
+      ((or (null tag) (and tag (string= tag "?")))
        (if (eq (node-style node) :plain)
            (if (member schema '(:core :json))
                (intern (string-upcase
@@ -109,47 +109,64 @@
                                 do (setf (aref result i) (walk item)))
                           result)))))
              ((mapping-node-p object)
-              (or (gethash object memo)
-                  (let ((pairs (mapping-node-pairs object)))
-                    (case mapping-type
-                      (:alist
-                       (let ((result nil))
-                         (setf (gethash object memo) result)
-                         (dolist (pair pairs (nreverse result))
-                           (let ((key (walk (car pair)))
-                                 (value (walk (cdr pair))))
-                             (when (and (eq duplicate-key-policy :error)
-                                        (assoc key result :test #'equal))
-                               (error 'yaml-compose-error))
-                             (unless (and (eq duplicate-key-policy :first)
+              (multiple-value-bind (cached presentp) (gethash object memo)
+                (if presentp
+                    cached
+                    (let ((pairs (mapping-node-pairs object)))
+                      (case mapping-type
+                        (:alist
+                         (let ((result (make-list (length pairs)))
+                               (tail nil) (last-cell nil))
+                           (setf (gethash object memo) result
+                                 tail result)
+                           (dolist (pair pairs)
+                             (let ((key (walk (car pair)))
+                                   (value (walk (cdr pair))))
+                               (when (and (eq duplicate-key-policy :error)
                                           (assoc key result :test #'equal))
-                               (if (eq duplicate-key-policy :last)
-                                   (let ((old (assoc key result :test #'equal)))
-                                     (if old (setf (cdr old) value)
-                                         (push (cons key value) result)))
-                                   (push (cons key value) result)))))))
-                      (:yaml-mapping
-                       (make-yaml-mapping
-                        (loop for pair in pairs
-                              collect (cons (walk (car pair)) (walk (cdr pair))))))
-                      (:hash-table
-                       (let ((table (make-hash-table :test #'equal
-                                                     :size (max 1 (length pairs)))))
-                         (setf (gethash object memo) table)
-                         (dolist (pair pairs table)
-                           (let ((key (walk (car pair)))
-                                 (value (walk (cdr pair))))
-                             (when (or (consp key)
-                                       (and (vectorp key) (not (stringp key)))
-                                       (yaml-mapping-p key))
-                               (error 'yaml-compose-error))
-                             (multiple-value-bind (old presentp) (gethash key table)
-                               (declare (ignore old))
-                               (when (and presentp
-                                          (eq duplicate-key-policy :error))
                                  (error 'yaml-compose-error))
-                               (unless (and presentp
-                                             (eq duplicate-key-policy :first))
-                                 (setf (gethash key table) value)))))))))))
+                               (unless (and (eq duplicate-key-policy :first)
+                                            (assoc key result :test #'equal))
+                                 (if (eq duplicate-key-policy :last)
+                                     (let ((old (assoc key result :test #'equal)))
+                                       (if old (setf (cdr old) value)
+                                           (setf (car tail) (cons key value)
+                                                 last-cell tail
+                                                 tail (cdr tail))))
+                                     (setf (car tail) (cons key value)
+                                           last-cell tail
+                                           tail (cdr tail))))))
+                           (when last-cell (setf (cdr last-cell) nil))
+                           result))
+                        (:yaml-mapping
+                         (let* ((result (make-yaml-mapping
+                                         (make-list (length pairs))))
+                                (entries (yaml-mapping-entries result)))
+                           (setf (gethash object memo) result)
+                           (loop for pair in pairs
+                                 for cell on entries
+                                 do (setf (car cell)
+                                          (cons (walk (car pair))
+                                                (walk (cdr pair)))))
+                           result))
+                        (:hash-table
+                         (let ((table (make-hash-table :test #'equal
+                                                       :size (max 1 (length pairs)))))
+                           (setf (gethash object memo) table)
+                           (dolist (pair pairs table)
+                             (let ((key (walk (car pair)))
+                                   (value (walk (cdr pair))))
+                               (when (or (consp key)
+                                         (and (vectorp key) (not (stringp key)))
+                                         (yaml-mapping-p key))
+                                 (error 'yaml-compose-error))
+                               (multiple-value-bind (old presentp) (gethash key table)
+                                 (declare (ignore old))
+                                 (when (and presentp
+                                            (eq duplicate-key-policy :error))
+                                   (error 'yaml-compose-error))
+                                 (unless (and presentp
+                                               (eq duplicate-key-policy :first))
+                                   (setf (gethash key table) value))))))))))))
              (t (error 'yaml-compose-error)))))
       (walk node))))
