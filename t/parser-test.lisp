@@ -153,6 +153,19 @@
               yaml-kit:scalar-event yaml-kit:mapping-end-event
               yaml-kit:document-end-event yaml-kit:stream-end-event))))
 
+(it "reports missing stream-start and node tokens directly"
+  (let ((parser (yaml-kit::make-parser%
+                 :peek-function (lambda (scanner) (declare (ignore scanner)) nil)
+                 :next-function (lambda (scanner) (declare (ignore scanner)) nil))))
+    (expect (handler-case
+                (funcall (symbol-function 'yaml-kit::yaml-parser-parse-stream-start)
+                         parser)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)
+    (expect (handler-case (yaml-kit::parser-node parser nil nil)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
+
 (it "rejects duplicate node tags and invalid stream-end tokens"
   (expect (handler-case
               (parse-parser-token-events
