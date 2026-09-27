@@ -27,8 +27,8 @@
 (defmacro define-event (name slots &optional documentation)
   `(define-yaml-subtype ,name event ,slots ,documentation))
 
-(define-event stream-start-event () "Start of a YAML stream.")
-(define-event stream-end-event () "End of a YAML stream.")
+(define-event stream-start-event ())
+(define-event stream-end-event ())
 (define-event document-start-event
   ((explicit-p nil :type boolean) (version nil) (tag-directives nil :type list)))
 (define-event document-end-event ((explicit-p nil :type boolean)))
