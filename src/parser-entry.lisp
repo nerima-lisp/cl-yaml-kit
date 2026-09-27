@@ -6,14 +6,32 @@
 (defconstant +default-max-nodes+ 1000000)
 (defconstant +default-max-alias-expansions+ 100000)
 
-(defun %parser-input-string (input)
+(defun %resource-limit (name limit actual)
+  (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual))
+
+(defun %simple-character-string (text)
+  (make-array (length text) :element-type 'character :initial-contents text))
+
+(defun %parser-stream-string (stream max-input-length)
+  (%simple-character-string
+   (with-output-to-string (out)
+     (loop for character = (read-char stream nil nil)
+           while character
+           for length from 1
+           do (when (> length max-input-length)
+                (%resource-limit "input length" max-input-length length))
+              (write-char character out)))))
+
+(defun %parser-input-string (input max-input-length)
   (typecase input
-    (string (coerce input 'simple-string))
-    (stream (with-output-to-string (out) (loop for c = (read-char input nil nil) while c do (write-char c out))))
+    (string (%simple-character-string input))
+    (stream (%parser-stream-string input max-input-length))
     ((vector (unsigned-byte 8))
+     (when (> (length input) max-input-length)
+       (%resource-limit "input bytes" max-input-length (length input)))
      (handler-case
-         (coerce (cl-codec-kit:octets-to-string input :encoding :auto :errorp t)
-                 'simple-string)
+         (%simple-character-string
+          (cl-codec-kit:octets-to-string input :encoding :auto :errorp t))
        (cl-codec-kit:decode-error (condition)
          (error 'yaml-parse-error :context "invalid YAML input"
                 :message (princ-to-string condition)))))
@@ -22,7 +40,7 @@
 (defun map-events (handler input &key (max-input-length +default-max-input-length+)
                                       (max-depth +default-max-depth+)
                                       (max-scalar-length +default-max-scalar-length+))
-  (let ((text (%parser-input-string input)))
+  (let ((text (%parser-input-string input max-input-length)))
     (when (> (length text) max-input-length)
       (error 'yaml-resource-limit-error :limit-name "input length"
              :limit max-input-length :actual (length text)))
