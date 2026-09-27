@@ -25,6 +25,22 @@
 (defun %yaml-blank-p (character)
   (or (char= character #\Space) (char= character #\Tab)))
 
+(defun %scalar-style-candidates
+    (line-breaks flow-indicators block-indicators leading-space leading-break
+     trailing-space trailing-break break-space space-break special-characters)
+  (let ((flow-plain t) (block-plain t) (single-quoted t) (block t))
+    (when (or leading-space leading-break trailing-space trailing-break)
+      (setf flow-plain nil block-plain nil))
+    (when break-space (setf flow-plain nil block-plain nil single-quoted nil))
+    (when (or space-break special-characters)
+      (setf flow-plain nil block-plain nil single-quoted nil))
+    (when line-breaks (setf flow-plain nil block-plain nil))
+    (when flow-indicators (setf flow-plain nil))
+    (when block-indicators (setf block-plain nil))
+    (list :multiline line-breaks :flow-plain flow-plain
+          :block-plain block-plain :single-quoted single-quoted
+          :block block)))
+
 (defun %scalar-analysis (value)
   "Return the libyaml-style scalar restrictions for VALUE."
   (declare (optimize (speed 3) (safety 1)) (type simple-string value))
@@ -81,18 +97,10 @@
                 (when previous-space (setf space-break t))
                 (setf previous-space nil previous-break t))
                (t (setf previous-space nil previous-break nil))))
-    (let ((flow-plain t) (block-plain t) (single-quoted t) (block t))
-      (when (or leading-space leading-break trailing-space trailing-break)
-        (setf flow-plain nil block-plain nil))
-      (when break-space (setf flow-plain nil block-plain nil single-quoted nil))
-      (when (or space-break special-characters)
-        (setf flow-plain nil block-plain nil single-quoted nil))
-      (when line-breaks (setf flow-plain nil block-plain nil))
-      (when flow-indicators (setf flow-plain nil))
-      (when block-indicators (setf block-plain nil))
-      (list :multiline line-breaks :flow-plain flow-plain
-            :block-plain block-plain :single-quoted single-quoted
-            :block block))))
+    (%scalar-style-candidates line-breaks flow-indicators block-indicators
+                              leading-space leading-break trailing-space
+                              trailing-break break-space space-break
+                              special-characters)))
 
 (defun %plain-safe-p (value &key flow tag analysis)
   (let ((analysis (or analysis (%scalar-analysis value))))
@@ -134,118 +142,3 @@
     style))
 
 (defun %hex-digit (value) (schar "0123456789ABCDEF" value))
-
-(defun %write-hex-escape (context prefix code digits)
-  (%emit-text context prefix)
-  (loop for shift downfrom (* 4 (1- digits)) to 0 by 4
-        do (%emit-char context (%hex-digit (logand #xf (ash code (- shift)))))))
-
-(defun %write-double-quoted (value context)
-  (%emit-char context #\")
-  (loop for character across value
-        for code fixnum = (char-code character)
-        do (case character
-             (#\Null (%emit-text context "\\0")) (#\Bell (%emit-text context "\\a"))
-             (#\Backspace (%emit-text context "\\b")) (#\Tab (%emit-text context "\\t"))
-             (#\Newline (%emit-text context "\\n")) (#\Vt (%emit-text context "\\v"))
-             (#\Page (%emit-text context "\\f")) (#\Return (%emit-text context "\\r"))
-             (#\Escape (%emit-text context "\\e")) (#\" (%emit-text context "\\\""))
-             (#\\ (%emit-text context "\\\\"))
-             (t (cond ((= code #x85) (%emit-text context "\\N"))
-                      ((= code #xa0) (%emit-text context "\\_"))
-                      ((= code #x2028) (%emit-text context "\\L"))
-                      ((= code #x2029) (%emit-text context "\\P"))
-                      ((or (< code #x20) (= code #x7f) (= code #xfeff))
-                       (%write-hex-escape context (if (= code #xfeff) "\\u" "\\x")
-                                           code (if (= code #xfeff) 4 2)))
-                      (t (%emit-char context character))))))
-  (%emit-char context #\"))
-
-(defun %write-plain (value context)
-  (declare (optimize (speed 3) (safety 1)) (type simple-string value))
-  (loop for start = 0 then (1+ end)
-        for end = (position #\Newline value :start start)
-        do (if end
-               (progn
-                 (when (> end start)
-                   (%emit-text context (subseq value start end)))
-                 (%emit-char context #\Newline)
-                 (%emit-char context #\Newline))
-               (progn
-                 (when (< start (length value))
-                   (%emit-text context (subseq value start)))
-                 (return)))))
-
-(defun %write-single-quoted (value context &optional (indent 0))
-  (%emit-char context #\')
-  (let ((breaks nil))
-    (loop for character across value do
-      (if (char= character #\Newline)
-          (progn
-            (unless breaks (%emit-char context #\Newline))
-            (%emit-char context #\Newline)
-            (setf breaks t))
-          (progn
-            (when breaks
-              (%emit-text context (make-string indent :initial-element #\Space))
-              (setf breaks nil))
-            (%emit-char context character)
-            (when (char= character #\') (%emit-char context #\')))))
-    (when breaks
-      (%emit-text context (make-string indent :initial-element #\Space))))
-  (%emit-char context #\'))
-
-(defun %write-block-scalar (value context folded indent &optional (preserve-blank-indentation t))
-  (let ((chomp (cond ((and (plusp (length value))
-                           (%yaml-line-break-p (char value (1- (length value)))))
-                      (if (and (> (length value) 1)
-                               (%yaml-line-break-p (char value (- (length value) 2)))) "+" ""))
-                     (t "-"))))
-    (%emit-char context (if folded #\> #\|))
-    (let ((first-content
-            (loop for start = 0 then (1+ end)
-                  for end = (position #\Newline value :start start)
-                  for line = (subseq value start (or end (length value)))
-                  unless (zerop (length line))
-                    do (return line)
-                  when (null end) do (return nil))))
-      (when (and first-content
-                 (or (%yaml-blank-p (char first-content 0))
-                     (char= (char first-content 0) #\#)))
-        (%emit-char context #\2)))
-    (%emit-text context chomp)
-    (%emit-char context #\Newline)
-    (loop for start = 0 then (1+ end)
-          for end = (position #\Newline value :start start)
-          do (when (>= start (length value)) (return))
-             (unless (or (= start (length value))
-                         (and (not preserve-blank-indentation)
-                              end (= start end))
-                         (and end (= start end)
-                              (let* ((next-start (1+ end))
-                                     (next-end (and (< next-start (length value))
-                                                   (position #\Newline value :start next-start))))
-                                (or (null next-end)
-                                    (= next-start next-end)
-                                    (not (loop for index from next-start below next-end
-                                               always (%yaml-blank-p (char value index))))))))
-               (%emit-text context (make-string indent :initial-element #\Space)))
-             (when end
-               (%emit-text context (subseq value start end))
-               (%emit-char context #\Newline))
-             (unless end
-               (when (< start (length value))
-                 (%emit-text context (subseq value start)))
-               (when (or (zerop (length value))
-                         (not (%yaml-line-break-p (char value (1- (length value))))))
-                 (%emit-char context #\Newline))
-               (return)))))
-
-(defun %write-scalar (value style context &optional (indent 0)
-                                             (preserve-blank-indentation t))
-  (case style
-    (:plain (%write-plain value context))
-    (:single-quoted (%write-single-quoted value context indent))
-    (:double-quoted (%write-double-quoted value context))
-    (:literal (%write-block-scalar value context nil indent preserve-blank-indentation))
-    (:folded (%write-block-scalar value context t indent preserve-blank-indentation))))

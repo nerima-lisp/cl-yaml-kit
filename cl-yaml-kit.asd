@@ -26,8 +26,9 @@
                (:file "composer") (:file "schema") (:file "constructor")
                (:file "loader") (:file "representer") (:file "serializer")
                (:file "emitter-state") (:file "emitter-scalars")
+               (:file "emitter-writers")
                (:file "emitter-directives")
-               (:file "emitter") (:file "dumper"))
+               (:file "emitter-frames") (:file "emitter") (:file "dumper"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
 (asdf:defsystem "cl-yaml-kit/test"
