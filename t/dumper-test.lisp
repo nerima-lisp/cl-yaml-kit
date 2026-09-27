@@ -515,6 +515,29 @@
            :to-equal t)))
 
 (cl-weave:it
+ "covers alias event stack presence"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil))
+        (event (yaml-kit:make-alias-event :anchor "a")))
+   (yaml-kit::%emit-alias-event event state nil)
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 0)))
+   (yaml-kit::%emit-alias-event event state nil)
+   (expect (search "*a" (get-output-stream-string
+                          (yaml-kit::emitter-context-stream context)))
+           :to-be-truthy)))
+
+(cl-weave:it
+ "covers flow and block frame separators"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+   (yaml-kit::%frame-separator state)
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :flow-map 1)))
+   (yaml-kit::%frame-separator state)
+   (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
+           :to-equal ", ")))
+
+(cl-weave:it
  "covers a non-line-start explicit-key sequence"
  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
