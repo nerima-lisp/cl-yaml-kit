@@ -45,6 +45,17 @@
       (it name
         (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
           (expect (funcall predicate scanner) :to-equal expected))))))
+  (dolist (case '(("space accepts space" yaml-kit::sc-space-p " " t)
+                  ("space rejects tab" yaml-kit::sc-space-p #.(string #\Tab) nil)
+                  ("tab accepts tab" yaml-kit::sc-tab-p #.(string #\Tab) t)
+                  ("zero accepts end of input" yaml-kit::sc-z-p "" t)
+                  ("BOM accepts BOM" yaml-kit::sc-bom-p "﻿" t)
+                  ("printable accepts ASCII" yaml-kit::sc-printable-p "A" t)
+                  ("printable rejects control" yaml-kit::sc-printable-p #.(string (code-char 1)) nil)))
+    (destructuring-bind (name predicate text expected) case
+      (it name
+        (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
+          (expect (funcall predicate scanner) :to-equal expected)))))
 
 (it "exercises scanner state primitives at boundaries"
   (declare (notinline yaml-kit::sc-char yaml-kit::sc-check yaml-kit::sc-skip
