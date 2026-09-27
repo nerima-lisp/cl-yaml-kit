@@ -22,7 +22,10 @@ The exported composition entry points are `compose`, `compose-all`,
 `compose-events`, and `compose-all-events`.
 
 `input` may be a string, octet vector accepted by the reader, or stream where
-the implementation permits it. The defaults are centralized here:
+the implementation permits it. Octet vectors use cl-codec-kit's `:auto`
+encoding detection, including BOM-less UTF-16 and UTF-32 null-pattern
+detection. Invalid octet sequences are reported as `yaml-parse-error`. The
+defaults are centralized here:
 
 | Option or limit | Default | Applies to |
 | --- | ---: | --- |

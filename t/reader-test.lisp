@@ -71,3 +71,41 @@
                        nil)
               (yaml-kit:yaml-resource-limit-error (condition) condition))
             :to-be-type-of 'yaml-kit:yaml-resource-limit-error)))
+(describe "octet input encoding"
+  (flet ((event-kind (event)
+           (cond ((yaml-kit:stream-start-event-p event) :stream-start)
+                 ((yaml-kit:document-start-event-p event) :document-start)
+                 ((yaml-kit:scalar-event-p event) :scalar)
+                 ((yaml-kit:document-end-event-p event) :document-end)
+                 ((yaml-kit:stream-end-event-p event) :stream-end))))
+    (dolist (case
+              '((:utf-8 #(#xef #xbb #xbf))
+                (:utf-16be #(#xfe #xff))
+                (:utf-16le #(#xff #xfe))
+                (:utf-32be #(0 0 #xfe #xff))
+                (:utf-32le #(#xff #xfe 0 0))))
+      (destructuring-bind (encoding bom) case
+        (dolist (with-bom-p '(nil t))
+          (let* ((body (cl-codec-kit:string-to-octets (format nil "---~%a~%")
+                                                       :encoding encoding))
+                 (input (if with-bom-p
+                            (concatenate '(vector (unsigned-byte 8)) bom body)
+                            body))
+                 (events (yaml-kit:parse-events input)))
+            (expect (mapcar #'event-kind events)
+                    :to-equal '(:stream-start :document-start :scalar
+                                :document-end :stream-end))
+            (expect (yaml-kit:scalar-event-value (third events)) :to-equal "a"))))))
+  (it "rejects empty and BOM-only octet input as YAML parse errors"
+    (dolist (input '(#() #(#xef #xbb #xbf) #(#xfe #xff) #(#xff #xfe)
+                     #(0 0 #xfe #xff) #(#xff #xfe 0 0)))
+      (expect (handler-case
+                  (progn (yaml-kit:parse-events input) nil)
+                (yaml-kit:yaml-parse-error () t))
+              :to-be-truthy)))
+  (it "turns invalid octet sequences into YAML parse errors"
+    (expect (handler-case
+                (progn (yaml-kit:parse-events #(#xff)) nil)
+              (yaml-kit:yaml-parse-error () t)
+              (error () nil))
+            :to-be-truthy)))
