@@ -31,7 +31,15 @@
   ("folded scalar" ">\na\n" (:stream-start :scalar :stream-end))
   ("single quoted scalar" "'a'" (:stream-start :scalar :stream-end))
   ("double quoted scalar" "\"a\"" (:stream-start :scalar :stream-end))
-  ("document indicators" "--- a ..." (:stream-start :document-start :scalar :document-end :stream-end)))
+  ("document indicators" "--- a ..." (:stream-start :document-start :scalar :document-end :stream-end))
+  ("document end in flow context" "[
+...
+]"
+   (:stream-start :flow-sequence-start :document-end :flow-sequence-end :stream-end))
+  ("indented document-looking plain scalar in flow context" "[
+  ...
+]"
+   (:stream-start :flow-sequence-start :scalar :flow-sequence-end :stream-end)))
 
 (describe "scanner fetch errors"
   (it "rejects a block entry after a scalar"

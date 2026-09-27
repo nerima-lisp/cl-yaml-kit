@@ -52,7 +52,9 @@
         when tag do (return tag)))
 
 (defun conformance-event-flow-p (fields)
-  (member "[]" fields :test #'string=))
+  ;; test.event marks flow sequences with [] and flow mappings with {}.
+  (or (member "[]" fields :test #'string=)
+      (member "{}" fields :test #'string=)))
 
 (defun conformance-event-line (line)
   (let* ((text (string-right-trim '(#\Return) line))
@@ -151,7 +153,7 @@
                     ("=VAL ' " (:scalar nil nil #\' " "))
                     ("=VAL :" (:scalar nil nil #\: ""))
                     ("+MAP {} &node <tag:yaml.org,2002:map>"
-                     (:mapping-start nil "node" "tag:yaml.org,2002:map"))))
+                     (:mapping-start t "node" "tag:yaml.org,2002:map"))))
       (destructuring-bind (line expected) case
         (expect (conformance-event-signature (conformance-event-line line))
                 :to-equal expected)))))

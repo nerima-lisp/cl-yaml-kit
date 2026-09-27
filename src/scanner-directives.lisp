@@ -100,15 +100,14 @@
   "yaml_parser_scan_anchor."
   (let ((start (sc-mark s)) (b (make-scan-buffer)))
     (sc-skip s)
-    ;; YAML 1.2.2 ns-anchor-char excludes only flow indicators and blanks.
-    ;; In particular, ':' is valid inside an anchor name (for example &a:).
-    (loop for c = (sc-char s) while (and (not (sc-blankz-p s))
-                                         (not (yaml-flow-indicator-p c)))
+    (loop while (and (not (sc-blankz-p s))
+                     (not (yaml-flow-indicator-p (sc-char s))))
           do (sc-read s b))
-    (when (zerop (fill-pointer b)) (sc-error s (if (eq kind :anchor)
-                                                   "while scanning an anchor"
-                                                   "while scanning an alias")
-                                                   start "did not find expected anchor name"))
+    (when (zerop (fill-pointer b))
+      (sc-error s (if (eq kind :anchor)
+                      "while scanning an anchor"
+                      "while scanning an alias")
+                start "did not find expected anchor name"))
     (make-token kind start (sc-mark s) :value (scan-buffer-string b))))
 
 (defun scan-tag (s)

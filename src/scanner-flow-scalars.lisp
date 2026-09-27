@@ -78,6 +78,9 @@
         (sc-error s "while scanning a quoted scalar" start
                   "found unexpected end of stream"))
       (loop while (not (sc-blankz-p s)) do
+        (when leading-blanks
+          (%flow-fold out leading trailing)
+          (setf leading-blanks nil))
         (cond ((and single-p (sc-check s #\') (sc-check s #\' 1))
                (vector-push-extend #\' out) (sc-skip s) (sc-skip s))
               ((sc-check s quote) (return))
@@ -138,8 +141,7 @@
                 (or (sc-check s #\, 1) (sc-check s #\? 1)
                     (sc-check s #\[ 1) (sc-check s #\] 1)
                     (sc-check s #\{ 1) (sc-check s #\} 1)))
-           (sc-error s "while scanning a plain scalar" start
-                     "found unexpected ':'"))
+           (return))
           ((or (and (sc-check s #\:) (sc-blankz-p s 1))
                (and (plusp (scanner-flow-level s))
                     (or (sc-check s #\,)

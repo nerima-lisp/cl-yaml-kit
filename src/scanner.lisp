@@ -52,7 +52,7 @@
       ((and (zerop (scanner-column s)) (char= c #\-) (char= c1 #\-)
             (char= c2 #\-) (sc-blankz-p s 3))
        (fetch-document-indicator s :document-start))
-      ((and (zerop (scanner-flow-level s)) (char= c #\.) (char= c1 #\.)
+      ((and (zerop (scanner-column s)) (char= c #\.) (char= c1 #\.)
             (char= c2 #\.) (sc-blankz-p s 3))
        (fetch-document-indicator s :document-end))
       ((char= c #\[) (fetch-flow-collection-start s :flow-sequence-start))
@@ -75,7 +75,7 @@
       ((or (not (or (sc-blankz-p s) (member c '(#\- #\? #\: #\, #\[ #\]
                                                     #\{ #\} #\# #\& #\* #\!
                                                     #\| #\> #\' #\" #\% #\@ #\`))))
-           (and (char= c #\-) (not (sc-blankz-p s 1)))
+           (and (char= c #\-) (not (sc-blank-p s 1)))
            (and (zerop (scanner-flow-level s)) (member c '(#\? #\:))
                 (not (sc-blankz-p s 1))))
        (fetch-plain-scalar s))

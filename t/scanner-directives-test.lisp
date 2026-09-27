@@ -30,8 +30,18 @@
    ((:document-start nil nil nil nil nil) (:scalar "foo" nil nil nil nil nil)))
   ("TAG directive" "%TAG !e! tag:example.com,2000:\n"
    ((:tag-directive "tag:example.com,2000:" "!e!" nil nil nil)))
+  ("TAG handle and suffix" "%TAG !e! tag:example.com,2000:\n--- !e!foo\n"
+   ((:document-start nil nil nil nil nil)
+    (:tag nil "!e!" "foo" nil nil)))
+  ("verbatim tag keeps trailing bang" "!<tag:yaml.org,2002:str!> value\n"
+   ((:tag nil "" "tag:yaml.org,2002:str!" nil nil)
+    (:scalar "value" nil nil nil nil)))
   ("anchors and aliases" "&a *a\n"
    ((:anchor "a" nil nil nil nil) (:alias "a" nil nil nil nil)))
+  ("anchor stops before mapping colon" "&a: value\n"
+   ((:block-mapping-start nil nil nil nil nil) (:key nil nil nil nil nil)
+    (:anchor "a" nil nil nil nil) (:value nil nil nil nil nil)
+    (:scalar "value" nil nil nil nil)))
   ("tag forms" "! !!str !e!foo !<tag:yaml.org,2002:str>\n"
    ((:tag nil "" "!" nil nil) (:tag nil "!!" "str" nil nil)
     (:tag nil "!e!" "foo" nil nil) (:tag nil "" "tag:yaml.org,2002:str" nil nil)))
@@ -49,4 +59,7 @@
   ("invalid version" "%YAML 2.0\n")
   ("incomplete version" "%YAML 1.\n")
   ("unterminated verbatim tag" "!<tag:yaml.org,2002:str\n")
-  ("empty anchor" "&\n"))
+  ("empty anchor" "&\n")
+  ("empty alias" "*\n")
+  ("invalid anchor character" "&a! value\n")
+  ("invalid alias character" "*a!\n"))
