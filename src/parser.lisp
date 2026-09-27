@@ -234,10 +234,12 @@
     (if (eq (token-kind token) :block-end)
         (progn (parser-next parser) (parser-emit parser (make-sequence-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token))) (decf (parser-depth parser)) (parser-pop parser))
         (progn (when (eq (token-kind token) :block-entry) (parser-next parser))
-               (parser-push parser #'yaml-parser-parse-block-sequence-entry)
+               ;; Only the branch that parses a node may leave a continuation for
+               ;; that node to pop; an empty entry has already been consumed.
                (if (member (token-kind (parser-peek parser)) '(:block-entry :block-end))
                    (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-sequence-entry)
-                   #'yaml-parser-parse-node-block)))))
+                   (progn (parser-push parser #'yaml-parser-parse-block-sequence-entry)
+                          #'yaml-parser-parse-node-block))))))
 
 (define-parser-state yaml-parser-parse-indentless-sequence-entry (parser)
   "yaml_parser_parse_indentless_sequence_entry."
@@ -272,11 +274,12 @@
          (parser-empty-scalar parser (token-start-mark token))
          #'yaml-parser-parse-block-mapping-value)
         ((eq (token-kind token) :key)
-         (parser-next parser)
-         (parser-push parser #'yaml-parser-parse-block-mapping-value)
-         (if (member (token-kind (parser-peek parser)) '(:value :block-end))
-             (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-value)
-             #'yaml-parser-parse-node-block-indentless))
+         (let ((next-token (progn (parser-next parser) (parser-peek parser))))
+           (if (member (token-kind next-token) '(:value :block-end))
+               (progn (parser-empty-scalar parser (token-start-mark next-token))
+                      #'yaml-parser-parse-block-mapping-value)
+               (progn (parser-push parser #'yaml-parser-parse-block-mapping-value)
+                      #'yaml-parser-parse-node-block-indentless))))
         (t (parser-error token "did not find expected mapping key")))))
 
 (define-parser-state yaml-parser-parse-block-mapping-value (parser)
