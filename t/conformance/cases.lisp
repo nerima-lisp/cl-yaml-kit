@@ -1,8 +1,7 @@
 (in-package #:cl-yaml-kit/test)
 
 (defun register-conformance-case-tests ()
-  (let ((cases (conformance-cases))
-        (exclusions (conformance-read-exclusions)))
+  (let ((cases (conformance-cases)))
     (dolist (stage *conformance-stage-names*)
       (dolist (case cases)
         (multiple-value-bind (applicable passedp condition)
@@ -10,11 +9,9 @@
           (declare (ignore passedp condition))
           (when applicable
             (let* ((id (conformance-case-id case))
-                   (name (format nil "~A case ~A" stage id))
-                   (excluded (conformance-excluded-p case stage exclusions)))
+                   (name (format nil "~A case ~A" stage id)))
               (eval
                `(it ,name
-                  ,@(when excluded '((:skip-reason "listed conformance exclusion")))
                   (multiple-value-bind (case-applicable case-passedp)
                       (conformance-stage-result
                        (find ,id (conformance-cases)

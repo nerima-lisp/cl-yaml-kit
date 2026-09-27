@@ -70,22 +70,24 @@
             (progn
               (incf (getf summary :total))
               (cond
-                ((eq passedp :skipped)
+                ((and (eq passedp :skipped)
+                      (not (conformance-excluded-p case stage exclusions)))
                  (incf (getf summary :skipped)))
                 ((conformance-excluded-p case stage exclusions)
                  (incf (getf summary :excluded))
-                 (if passedp
-                     (progn
-                       (incf (getf summary :drift))
-                       (push (conformance-case-id case) (getf summary :drift-ids)))
-                     (progn
-                       (incf (getf summary :failed))
-                       (push (conformance-case-id case) (getf summary :failure-ids))
-                       (push (list (conformance-case-id case) condition)
-                             (getf summary :failure-causes))
-                       (push (list :stage stage :id (conformance-case-id case)
-                                   :detail (princ-to-string condition))
-                             (getf summary :failure-details)))))
+                 (unless (eq passedp :skipped)
+                   (if passedp
+                       (progn
+                         (incf (getf summary :drift))
+                         (push (conformance-case-id case) (getf summary :drift-ids)))
+                       (progn
+                         (incf (getf summary :failed))
+                         (push (conformance-case-id case) (getf summary :failure-ids))
+                         (push (list (conformance-case-id case) condition)
+                               (getf summary :failure-causes))
+                         (push (list :stage stage :id (conformance-case-id case)
+                                     :detail (princ-to-string condition))
+                               (getf summary :failure-details))))))
                 (passedp (incf (getf summary :passed)))
                 (t
                  (incf (getf summary :failed))
