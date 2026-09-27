@@ -22,6 +22,52 @@
           (list (loader-event :document-end)
                 (loader-event :stream-end))))
 
+(defun loader-compose-events (events &rest options)
+  (apply #'yaml-kit:compose-events
+         (cons (yaml-kit::event-list-source events) options)))
+
+(defun loader-compose-all-events (events &rest options)
+  (apply #'yaml-kit:compose-all-events
+         (cons (yaml-kit::event-list-source events) options)))
+
+(defun loader-parse-events (events &key (schema :core) (mapping-type :hash-table)
+                                      (sequence-type :vector)
+                                      (duplicate-key-policy :error)
+                                      (max-input-length 104857600)
+                                      (max-depth 1000)
+                                      (max-scalar-length 16777216)
+                                      (max-nodes 1000000)
+                                      (max-alias-expansions 100000))
+  (yaml-kit::construct
+   (loader-compose-events
+    events :max-input-length max-input-length :max-depth max-depth
+    :max-scalar-length max-scalar-length :max-nodes max-nodes
+    :max-alias-expansions max-alias-expansions)
+   :schema schema :mapping-type mapping-type :sequence-type sequence-type
+   :duplicate-key-policy duplicate-key-policy))
+
+(defun loader-parse-all-events (events &key (schema :core) (mapping-type :hash-table)
+                                          (sequence-type :vector)
+                                          (duplicate-key-policy :error)
+                                          (max-input-length 104857600)
+                                          (max-depth 1000)
+                                          (max-scalar-length 16777216)
+                                          (max-nodes 1000000)
+                                          (max-alias-expansions 100000))
+  (let ((values nil))
+    (loader-compose-all-events
+     events :max-input-length max-input-length :max-depth max-depth
+     :max-scalar-length max-scalar-length :max-nodes max-nodes
+     :max-alias-expansions max-alias-expansions
+     :document-handler
+     (lambda (node)
+       (push (yaml-kit::construct
+              node :schema schema :mapping-type mapping-type
+              :sequence-type sequence-type
+              :duplicate-key-policy duplicate-key-policy)
+             values)))
+    (nreverse values)))
+
 (defmacro loader-scalar-cases (&body cases)
   `(progn
      ,@(mapcar (lambda (case)
@@ -35,7 +81,7 @@
   `(progn
      ,@(mapcar (lambda (case)
                  `(it ,(first case)
-                    (expect (yaml-kit:parse
+                    (expect (loader-parse-events
                              (loader-document
                               (loader-event :scalar :value ,(second case)))
                              ,@(third case))
@@ -94,7 +140,7 @@
      ,@(mapcar (lambda (case)
                  `(it ,(first case)
                     (expect (funcall ,(fourth case)
-                                     (yaml-kit:parse
+                                     (loader-parse-events
                                       (loader-empty-collection-events
                                        ,(second case) ,(third case))))
                             :to-be-truthy)))
@@ -130,10 +176,10 @@
 
   (loader-value-cases
     ("empty input has no documents"
-     (yaml-kit:parse-all nil)
+     (loader-parse-all-events nil)
      nil)
     ("empty sequence can be a list"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-empty-collection-events :sequence nil)
       :sequence-type :list)
      nil))
@@ -177,19 +223,19 @@
 
   (loader-predicate-cases
     ("empty mapping can be a YAML mapping"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-empty-collection-events :mapping nil)
       :mapping-type :yaml-mapping)
      (lambda (value)
        (and (yaml-kit:yaml-mapping-p value)
             (null (yaml-kit:yaml-mapping-entries value)))))
     ("positive infinity is a double float"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :value ".INF")))
      (lambda (value)
        (and (floatp value) (= value sb-kernel::double-float-positive-infinity))))
     ("negative infinity is a double float"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :value "-.INF")))
      (lambda (value)
        (and (floatp value) (= value sb-kernel::double-float-negative-infinity)))))
@@ -210,52 +256,52 @@
 
   (loader-error-cases
     ("rejects an unknown alias"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document (loader-event :alias :anchor "missing")))
      yaml-kit:yaml-compose-error)
     ("rejects two root nodes"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document
        (loader-event :scalar :value "one")
        (loader-event :scalar :value "two")))
      yaml-kit:yaml-compose-error)
     ("rejects an unmatched collection end"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document (loader-event :sequence-end)))
      yaml-kit:yaml-compose-error)
     ("rejects an odd mapping"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document
        (loader-event :mapping-start)
        (loader-event :scalar :value "key")
        (loader-event :mapping-end)))
      yaml-kit:yaml-compose-error)
     ("rejects an invalid mapping type"
-     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+     (loader-parse-events (loader-document (loader-event :scalar :value "x"))
                      :mapping-type :invalid)
      yaml-kit:yaml-compose-error)
     ("rejects an invalid sequence type"
-     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+     (loader-parse-events (loader-document (loader-event :scalar :value "x"))
                      :sequence-type :invalid)
      yaml-kit:yaml-compose-error)
     ("rejects an invalid duplicate policy"
-     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+     (loader-parse-events (loader-document (loader-event :scalar :value "x"))
                      :duplicate-key-policy :invalid)
      yaml-kit:yaml-compose-error)
     ("rejects a malformed integer tag"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!int" :value "nope")))
      sb-int:simple-parse-error)
     ("rejects a malformed boolean tag"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!bool" :value "maybe")))
      yaml-kit:yaml-compose-error)
     ("rejects a malformed null tag"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!null" :value "nope")))
      yaml-kit:yaml-compose-error)
     ("rejects a non-scalar hash key"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document
        (loader-event :mapping-start)
        (loader-event :sequence-start)
@@ -264,32 +310,32 @@
        (loader-event :mapping-end)))
      yaml-kit:yaml-compose-error)
     ("rejects a malformed float tag"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!float" :value "nope")))
      type-error))
 
   (loader-error-cases
     ("rejects a mapping with a scalar collection tag"
-     (yaml-kit:parse
+     (loader-parse-events
       (loader-document
        (loader-event :mapping-start :tag "!!str")
        (loader-event :mapping-end)))
      yaml-kit:yaml-compose-error)
     ("rejects an unclosed collection"
-     (yaml-kit:compose
+     (loader-compose-events
       (list (loader-event :stream-start)
             (loader-event :document-start)
             (loader-event :sequence-start)))
      yaml-kit:yaml-compose-error)
     ("rejects document end inside collection"
-     (yaml-kit:compose
+     (loader-compose-events
       (list (loader-event :stream-start)
             (loader-event :document-start)
             (loader-event :sequence-start)
             (loader-event :document-end)))
      yaml-kit:yaml-compose-error)
     ("rejects an unknown event"
-     (yaml-kit:compose (list (loader-event :stream-start) 42))
+     (loader-compose-events (list (loader-event :stream-start) 42))
      yaml-kit:yaml-compose-error)
     ("rejects an unknown schema"
      (yaml-kit::%schema-table :unknown)
@@ -300,19 +346,19 @@
 
   (loader-limit-cases
     ("enforces maximum depth"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document
        (loader-event :sequence-start)
        (loader-event :sequence-end))
       :max-depth 0)
      "depth")
     ("enforces maximum nodes"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document (loader-event :scalar :value "x"))
       :max-nodes 0)
      "nodes")
     ("enforces alias expansion limits"
-     (yaml-kit:compose
+     (loader-compose-events
       (loader-document
        (loader-event :sequence-start :anchor "a")
        (loader-event :sequence-end)
@@ -331,15 +377,15 @@
                                 (loader-event :scalar :value "two")
                                 (loader-event :document-end)
                                 (loader-event :stream-end)))))
-      (expect (yaml-kit:parse-all events :schema :failsafe)
+      (expect (loader-parse-all-events events :schema :failsafe)
               :to-equal '("one" "two"))))
 
   (it "exposes compose-all and reports resource limits"
     (let ((events (loader-document
                    (loader-event :scalar :value "long"))))
-      (expect (length (yaml-kit:compose-all events)) :to-equal 1)
+      (expect (length (loader-compose-all-events events)) :to-equal 1)
       (expect (handler-case
-                  (progn (yaml-kit:compose-all events :max-nodes 0) nil)
+                  (progn (loader-compose-all-events events :max-nodes 0) nil)
                 (yaml-kit:yaml-resource-limit-error (condition)
                   (and (equal (yaml-kit::yaml-resource-limit-error-limit condition)
                               0)
@@ -353,14 +399,14 @@
                    (loader-event :scalar :value "a")
                    (loader-event :scalar :value "b")
                    (loader-event :sequence-end))))
-      (expect (yaml-kit:parse events :schema :failsafe :sequence-type :list)
+      (expect (loader-parse-events events :schema :failsafe :sequence-type :list)
               :to-equal '("a" "b")))
     (let ((events (loader-document
                    (loader-event :mapping-start)
                    (loader-event :scalar :value "key")
                    (loader-event :scalar :value "value")
                    (loader-event :mapping-end))))
-      (expect (yaml-kit:parse events :schema :failsafe :mapping-type :alist)
+      (expect (loader-parse-events events :schema :failsafe :mapping-type :alist)
               :to-equal '(("key" . "value")))))
 
   (it "reads non-list input through the reader path"
@@ -378,7 +424,7 @@
                     (loader-event :scalar :value "right")
                     (loader-event :alias :anchor "a")
                     (loader-event :mapping-end)))
-           (node (yaml-kit:compose events)))
+           (node (loader-compose-events events)))
       (expect (eq (yaml-kit:sequence-node-items
                    (cdr (first (yaml-kit:mapping-node-pairs node))))
                   (yaml-kit:sequence-node-items
@@ -393,11 +439,11 @@
                    (loader-event :scalar :value "key")
                    (loader-event :scalar :value "last")
                    (loader-event :mapping-end))))
-      (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :first))
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :first))
               :to-equal "first")
-      (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :last))
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :last))
               :to-equal "last")
-      (expect (handler-case (progn (yaml-kit:parse events) nil)
+      (expect (handler-case (progn (loader-parse-events events) nil)
                 (yaml-kit:yaml-compose-error () t))
               :to-be-truthy)))
 
@@ -405,11 +451,11 @@
     (let ((events (loader-document
                    (loader-event :sequence-start :tag "!!str")
                    (loader-event :sequence-end))))
-      (expect (handler-case (progn (yaml-kit:parse events) nil)
+      (expect (handler-case (progn (loader-parse-events events) nil)
                 (yaml-kit:yaml-compose-error () t))
               :to-be-truthy))
     (let ((events (loader-document (loader-event :scalar :value "long"))))
       (expect (handler-case
-                  (progn (yaml-kit:parse events :max-scalar-length 3) nil)
+                  (progn (loader-parse-events events :max-scalar-length 3) nil)
                 (yaml-kit:yaml-resource-limit-error () t))
               :to-be-truthy))))

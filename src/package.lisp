@@ -4,7 +4,8 @@
   (:export
    ;; Reading and writing
    #:parse #:parse-all #:read-yaml #:parse-events #:map-events
-   #:compose #:compose-all #:emit #:write-yaml #:emit-events
+   #:compose #:compose-all #:compose-events #:compose-all-events
+   #:emit #:write-yaml #:emit-events
    ;; Sentinel and ordered mapping data
    #:+yaml-null+ #:+yaml-false+ #:yaml-null-p #:yaml-false-p
    #:make-yaml-mapping #:yaml-mapping-p #:yaml-mapping-entries

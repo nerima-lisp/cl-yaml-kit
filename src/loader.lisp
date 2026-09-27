@@ -2,20 +2,16 @@
 (in-package #:yaml-kit)
 
 (defun %loader-event-source (input max-input-length max-depth max-scalar-length)
-  (if (listp input)
-      (lambda (handler) (dolist (event input) (funcall handler event)))
-      (lambda (handler)
-        (map-events handler input :max-input-length max-input-length
-                    :max-depth max-depth :max-scalar-length max-scalar-length))))
+  (lambda (handler)
+    (map-events handler input :max-input-length max-input-length
+                :max-depth max-depth :max-scalar-length max-scalar-length)))
 
 (defun compose (input &key (max-input-length +default-max-input-length+)
                              (max-depth +default-max-depth+)
                              (max-scalar-length +default-max-scalar-length+)
                              (max-nodes +default-max-nodes+)
                              (max-alias-expansions +default-max-alias-expansions+))
-  "Return the first representation graph in INPUT.
-
-INPUT may be an event list or reader input accepted by MAP-EVENTS."
+  "Return the first representation graph in reader INPUT."
   (compose-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
    :max-input-length max-input-length :max-depth max-depth
@@ -27,9 +23,7 @@ INPUT may be an event list or reader input accepted by MAP-EVENTS."
                                  (max-scalar-length +default-max-scalar-length+)
                                  (max-nodes +default-max-nodes+)
                                  (max-alias-expansions +default-max-alias-expansions+))
-  "Return all representation graphs in INPUT.
-
-INPUT may be an event list or reader input accepted by MAP-EVENTS."
+  "Return all representation graphs in reader INPUT."
   (compose-all-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
    :max-input-length max-input-length :max-depth max-depth
@@ -44,10 +38,7 @@ INPUT may be an event list or reader input accepted by MAP-EVENTS."
                             (max-scalar-length +default-max-scalar-length+)
                             (max-nodes +default-max-nodes+)
                             (max-alias-expansions +default-max-alias-expansions+))
-  "Parse the first YAML document from INPUT.
-
-Non-list input is consumed by MAP-EVENTS through the composer, so no
-intermediate event list is created."
+  "Parse the first YAML document from reader INPUT."
   (construct
    (compose input :max-input-length max-input-length :max-depth max-depth
                   :max-scalar-length max-scalar-length :max-nodes max-nodes
@@ -63,10 +54,7 @@ intermediate event list is created."
                                 (max-scalar-length +default-max-scalar-length+)
                                 (max-nodes +default-max-nodes+)
                                 (max-alias-expansions +default-max-alias-expansions+))
-  "Parse every YAML document from INPUT.
-
-Non-list input is consumed by MAP-EVENTS through the composer, so no
-intermediate event list is created."
+  "Parse every YAML document from reader INPUT."
   (let ((values nil))
     (compose-all-events
      (%loader-event-source input max-input-length max-depth max-scalar-length)

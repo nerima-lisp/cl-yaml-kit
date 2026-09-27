@@ -84,7 +84,7 @@ by passing the corresponding keyword to `compose`, `compose-all`, `parse`,
 
 | Keyword | Default | What is counted or bounded |
 | --- | ---: | --- |
-| `:max-input-length` | `104857600` | Maximum reader input length (100 MiB). This applies when the input is read through the scanner; an existing event list does not create an additional input buffer. |
+| `:max-input-length` | `104857600` | Maximum reader input length (100 MiB) for `parse`, `parse-all`, `compose`, and `compose-all`. |
 | `:max-depth` | `1000` | Maximum nested sequence/mapping depth during composition. |
 | `:max-scalar-length` | `16777216` | Maximum length of an individual scalar value. |
 | `:max-nodes` | `1000000` | Maximum representation nodes, including nodes reached through alias events. |

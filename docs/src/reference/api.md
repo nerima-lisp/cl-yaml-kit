@@ -13,6 +13,8 @@ implemented by the source.
 | `read-yaml stream &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | One constructed document | Same as `parse` |
 | `parse-events input &rest keys` | Event list | `yaml-parse-error`, `yaml-resource-limit-error` |
 | `map-events handler input &key max-input-length max-depth max-scalar-length` | `nil` | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `compose-events events &rest keys` | First representation graph | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-all-events events &rest keys` | Representation graphs | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes | Same as `compose` |
 

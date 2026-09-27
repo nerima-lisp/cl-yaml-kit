@@ -8,6 +8,11 @@
 
 (declaim (inline %limit!))
 
+(defun event-list-source (events)
+  (lambda (handler)
+    (dolist (event events)
+      (funcall handler event))))
+
 (defun %limit! (value limit &optional (name "resource"))
   (when (and limit (> value limit))
     (error 'yaml-resource-limit-error
@@ -126,4 +131,5 @@
       (nreverse documents)))
 
 (defun compose-events (events &rest options)
+  "Compose the first graph from an event source."
   (car (apply #'compose-all-events (cons events (append options '(:first-only t))))))
