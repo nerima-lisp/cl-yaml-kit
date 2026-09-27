@@ -188,7 +188,7 @@
  (expect (yaml-kit:emit
           (yaml-kit:make-yaml-mapping (list (cons "a" (list 1 2))))
           :indent 4)
-         :to-equal #.(format nil "a:~%    - 1~%    - 2~%")))
+         :to-equal #.(format nil "a: ~%    - 1~%    - 2~%")))
 
 (cl-weave:it
  "tracks emitter text state"
@@ -225,3 +225,56 @@
                      (yaml-kit:make-document-end-event)
                      (yaml-kit:make-stream-end-event))))
    (expect (yaml-kit:emit-events events) :to-equal #.(format nil "--- []~%"))))
+
+(cl-weave:it
+ "rejects an unknown emitter event"
+ (expect (handler-case (progn (yaml-kit::%emit-dispatch "unknown" nil nil) nil)
+           (yaml-kit:yaml-emit-error () t))
+         :to-equal t))
+
+(cl-weave:it
+ "emits indentation from both context positions"
+ (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+   (yaml-kit::%emit-indent context 1)
+   (expect (yaml-kit::emitter-context-line-start context) :to-equal nil)
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-indent context 2)
+   (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
+           :to-equal #.(format nil "  x~%    "))))
+
+(cl-weave:it-each
+    ((null #\Null "\\0")
+     (bell #\Bell "\\a")
+     (backspace #\Backspace "\\b")
+     (tab #\Tab "\\t")
+     (newline #\Newline "\\n")
+     (vertical-tab #\Vt "\\v")
+     (page #\Page "\\f")
+     (return #\Return "\\r")
+     (escape #\Escape "\\e")
+     (quote #\" "\\\"")
+     (backslash #\\ "\\\\")
+     (nel #.(code-char #x85) "\\N")
+     (nbsp #.(code-char #xa0) "\\_")
+     (line-separator #.(code-char #x2028) "\\L")
+     (paragraph-separator #.(code-char #x2029) "\\P"))
+  "escapes double-quoted scalar characters ~S"
+  (name character escape)
+  (declare (ignore name))
+  (expect (yaml-kit:emit-events
+           (list (yaml-kit:make-stream-start-event)
+                 (yaml-kit:make-document-start-event)
+                 (yaml-kit:make-scalar-event :value (string character)
+                                             :style :double-quoted)
+                 (yaml-kit:make-document-end-event)
+                 (yaml-kit:make-stream-end-event)))
+          :to-equal (format nil "\"~A\"~%" escape)))
+
+(cl-weave:it
+ "expands the representer builder macro"
+ (let ((expansion (macroexpand-1
+                   '(yaml-kit::define-representer-builder test-builder
+                      yaml-kit::make-scalar-node yaml-kit::scalar-node-value
+                      value))))
+   (expect (first expansion) :to-equal 'defun)
+   (expect (second expansion) :to-equal 'test-builder)))
