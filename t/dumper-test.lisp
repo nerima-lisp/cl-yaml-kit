@@ -81,6 +81,15 @@
            :to-equal
            (dumper-roundtrip-canonical-value value))))
 
+(cl-weave:it
+ "round-trips NIL as the empty sequence convention"
+ (let ((round-tripped (yaml-kit:parse (yaml-kit:emit nil))))
+   (expect (vectorp round-tripped) :to-be-truthy)
+   (expect (= (length round-tripped) 0) :to-be-truthy)
+   (expect (dumper-roundtrip-canonical-value round-tripped)
+           :to-equal
+           '(:array nil))))
+
 (describe
   "dumper"
   (cl-weave:it-each
