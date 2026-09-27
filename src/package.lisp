@@ -21,7 +21,7 @@
    #:node-tag #:node-anchor #:node-style #:node-start-mark #:node-end-mark
    #:scalar-node-value #:sequence-node-items #:mapping-node-pairs
    ;; Events and event accessors
-   #:define-event #:stream-start-event #:stream-end-event
+   #:stream-start-event #:stream-end-event
    #:make-stream-start-event #:make-stream-end-event
    #:document-start-event #:document-end-event #:sequence-start-event
    #:sequence-end-event #:mapping-start-event #:mapping-end-event
