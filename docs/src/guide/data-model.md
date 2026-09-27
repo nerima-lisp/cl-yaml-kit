@@ -3,8 +3,8 @@
 The loader composes YAML events into a representation graph and then
 constructs Common Lisp values from that graph. `parse` and `read-yaml` return
 the first document; `parse-all` returns a list of constructed values, one per
-document. The default options are `:schema :core`, `:mapping-type
-:hash-table`, `:sequence-type :vector`, and `:duplicate-key-policy :error`.
+document. See the [API reference](../reference/api.md) for the single table of
+default options and resource limits.
 
 ## YAML-to-Lisp value mapping
 
@@ -19,7 +19,7 @@ scalars according to the selected schema.
 | False (`!!bool`) | `+yaml-false+`; this is distinct from `nil`. |
 | True (`!!bool`) | `t`. |
 | Integer (`!!int`) | A Lisp integer. The core schema accepts decimal, `0o` octal, and `0x` hexadecimal notation, with an optional sign. |
-| Floating point (`!!float`) | A double-float, including `.inf`, `-.inf`, and `.nan`. |
+| Floating point (`!!float`) | A double-float, including `.inf`, `-.inf`, and `.nan`, when the scalar remains a float after construction. |
 | Sequence (`!!seq`) | A simple vector by default, or a proper list when `:sequence-type :list` is selected. |
 | Mapping (`!!map`) | An `equal` hash table by default; see the mapping options below. |
 | Alias | The aliased representation node is reused, so aliases preserve sharing. |
@@ -78,18 +78,10 @@ scalar tag signals `yaml-compose-error`.
 
 ## Resource limits
 
-Composition enforces the following limits by default. A limit can be changed
-by passing the corresponding keyword to `compose`, `compose-all`, `parse`,
-`parse-all`, or `read-yaml`; exceeding one signals `yaml-resource-limit-error`.
-
-| Keyword | Default | What is counted or bounded |
-| --- | ---: | --- |
-| `:max-input-length` | `104857600` | Maximum reader input length (100 MiB) for `parse`, `parse-all`, `compose`, and `compose-all`. |
-| `:max-depth` | `1000` | Maximum nested sequence/mapping depth during composition. |
-| `:max-scalar-length` | `16777216` | Maximum length of an individual scalar value. |
-| `:max-nodes` | `1000000` | Maximum representation nodes, including nodes reached through alias events. |
-| `:max-alias-expansions` | `100000` | Maximum number of alias references encountered. |
-
-Limits are checked while composing, before the representation graph is
-constructed into final Lisp values. Aliases reuse nodes but still count toward
-the alias-reference and node limits when encountered.
+The default limits and the entry points that use them are listed in the [API
+reference](../reference/api.md). A limit can be changed by passing its keyword
+to the relevant entry point; exceeding one signals
+`yaml-resource-limit-error`. Limits are checked while composing, before the
+representation graph is constructed into final Lisp values. Aliases reuse
+nodes but still count toward the alias-reference and node limits when
+encountered.

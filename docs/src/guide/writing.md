@@ -2,8 +2,8 @@
 
 `emit` represents Common Lisp values as YAML. `NIL` is represented as an empty
 sequence (`[]`), while `+yaml-null+` is represented as YAML null (`null`).
-The two values are therefore distinct and round-trip to different Common Lisp
-values.
+The two values are distinct YAML outputs. Reading the emitted `[]` with the
+default loader produces an empty vector; it does not reconstruct `NIL`.
 
 Supported values include strings, characters, numbers, lists, vectors,
 `yaml-mapping` values, hash tables, `T`, `+yaml-null+`, and `+yaml-false+`.
@@ -20,6 +20,9 @@ Both functions accept `:indent`, `:default-flow-style`, and
 `:explicit-document-start`. `indent` controls collection indentation and
 `default-flow-style` may be `:block` or `:flow`. Set
 `explicit-document-start` to true to emit `---`.
+
+`emit-events` writes YAML from an event list. It accepts `:indent` and
+`:explicit-document-start` and returns the resulting string.
 
 Strings that could resolve as YAML numbers, booleans, or null are quoted so
 that their string type is preserved. Plain style is used only when the

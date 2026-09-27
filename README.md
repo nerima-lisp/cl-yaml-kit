@@ -28,7 +28,10 @@ also uses `cl-weave` and `cl-json-kit`.
 ;; => ("one" "two")
 
 (yaml-kit:emit (list 1 2 3))
-;; => "- 1\n- 2\n- 3\n"
+;; =>
+;; - 1
+;; - 2
+;; - 3
 
 (yaml-kit:map-events
  (lambda (event) (declare (ignore event)))

@@ -52,11 +52,16 @@ to an existing stream and returns the original value.
 
 ```lisp
 (yaml-kit:emit #(1 2 3))
-;; => "- 1\n- 2\n- 3\n"
+;; =>
+;; - 1
+;; - 2
+;; - 3
 
 (with-output-to-string (stream)
-  (yaml-kit:write-yaml '(a b) stream))
-;; => "- a\n- b\n"
+  (yaml-kit:write-yaml '("a" "b") stream))
+;; =>
+;; - a
+;; - b
 ```
 
 The sentinels `+yaml-null+` and `+yaml-false+` represent YAML null and false.
@@ -80,7 +85,11 @@ event list.
    (yaml-kit:parse-events
     (make-array (length text) :element-type 'character
                 :initial-contents text))))
-;; => "%TAG !! tag:yaml.org,2002:\n%TAG ! !\n---\nanswer: '42'\n"
+;; =>
+;; %TAG !! tag:yaml.org,2002:
+;; %TAG ! !
+;; ---
+;; answer: 42
 ```
 
 ## Handle errors
@@ -88,5 +97,6 @@ event list.
 Malformed input signals `yaml-parse-error`; representation-graph failures
 signal `yaml-compose-error`; unsupported output signals `yaml-emit-error`.
 Resource exhaustion signals `yaml-resource-limit-error`. These conditions
-inherit from `yaml-kit-error` and expose structured readers. See
+inherit from `yaml-kit-error`; the readers exported for individual conditions
+expose structured details. See
 [Conditions](reference/conditions.md).
