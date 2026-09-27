@@ -61,7 +61,7 @@
                (:file "loader-integration-test") (:file "dumper-test")
                (:file "conformance/events") (:file "conformance/values")
                (:file "conformance-test") (:file "conformance/stages")
-               (:file "conformance/report"))
+               (:file "conformance/report") (:file "conformance/cases"))
   :perform (test-op (operation component)
              (declare (ignore operation component))
              (unless (uiop:symbol-call :cl-yaml-kit/test :run-tests)
