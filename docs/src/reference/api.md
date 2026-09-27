@@ -18,12 +18,30 @@ implemented by the source.
 | `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes | Same as `compose` |
 
-`input` may be a string, octet vector accepted by the reader, stream, or event
-list where the implementation permits it. Defaults are `:core`,
-`:hash-table`, `:vector`, `:error`, 104857600 input characters, depth 1000,
-scalar length 16777216, 1000000 nodes, and 100000 alias expansions. Event
-mapping defaults are input length 104857600, depth 256, and scalar length
-16777216.
+The exported composition entry points are `compose`, `compose-all`,
+`compose-events`, and `compose-all-events`.
+
+`input` may be a string, octet vector accepted by the reader, or stream where
+the implementation permits it. The defaults are centralized here:
+
+| Option or limit | Default | Applies to |
+| --- | ---: | --- |
+| `:schema` | `:core` | `parse`, `parse-all`, `read-yaml` |
+| `:mapping-type` | `:hash-table` | `parse`, `parse-all`, `read-yaml` |
+| `:sequence-type` | `:vector` | `parse`, `parse-all`, `read-yaml` |
+| `:duplicate-key-policy` | `:error` | `parse`, `parse-all`, `read-yaml` |
+| `:max-input-length` | `104857600` | loaders, composers, and event parsing |
+| `:max-depth` | `1000` | loaders and composers |
+| `:max-scalar-length` | `16777216` | loaders, composers, and event parsing |
+| `:max-nodes` | `1000000` | loaders and composers |
+| `:max-alias-expansions` | `100000` | loaders and composers |
+| event-parser `:max-depth` | `256` | `map-events`, `parse-events` |
+| `:indent` | `2` | `emit`, `write-yaml`, `emit-events` |
+| `:default-flow-style` | `:block` | `emit`, `write-yaml` |
+| `:explicit-document-start` | `nil` | `emit`, `write-yaml`, `emit-events` |
+
+The limit values are upper bounds. Exceeding one signals
+`yaml-resource-limit-error`.
 
 ## Emitting
 
@@ -33,7 +51,7 @@ mapping defaults are input length 104857600, depth 256, and scalar length
 | `write-yaml value stream &key indent default-flow-style explicit-document-start` | `value` | `yaml-emit-error` |
 | `emit-events events &key indent explicit-document-start` | YAML string | `yaml-emit-error` |
 
-Defaults are indent 2, `:block`, and false for explicit document start.
+The defaults for these options are in the table above.
 
 ## Sentinel and mapping values
 
@@ -55,7 +73,7 @@ Defaults are indent 2, `:block`, and false for explicit document start.
 | `token` | structure type | Token structure |
 | `make-token` | `(kind start-mark end-mark &key value handle suffix style major minor)` | Validated token |
 | `token-kind`, `token-start-mark`, `token-end-mark`, `token-value`, `token-handle`, `token-suffix`, `token-style`, `token-major`, `token-minor` | `(token)` | Corresponding token field |
-| `make-scanner` | `(simple-character-array)` | Scanner |
+| `make-scanner` | `(simple-array character (*))` | Scanner |
 | `scanner-peek-token`, `scanner-next-token` | `(scanner)` | Next token or `nil` |
 
 ## Nodes
@@ -81,6 +99,12 @@ constructors add `:anchor :tag :implicit-p :style`; the scalar constructor
 adds `:anchor :tag :value :plain-implicit-p :quoted-implicit-p :style`; and
 `make-alias-event` adds `:anchor`.
 
+The exported event constructors are `make-stream-start-event`,
+`make-stream-end-event`, `make-document-start-event`,
+`make-document-end-event`, `make-sequence-start-event`,
+`make-sequence-end-event`, `make-mapping-start-event`,
+`make-mapping-end-event`, `make-scalar-event`, and `make-alias-event`.
+
 The event types are `stream-start-event`, `stream-end-event`,
 `document-start-event`, `document-end-event`, `sequence-start-event`,
 `sequence-end-event`, `mapping-start-event`, `mapping-end-event`,
@@ -103,3 +127,15 @@ field: `document-start-event-explicit-p`, `document-start-event-version`,
 `yaml-compose-error`, `yaml-emit-error`, and `yaml-resource-limit-error` are
 its exported subtypes. Their readers and defaults are specified in
 [Conditions](conditions.md).
+
+The exported event predicates are `stream-start-event-p`,
+`stream-end-event-p`, `document-start-event-p`, `document-end-event-p`,
+`sequence-start-event-p`, `sequence-end-event-p`, `mapping-start-event-p`,
+`mapping-end-event-p`, `scalar-event-p`, and `alias-event-p`.
+
+The exported condition readers are `yaml-parse-error-line`,
+`yaml-parse-error-column`, `yaml-parse-error-offset`,
+`yaml-parse-error-context`, `yaml-compose-error-mark`,
+`yaml-compose-error-context`, `yaml-compose-error-cause`,
+`yaml-emit-error-mark`, `yaml-emit-error-context`, and
+`yaml-emit-error-cause`.

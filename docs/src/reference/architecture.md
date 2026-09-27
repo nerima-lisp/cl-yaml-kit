@@ -8,20 +8,20 @@ characters -> scanner -> tokens -> parser -> events -> composer -> nodes
 Common Lisp values -> representer -> serializer -> emitter -> characters
 ```
 
-The reader stages are owned by `src/reader-macros.lisp`, the character and
-scanner files, and the parser files. `src/events.lisp` defines the event
-contract. `src/composer.lisp` builds representation graphs in the node types
-from `src/nodes.lisp`; schema and constructor files turn those graphs into
-Common Lisp values. The reverse path is owned by the representer, serializer,
-emitter, and dumper files.
+The reader stages are owned by the scanner and parser files. `src/events.lisp`
+defines the event contract. `src/composer.lisp` builds representation graphs
+in the node types from `src/nodes.lisp`; schema and constructor files turn
+those graphs into Common Lisp values. The reverse path is owned by the
+representer, serializer, emitter, and dumper files.
 
 Events model stream, document, sequence, mapping, scalar, and alias actions.
 Every event carries start and end marks. Nodes model scalar, sequence, and
 mapping values and share tag, anchor, style, and source-mark metadata.
 
-Data tables and types live in `data.lisp`, `events.lisp`, and `nodes.lisp`;
-pipeline behavior lives in the stage-specific files. This separation keeps
-contracts inspectable without loading implementation logic.
+Data values and types live in `data.lisp`, `events.lisp`, `nodes.lisp`, and
+`tokens.lisp`. Schema tables are in `schema.lisp`, and character-class tables
+are in `char-classes.lisp`; pipeline behavior lives in the stage-specific
+files.
 
 Event delivery uses continuation-passing style (CPS): each stage accepts the
 next stage as a continuation and sends each produced item to it. This permits
