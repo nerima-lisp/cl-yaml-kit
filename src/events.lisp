@@ -11,18 +11,21 @@
   (start-mark nil :type (or null mark))
   (end-mark nil :type (or null mark)))
 
-(defmacro define-event (name slots &optional documentation)
+(defmacro define-yaml-subtype (name base slots &optional documentation)
   (let ((constructor (intern (format nil "MAKE-~A" (string-upcase name)) *package*))
         (predicate (intern (format nil "~A-P" (string-upcase name)) *package*)))
     `(progn
        (defstruct (,name (:constructor ,constructor)
                             (:predicate ,predicate)
-                            (:include event)
+                            (:include ,base)
                             (:conc-name ,(intern (format nil "~A-" (string-upcase name))
                                                 *package*)))
          ,@(when documentation (list documentation))
          ,@slots)
        ',name)))
+
+(defmacro define-event (name slots &optional documentation)
+  `(define-yaml-subtype ,name event ,slots ,documentation))
 
 (define-event stream-start-event () "Start of a YAML stream.")
 (define-event stream-end-event () "End of a YAML stream.")

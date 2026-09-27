@@ -11,7 +11,7 @@
     (expect (yaml-kit:yaml-false-p yaml-kit:+yaml-false+) :to-be-truthy)
     (expect (yaml-kit:yaml-null-p yaml-kit:+yaml-false+) :to-equal nil)
     (expect (yaml-kit:yaml-false-p yaml-kit:+yaml-null+) :to-equal nil)
-    (expect (eq yaml-kit:+yaml-null+ yaml-kit:+yaml-null+) :to-be-truthy))
+    (expect (eq yaml-kit:+yaml-null+ (yaml-kit:parse "null")) :to-be-truthy))
   (it "preserves ordered mapping entries and copies the input"
     (let* ((entries (list (cons "a" 1) (cons "a" 2)))
            (mapping (yaml-kit:make-yaml-mapping entries)))

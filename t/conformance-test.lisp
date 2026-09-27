@@ -194,6 +194,8 @@
             (progn
               (incf (getf summary :total))
               (cond
+                ((eq passedp :skipped)
+                 (incf (getf summary :skipped)))
                 ((conformance-excluded-p case stage exclusions)
                  (incf (getf summary :excluded))
                  (if passedp
@@ -204,7 +206,7 @@
                        (incf (getf summary :failed))
                        (push (conformance-case-id case) (getf summary :failure-ids))
                        (push (list (conformance-case-id case)
-                                   (princ-to-string condition))
+                                   condition)
                              (getf summary :failure-causes))
                        (push (list :stage stage
                                    :id (conformance-case-id case)
@@ -215,7 +217,7 @@
                  (incf (getf summary :failed))
                  (push (conformance-case-id case) (getf summary :failure-ids))
                  (push (list (conformance-case-id case)
-                             (princ-to-string condition))
+                             condition)
                        (getf summary :failure-causes))
                  (push (list :stage stage
                              :id (conformance-case-id case)
@@ -231,13 +233,12 @@
                (otherwise (write-char character out))))))
 
 (defun conformance-cause-category (condition)
-  (let ((text (string-downcase (or condition ""))))
-    (cond ((search "event" text) :event-conversion)
-          ((or (search "compose" text) (search "construct" text)
-               (search "yaml" text)) :loader-or-schema)
-          ((or (search "emit" text) (search "stream" text)) :emitter-format)
-          ((search "json" text) :expected-value)
-          (t :other))))
+  (cond ((typep condition 'yaml-kit:yaml-compose-error) :loader-or-schema)
+        ((typep condition 'yaml-kit:yaml-emit-error) :emitter-format)
+        ((typep condition 'yaml-kit:yaml-parse-error) :event-conversion)
+        ((typep condition 'yaml-kit:yaml-resource-limit-error) :resource-limit)
+        ((typep condition 'json-kit:json-parse-error) :expected-value)
+        (t :other)))
 
 (defun conformance-write-status (summaries)
   (let ((pathname (merge-pathnames ".mediator/research/conformance-status.md"

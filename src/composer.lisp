@@ -34,14 +34,14 @@
            (if stack
                (push node (cdr (car stack)))
                (if current
-                   (error 'yaml-compose-error)
+                   (signal-yaml-compose-error :cause "multiple root nodes")
                    (setf current node))))
         (start-document ()
            (setf current nil stack nil depth 0
                  anchors (make-hash-table :test #'equal)
                  nodes 0 aliases 0))
          (finish-node ()
-           (unless stack (error 'yaml-compose-error))
+           (unless stack (signal-yaml-compose-error :cause "collection end without start"))
            (let* ((frame (pop stack))
                   (node (car frame))
                   (children (nreverse (cdr frame))))
@@ -49,7 +49,7 @@
                  (setf (sequence-node-items node) children)
                  (progn
                    (unless (evenp (length children))
-                     (error 'yaml-compose-error))
+                     (signal-yaml-compose-error :cause "odd mapping entries"))
                    (setf (mapping-node-pairs node)
                          (loop for (key value) on children by #'cddr
                                collect (cons key value)))))
@@ -57,7 +57,7 @@
              (if stack
                  (push node (cdr (car stack)))
                  (if current
-                     (error 'yaml-compose-error)
+                     (signal-yaml-compose-error :cause "multiple root nodes")
                      (setf current node)))))
          (start-collection (event sequence-p)
            (let ((node (if sequence-p
@@ -85,7 +85,7 @@
              ((or (stream-start-event-p event) (stream-end-event-p event)) nil)
              ((document-start-event-p event) (start-document))
              ((document-end-event-p event)
-              (when stack (error 'yaml-compose-error))
+              (when stack (signal-yaml-compose-error :cause "document ended inside collection"))
               (when current
                 (if document-handler
                     (funcall document-handler current)
@@ -100,7 +100,9 @@
               (%limit! aliases max-alias-expansions "alias expansions")
               (multiple-value-bind (node presentp)
                   (gethash (alias-event-anchor event) anchors)
-                (unless presentp (error 'yaml-compose-error))
+                (unless presentp
+                  (signal-yaml-compose-error :mark (event-start-mark event)
+                                             :cause "unknown alias"))
                 (incf nodes)
                 (%limit! nodes max-nodes "nodes")
                 (append-node node)))
@@ -123,10 +125,10 @@
              ((mapping-start-event-p event) (start-collection event nil))
              ((or (sequence-end-event-p event) (mapping-end-event-p event))
               (finish-node))
-             (t (error 'yaml-compose-error)))))
+             (t (signal-yaml-compose-error :cause "unknown event")))))
       (catch 'first-document
         (funcall events #'handle)))
-      (when stack (error 'yaml-compose-error))
+      (when stack (signal-yaml-compose-error :cause "unclosed collection"))
       (when current (push current documents))
       (nreverse documents)))
 

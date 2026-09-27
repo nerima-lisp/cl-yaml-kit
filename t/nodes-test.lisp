@@ -5,15 +5,25 @@
   (let ((expansion (macroexpand-1
                     '(yaml-kit::define-node probe-node-contract () "probe"))))
     (expect (consp expansion) :to-be-truthy)
-    (expect (equal (car expansion) 'progn) :to-be-truthy)))
+    (expect (member (car expansion) '(progn yaml-kit::define-yaml-subtype)) :to-be-truthy)))
 (defmacro define-node-contract-tests (name constructor predicate accessors arguments)
-  `(it ,(format nil "constructs ~A" name)
-     (let ((value (,constructor ,@arguments)))
-       (expect (,predicate value) :to-be-truthy)
-       (expect (typep value ',name) :to-be-truthy)
-       ,@(mapcar (lambda (accessor)
-                   `(expect (,accessor value) :to-be-truthy))
-                 accessors))))
+  (let ((keys (mapcar (lambda (accessor)
+                        (loop for key in arguments by #'cddr
+                              when (and (keywordp key)
+                                        (search (string-upcase (symbol-name key))
+                                                (string-upcase (symbol-name accessor))
+                                                :from-end t))
+                                do (return key)))
+                      accessors)))
+    `(it ,(format nil "constructs ~A" name)
+       (let ((value (,constructor ,@arguments)))
+         (expect (,predicate value) :to-be-truthy)
+         (expect (typep value ',name) :to-be-truthy)
+         ,@(mapcar (lambda (accessor key)
+                     `(expect (contract-value-equal-p (,accessor value)
+                                     (getf (list ,@arguments) ,key))
+                              :to-be-truthy))
+                   accessors keys)))))
 
 (define-node-contract-tests yaml-kit:scalar-node yaml-kit:make-scalar-node yaml-kit:scalar-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style

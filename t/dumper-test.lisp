@@ -10,11 +10,11 @@
    (cl-weave:gen-one-of
     (cl-weave:gen-integer :min -20 :max 20)
     (cl-weave:gen-boolean)
-    (cl-weave:gen-string :min-length 0 :max-length 8
-                         :alphabet "abcXYZ012 "))
+    (cl-weave:gen-string :min-length 0 :max-length 12
+                         :alphabet "abcXYZ012 あé "))
    (lambda (self)
      (cl-weave:gen-one-of
-      (cl-weave:gen-list self :min-length 0 :max-length 3)
+      (cl-weave:gen-list self :min-length 0 :max-length 4)
       (cl-weave:gen-map
        (lambda (pairs)
          (yaml-kit:make-yaml-mapping
@@ -60,6 +60,17 @@
           (yaml-kit:parse (yaml-kit:emit value)))
          :to-equal
          (dumper-roundtrip-canonical-value value)))
+
+(cl-weave:it-property
+ "block scalar and flow collection values round-trip"
+ ((text (cl-weave:gen-one-of
+         (cl-weave:gen-member (list (format nil "value: |~%  unicode あ~%")))
+         (cl-weave:gen-member (list (format nil "{a: [1, 2], b: あ}~%"))))))
+ (let ((value (yaml-kit:parse text)))
+   (expect (dumper-roundtrip-canonical-value
+            (yaml-kit:parse (yaml-kit:emit value)))
+           :to-equal
+           (dumper-roundtrip-canonical-value value))))
 
 (cl-weave:it
  "round-trips repeated shared structures"

@@ -127,7 +127,7 @@
                          (conformance-loader-value case)
                        (error (condition)
                          (return-from conformance-dumper-e2e-result
-                           (values t condition)))))
+                           (values :skipped condition)))))
              (roundtrip-values
                (mapcar (lambda (value)
                          (let ((documents

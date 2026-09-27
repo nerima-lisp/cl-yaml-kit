@@ -55,7 +55,8 @@
         node)))
 
 (defun %represent-unsupported (value)
-  (error 'yaml-emit-error
+  (signal-yaml-emit-error
+         :cause "unsupported value type"
          :context "unsupported value type"
          :message (princ-to-string (type-of value))))
 

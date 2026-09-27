@@ -45,4 +45,8 @@
    ;; Conditions
    #:yaml-kit-error #:yaml-parse-error #:yaml-parse-error-line
    #:yaml-parse-error-column #:yaml-parse-error-offset #:yaml-parse-error-context
-   #:yaml-compose-error #:yaml-emit-error #:yaml-resource-limit-error))
+   #:yaml-compose-error #:yaml-compose-error-mark #:yaml-compose-error-context
+   #:yaml-compose-error-cause
+   #:yaml-emit-error #:yaml-emit-error-mark #:yaml-emit-error-context
+   #:yaml-emit-error-cause
+   #:yaml-resource-limit-error))

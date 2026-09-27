@@ -10,17 +10,7 @@
   (end-mark nil :type (or null mark)))
 
 (defmacro define-node (name slots &optional documentation)
-  (let ((constructor (intern (format nil "MAKE-~A" (string-upcase name)) *package*))
-        (predicate (intern (format nil "~A-P" (string-upcase name)) *package*)))
-    `(progn
-       (defstruct (,name (:constructor ,constructor)
-                            (:predicate ,predicate)
-                            (:include node)
-                            (:conc-name ,(intern (format nil "~A-" (string-upcase name))
-                                                *package*)))
-         ,@(when documentation (list documentation))
-         ,@slots)
-       ',name)))
+  `(define-yaml-subtype ,name node ,slots ,documentation))
 
 (define-node scalar-node ((value "" :type simple-string)) "A scalar node in a YAML representation graph.")
 (define-node sequence-node ((items nil :type list)) "A sequence node in a YAML graph.")

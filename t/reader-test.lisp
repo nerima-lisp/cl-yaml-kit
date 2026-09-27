@@ -43,9 +43,10 @@
     (error (condition) condition)))
 
 (describe "reader termination"
-  (cl-weave:it-property "ends generated inputs with a parse result or a declared error"
+  (cl-weave:it-fuzz "ends generated inputs with a parse result or a declared error"
     ((text (cl-weave:gen-string :min-length 0 :max-length 64
-                                :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~")))
+                                :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))
+    (:trials 100 :timeout-per-trial 5)
     ;; A scanner that stops advancing enqueues tokens forever, so termination is
     ;; the property under test; the per-test timeout catches a regression.
     (let ((offenders
@@ -56,7 +57,8 @@
                        (mapcar (lambda (text)
                                  (cons text (reader-parse-outcome text)))
                                (list text)))))
-      (expect offenders :to-be '())))
+      (unless (null offenders)
+        (error "reader signaled an undeclared condition: ~S" offenders))))
   (it "bounds token production by the input size"
     (expect (yaml-kit::scanner-token-limit
              (yaml-kit:make-scanner (coerce "x" 'simple-string)))

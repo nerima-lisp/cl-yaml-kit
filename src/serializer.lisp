@@ -15,9 +15,11 @@
                (unless (or (scalar-node-p node)
                            (sequence-node-p node)
                            (mapping-node-p node))
-                 (error 'yaml-emit-error
-                        :context "unsupported representation node"
-                        :message (princ-to-string (type-of node))))
+                 (signal-yaml-emit-error
+                        :mark (node-start-mark node)
+                        :cause "unsupported representation node"
+                        :message
+                        (princ-to-string (type-of node))))
                (incf (gethash node counts 0))
                (unless (gethash node seen)
                  (setf (gethash node seen) t)

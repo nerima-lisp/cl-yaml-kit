@@ -1,6 +1,13 @@
 ;;;; t/events-test.lisp
 (in-package #:cl-yaml-kit/test)
 
+(defun contract-value-equal-p (actual expected)
+  (if (and (typep actual 'yaml-kit:mark) (typep expected 'yaml-kit:mark))
+      (and (= (yaml-kit:mark-line actual) (yaml-kit:mark-line expected))
+           (= (yaml-kit:mark-column actual) (yaml-kit:mark-column expected))
+           (= (yaml-kit:mark-offset actual) (yaml-kit:mark-offset expected)))
+      (equal actual expected)))
+
 (it "constructs a mark and exposes its coordinates"
   (let ((mark (yaml-kit:make-mark 11 12 13)))
     (expect (yaml-kit:mark-line mark) :to-equal 11)
@@ -11,15 +18,25 @@
   (let ((expansion (macroexpand-1
                     '(yaml-kit:define-event probe-event-contract () "probe"))))
     (expect (consp expansion) :to-be-truthy)
-    (expect (equal (car expansion) 'progn) :to-be-truthy)))
+    (expect (member (car expansion) '(progn yaml-kit::define-yaml-subtype)) :to-be-truthy)))
 (defmacro define-event-contract-tests (name constructor predicate accessors arguments)
-  `(it ,(format nil "constructs ~A" name)
-     (let ((value (,constructor ,@arguments)))
-       (expect (,predicate value) :to-be-truthy)
-       (expect (typep value ',name) :to-be-truthy)
-       ,@(mapcar (lambda (accessor)
-                   `(expect (,accessor value) :to-be-truthy))
-                 accessors))))
+  (let ((keys (mapcar (lambda (accessor)
+                        (loop for key in arguments by #'cddr
+                              when (and (keywordp key)
+                                        (search (string-upcase (symbol-name key))
+                                                (string-upcase (symbol-name accessor))
+                                                :from-end t))
+                                do (return key)))
+                      accessors)))
+    `(it ,(format nil "constructs ~A" name)
+       (let ((value (,constructor ,@arguments)))
+         (expect (,predicate value) :to-be-truthy)
+         (expect (typep value ',name) :to-be-truthy)
+         ,@(mapcar (lambda (accessor key)
+                     `(expect (contract-value-equal-p (,accessor value)
+                                     (getf (list ,@arguments) ,key))
+                              :to-be-truthy))
+                   accessors keys)))))
 
 (define-event-contract-tests yaml-kit:stream-start-event yaml-kit:make-stream-start-event
   yaml-kit:stream-start-event-p (yaml-kit:event-start-mark yaml-kit:event-end-mark)

@@ -13,7 +13,8 @@
 (defun %emit-dispatch (event state lookahead)
   (let ((handler (cdr (find-if (lambda (entry) (funcall (car entry) event))
                                *emitter-event-handlers*))))
-    (unless handler (error 'yaml-emit-error :context "unknown event"))
+    (unless handler (signal-yaml-emit-error :context "unknown event"
+                                             :cause "unknown event"))
     (funcall handler event state lookahead)))
 (defun emit-event-stream (events stream &key (indent 2)
                                       (explicit-document-start nil)
