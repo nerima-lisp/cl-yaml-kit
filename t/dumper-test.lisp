@@ -163,6 +163,21 @@
          :to-equal t))
 
 (cl-weave:it
+ "reports unsupported representation nodes"
+ (let ((node (eval '(defstruct (coverage-invalid-node
+                                (:include yaml-kit::node)))))
+       (handler (lambda (event) (declare (ignore event)))))
+   (declare (ignore node))
+   (expect (handler-case
+               (progn (yaml-kit::serialize
+                       (funcall (symbol-function
+                                 (find-symbol "MAKE-COVERAGE-INVALID-NODE")))
+                       handler)
+                      nil)
+             (yaml-kit:yaml-emit-error () t))
+           :to-equal t)))
+
+(cl-weave:it
  "serializes a cyclic list with an alias"
  (let ((value (list nil)))
    (setf (car value) value)
@@ -170,7 +185,8 @@
 
 (cl-weave:it-each
     ((positive-infinity #.(symbol-value 'sb-kernel::double-float-positive-infinity) ".inf")
-     (negative-infinity #.(symbol-value 'sb-kernel::double-float-negative-infinity) "-.inf"))
+     (negative-infinity #.(symbol-value 'sb-kernel::double-float-negative-infinity) "-.inf")
+     (not-a-number #.(sb-kernel:make-double-float #x7ff80000 0) ".nan"))
   "emits special floating point values ~S"
   (name value expected)
   (declare (ignore name))
