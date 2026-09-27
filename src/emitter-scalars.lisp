@@ -7,9 +7,6 @@
     "tag:yaml.org,2002:bool" "tag:yaml.org,2002:null"
     "tag:yaml.org,2002:str"))
 
-(declaim (inline %yaml-line-break-p %yaml-printable-character-p
-                %yaml-blank-p))
-
 (defun %yaml-line-break-p (character)
   (case (char-code character)
     ((#x0a #x0d #x85 #x2028 #x2029) t)

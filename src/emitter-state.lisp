@@ -20,7 +20,6 @@
               (emitter-context-column context)
               (+ (emitter-context-column context) length)))))
 
-(declaim (inline %emit-char))
 (defun %emit-char (context character)
   (write-char character (emitter-context-stream context))
   (if (char= character #\Newline)
