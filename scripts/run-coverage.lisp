@@ -3,7 +3,9 @@
   (require :asdf)
   (require :sb-cover))
 
-(defparameter *default-output-directory* "/tmp/cl-yaml-kit-coverage/")
+(defparameter *default-output-directory*
+  (merge-pathnames "cl-yaml-kit-coverage/"
+                   (uiop:pathname-directory-pathname *load-truename*)))
 (defparameter *default-source-directory* "src/")
 (defparameter *default-cache-directory* "asdf-cache/")
 (defparameter *summary-comment*

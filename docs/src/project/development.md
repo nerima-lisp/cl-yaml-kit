@@ -196,7 +196,7 @@ perl -e '$SIG{ALRM}=sub{kill 9,$$}; alarm 2400; exec @ARGV' \
   --load scripts/run-coverage.lisp
 ```
 
-The artifacts default under `/tmp/cl-yaml-kit-coverage/`: the cl-weave
+The artifacts default under `scripts/cl-yaml-kit-coverage/`: the cl-weave
 coverage data file, an HTML report restricted to `src/`, and the tab-separated
 per-file summary read by the gate. `COVERAGE_OUTPUT`,
 `COVERAGE_REPORT_DIRECTORY`, `COVERAGE_SUMMARY`, and `COVERAGE_ASDF_CACHE` move
