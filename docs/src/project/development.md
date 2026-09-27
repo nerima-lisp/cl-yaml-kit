@@ -62,7 +62,7 @@ registry tree:
 
 ```sh
 mkdir -p ~/lisp-deps
-git clone --branch v2.1.1 https://github.com/nerima-lisp/cl-regex-kit ~/lisp-deps/cl-regex-kit
+git clone --branch v2.2.0 https://github.com/nerima-lisp/cl-regex-kit ~/lisp-deps/cl-regex-kit
 git clone --branch v0.6.0 https://github.com/nerima-lisp/cl-codec-kit ~/lisp-deps/cl-codec-kit
 git clone --branch v1.3.0 https://github.com/nerima-lisp/cl-weave ~/lisp-deps/cl-weave
 git clone --branch v1.2.0 https://github.com/nerima-lisp/cl-json-kit ~/lisp-deps/cl-json-kit

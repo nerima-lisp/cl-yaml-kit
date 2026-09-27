@@ -13,7 +13,7 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-regex-kit"  ; Schema regexes resolve scalar values (schema.lisp)
+  :depends-on ("cl-regex-kit"  ; v2.2.0; schema regexes resolve scalar values (schema.lisp)
                 "cl-codec-kit") ; Detects and decodes YAML octet input (parser-entry.lisp)
   :pathname "src"
   :serial t
