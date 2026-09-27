@@ -157,10 +157,6 @@
                        (%write-hex-escape stream (if (= code #xfeff) "\\u" "\\x")
                                            code (if (= code #xfeff) 4 2)))
                       (t (write-char character stream))))))
-  (when (and (find #\Newline value)
-             (%yaml-blank-p (char value 0))
-             (not (%yaml-blank-p (char value (1- (length value))))))
-    (write-char #\Space stream))
   (write-char #\" stream))
 
 (defun %write-plain (value stream)

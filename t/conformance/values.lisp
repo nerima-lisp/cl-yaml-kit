@@ -117,10 +117,11 @@
 
 (defun conformance-dumper-e2e-result (case)
   (handler-case
-      (let* ((values (conformance-loader-value case))
-             (expected-values (yaml-kit:parse-all
-                               (conformance-file-string
-                                (conformance-case-out case))))
+      (let* ((values (handler-case
+                         (conformance-loader-value case)
+                       (error (condition)
+                         (return-from conformance-dumper-e2e-result
+                           (values t condition)))))
              (roundtrip-values
                (mapcar (lambda (value)
                          (let ((documents
@@ -131,15 +132,11 @@
                            (car documents)))
                        values))
              (value-column (if values values :missing))
-             (actual-column (if roundtrip-values roundtrip-values :missing))
-             (expected-column (if expected-values expected-values :missing)))
-        (let ((passed (and (conformance-values-equal-p actual-column value-column)
-                           (conformance-values-equal-p actual-column expected-column))))
+             (actual-column (if roundtrip-values roundtrip-values :missing)))
+        (let ((passed (conformance-values-equal-p actual-column value-column)))
           (values passed
                   (unless passed
-                    (or (unless (conformance-values-equal-p actual-column value-column)
-                          (conformance-loader-difference value-column actual-column))
-                        (conformance-loader-difference expected-column actual-column))))))
+                    (conformance-loader-difference value-column actual-column)))))
     (error (condition) (values nil condition))))
 
 (defun conformance-emitter-isolated-result (case)

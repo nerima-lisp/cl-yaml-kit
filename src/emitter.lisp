@@ -43,18 +43,7 @@
     (%emit-newline context)))
 
 (defun %normalize-scalar-event (event)
-  (if (and (eq (scalar-event-style event) :single-quoted)
-           (position #\Newline (scalar-event-value event))
-           (plusp (length (scalar-event-value event)))
-           (char= (char (scalar-event-value event) 0) #\Space)
-           (not (char= (char (scalar-event-value event)
-                             (1- (length (scalar-event-value event)))) #\Space)))
-      (make-scalar-event :anchor (scalar-event-anchor event)
-                         :tag (scalar-event-tag event)
-                         :value (concatenate 'simple-string
-                                             (scalar-event-value event) " ")
-                         :style (scalar-event-style event))
-      (if (and (null (scalar-event-tag event))
+  (if (and (null (scalar-event-tag event))
                (eq (scalar-event-style event) :plain))
       (let* ((value (scalar-event-value event))
              (tag-end (position #\> value))
@@ -76,7 +65,7 @@
                               :value (subseq value (+ anchor-end 2))
                               :style :plain))
           (t event)))
-        event)))
+        event))
 
 (defun emit-event-stream (events stream &key (indent 2) (width 80)
                                       (explicit-document-start nil)
@@ -178,7 +167,9 @@
                           (or (and (sequence-start-event-p (cadr remaining))
                                    (sequence-end-event-p (caddr remaining)))
                               (and (mapping-start-event-p (cadr remaining))
-                                   (mapping-end-event-p (caddr remaining))))))
+                                   (mapping-end-event-p (caddr remaining)))))
+                     (and (cdr remaining)
+                          (document-end-event-p (cadr remaining))))
              (when (and (not first-document)
                         (not (emitter-context-line-start context)))
                (%emit-newline context))
@@ -241,12 +232,7 @@
              (%emit-text
               context
               (with-output-to-string (scalar-stream)
-                               (%write-scalar (if (and empty
-                                                       (member (scalar-event-style event)
-                                                               '(:single-quoted :double-quoted))
-                                                       (null (scalar-event-tag event)))
-                                                  " "
-                                                  value)
+                               (%write-scalar value
                                style
                                scalar-stream
                                (* (max 1 (length stack)) indent)
@@ -303,22 +289,34 @@
              (setf (caar (cdr stack)) :map))
            (when (flow-p) (%emit-text context "[")))
           ((mapping-start-event-p event)
+           (let ((key-p (and stack (map-p) (evenp (cdar stack)))))
            (start-value)
            (when (and stack
                       (eq (caar stack) :map)
                       (oddp (cdar stack))
                       (eq (mapping-start-event-style event) :block)
+                      (null (mapping-start-event-anchor event))
+                      (null (mapping-start-event-tag event))
                       (not (emitter-context-line-start context)))
              (%emit-newline context))
            (%emit-prefix event context)
+           (when (and stack
+                      (eq (caar stack) :map)
+                      (oddp (cdar stack))
+                      (eq (mapping-start-event-style event) :block)
+                      (or (mapping-start-event-anchor event)
+                          (mapping-start-event-tag event))
+                      (not (emitter-context-line-start context)))
+             (%emit-newline context))
            (push (cons (if (or (eq (mapping-start-event-style event) :flow)
+                               key-p
                                (and (cdr remaining)
                                     (mapping-end-event-p (cadr remaining))))
                            :flow-map
                            :map)
                        0)
                  stack)
-           (when (flow-p) (%emit-text context "{")))
+           (when (flow-p) (%emit-text context "{"))))
           ((sequence-end-event-p event)
            (let ((frame (pop stack)))
              (when (eq (car frame) :flow) (%emit-text context "]"))

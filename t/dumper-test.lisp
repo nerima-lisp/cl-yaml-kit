@@ -118,7 +118,19 @@
   (" lead" "' lead'")
   ("trail " "'trail '")
   (#.(format nil "a~%b") "\"a\\nb\"")
+  (#.(format nil " folded~%") "\" folded\\n\"")
   (#.(string (code-char 1)) "\"\\x01\"")))
+
+(cl-weave:it-each
+    ((empty-string "")
+     (leading-space " lead")
+     (trailing-space "trail ")
+     (both-edge-spaces " edge ")
+     (space-only " "))
+  "reads back emitted scalar boundary value ~S"
+  (name value)
+  (declare (ignore name))
+  (expect (yaml-kit:parse (yaml-kit:emit value)) :to-equal value))
 
 (defun emit-events-to-string (events)
   (yaml-kit:emit-events events))
@@ -147,3 +159,19 @@
   (expect (emit-events-to-string
            (regression-events value sequence-p))
           :to-equal expected))
+
+(cl-weave:it-each
+    ((empty-stream
+       (list (yaml-kit:make-stream-start-event)
+             (yaml-kit:make-stream-end-event))
+       "")
+     (empty-document
+       (list (yaml-kit:make-stream-start-event)
+             (yaml-kit:make-document-start-event)
+             (yaml-kit:make-document-end-event)
+             (yaml-kit:make-stream-end-event))
+       #.(format nil "---~%")))
+  "emits empty event input ~S"
+  (name events expected)
+  (declare (ignore name))
+  (expect (emit-events-to-string events) :to-equal expected))
