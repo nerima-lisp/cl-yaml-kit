@@ -2,49 +2,53 @@
 (declaim (optimize (speed 3) (safety 1)))
 (defconstant +max-version-number-length+ 9)
 
+(defun %skip-reserved-directive-line (s)
+  (loop until (sc-breakz-p s) do (sc-skip s))
+  (when (sc-break-p s) (sc-skip-line s)))
+
+(defun %skip-directive-gap (s)
+  (loop
+    (loop while (sc-blank-p s) do (sc-skip s))
+    (cond
+      ((sc-break-p s) (%skip-reserved-directive-line s))
+      ((sc-check s #\#) (%skip-reserved-directive-line s))
+      (t (return)))))
+
+(defun %reserved-directive-result (s start)
+  (cond
+    ((sc-check s #\%) nil)
+    ((and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2)
+          (sc-blankz-p s 3))
+     (let ((document-start (sc-mark s)))
+       (dotimes (i 3) (sc-skip s))
+       (make-token :document-start document-start (sc-mark s))))
+    (t (sc-error s "while scanning a directive" start
+                 "found reserved directive name"))))
+
 (defun scan-directive (s)
-  (let ((start (sc-mark s)))
-    (sc-skip s)
-    (let ((name (scan-directive-name s start)))
-      (cond
+  (loop
+    (let ((start (sc-mark s)))
+      (sc-skip s)
+      (let ((name (scan-directive-name s start)))
+        (cond
         ((string= name "YAML")
          (multiple-value-bind (major minor) (scan-version-directive-value s start)
            ;; YAML 1.2.2 only defines the 1.x version family.
            (unless (= major 1) (sc-error s "while scanning a %YAML directive" start
                                          "found incompatible YAML major version"))
            (let ((end (sc-mark s))) (scan-directive-end s start)
-             (make-token :version-directive start end :major major :minor minor))))
+             (return (make-token :version-directive start end :major major :minor minor)))))
         ((string= name "TAG")
          (multiple-value-bind (handle prefix) (scan-tag-directive-value s start)
            (let ((end (sc-mark s))) (scan-directive-end s start)
-             (make-token :tag-directive start end :handle handle :value prefix))))
-        (t
-         ;; YAML 1.2.2 reserves unknown directives; consume their line.
-         (loop until (sc-breakz-p s) do (sc-skip s))
-         (when (sc-break-p s) (sc-skip-line s))
-         ;; Comments and blank lines between a reserved directive and the
-         ;; document marker are still part of the scanner's inter-token gap.
-         (loop
-           (loop while (sc-blank-p s) do (sc-skip s))
-           (cond
-             ((sc-break-p s) (sc-skip-line s))
-             ((sc-check s #\#)
-              (loop until (sc-breakz-p s) do (sc-skip s))
-              (when (sc-break-p s) (sc-skip-line s)))
-             (t (return))))
-         (cond
-           ((sc-check s #\%) (scan-directive s))
-           ;; A directive must be followed by a document start marker.  The
-           ;; fetcher already has a token slot reserved for this directive, so
-           ;; return the marker here after ignoring the reserved directive.
-           ((and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2)
-                 (sc-blankz-p s 3))
-            (let ((document-start (sc-mark s)))
-              (dotimes (i 3) (sc-skip s))
-              (make-token :document-start document-start (sc-mark s))))
-           (t
-            (sc-error s "while scanning a directive" start
-                      "found reserved directive name"))))))))
+             (return (make-token :tag-directive start end :handle handle :value prefix)))))
+          (t
+           ;; YAML 1.2.2 reserves unknown directives; consume their line.
+           (%skip-reserved-directive-line s)
+           ;; Comments and blank lines remain part of the inter-token gap.
+           (%skip-directive-gap s)
+           (let ((result (%reserved-directive-result s start)))
+             (if result (return result)))))))))
 
 (defun scan-directive-end (s start)
   (loop while (sc-blank-p s) do (sc-skip s))
