@@ -17,8 +17,8 @@ nix fmt                  # format the Nix files
 ```
 
 `nix flake check` is the repository gate. It builds the test suite, the
-treefmt formatting gate, and the documentation site, and fails on any of
-them. The suite runs against the `yaml-test-suite` checkout pinned in
+treefmt formatting gate, the documentation site, and the coverage check, and
+fails on any of them. The suite runs against the `yaml-test-suite` checkout pinned in
 `flake.nix`: `packageArgs` passes its store path into the package
 derivation as `YAML_TEST_SUITE`, and the test check inherits that
 environment. The docs build runs `mkdocs build --strict`, so a broken
@@ -26,15 +26,15 @@ internal link fails the gate instead of warning.
 
 `nix develop` opens a shell with SBCL and the runtime and test dependencies
 on `CL_SOURCE_REGISTRY`. The check-enabled package derivation backs the
-shell, which is why the test framework is on the registry. Iterate with:
+shell, which is why the test framework is on the registry. The test app also
+sets `YAML_TEST_SUITE` to the flake input. Iterate with:
 
 ```sh
 sbcl --script run-tests.lisp
 ```
 
-The shell and the apps do not set `YAML_TEST_SUITE`. The conformance
-stages require it, so export it before running the suite outside the flake
-check:
+The development shell does not set `YAML_TEST_SUITE`. The conformance stages
+require it, so export it before running the suite outside the flake check:
 
 ```sh
 export YAML_TEST_SUITE="$HOME/yaml-test-suite"   # data-2022-01-17 checkout
@@ -194,6 +194,9 @@ Run the expanded mutation measurement with the same dependency and fixture
 variables as the test suite:
 
 ```sh
+export CL_SOURCE_REGISTRY='(:source-registry (:tree "/tmp/cl-yaml-kit-env/deps/") :inherit-configuration)'
+export YAML_TEST_SUITE=/path/to/yaml-test-suite
+export CL_YAML_DEPS=/path/to/cl-weave
 CL_YAML_MUTATION_AREA=reader \
   sbcl --dynamic-space-size 4096 --non-interactive \
   --load scripts/run-mutation.lisp
@@ -201,17 +204,18 @@ CL_YAML_MUTATION_AREA=reader \
 
 `CL_YAML_MUTATION_AREA` may be `reader`, `loader`, or `dumper`; omit it to
 measure all three areas. Every target must select at least one test. The
-`--timeout-ms` value passed to cl-weave applies to the complete per-mutant
-callback, including evaluating the mutated definition and running its selected
-tests. A timeout is reported as `errored` by cl-weave and therefore fails the
-mutation gate; it is not silently counted as killed. The script exits non-zero
-when any non-equivalent mutant is `survived` or `errored`.
+The script passes a fixed 5000 ms timeout to cl-weave for the complete
+per-mutant callback, including evaluating the mutated definition and running
+its selected tests. A timeout is reported as `errored` by cl-weave and
+therefore fails the mutation gate; it is not silently counted as killed. The
+script exits non-zero when any non-equivalent mutant is `survived` or
+`errored`.
 
 The verified result table is:
 
 | area | functions | mutants | killed | survived | errored | equivalent exclusions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| reader | 15 | 50 | 50 | 0 | 0 | 0 |
+| reader | 12 | 50 | 50 | 0 | 0 | 0 |
 | loader | 7 | 43 | 41 | 0 | 0 | 2 |
 | dumper | 7 | 66 | 66 | 0 | 0 | 0 |
 

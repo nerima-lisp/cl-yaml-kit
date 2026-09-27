@@ -10,11 +10,11 @@ implemented by the source.
 | --- | --- | --- |
 | `parse input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First constructed document | `yaml-parse-error`, `yaml-compose-error`, `yaml-resource-limit-error` |
 | `parse-all input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of constructed documents | Same as `parse` |
-| `read-yaml stream &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | One constructed document | Same as `parse` |
+| `read-yaml input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | One constructed document | Same as `parse` |
 | `parse-events input &rest keys` | Event list | `yaml-parse-error`, `yaml-resource-limit-error` |
 | `map-events handler input &key max-input-length max-depth max-scalar-length` | `nil` | `yaml-parse-error`, `yaml-resource-limit-error` |
 | `compose-events events &rest keys` | First representation graph | `yaml-compose-error`, `yaml-resource-limit-error` |
-| `compose-all-events events &rest keys` | Representation graphs | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-all-events events &key max-depth max-scalar-length max-nodes max-alias-expansions` | Representation graphs | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes | Same as `compose` |
 
@@ -38,11 +38,13 @@ defaults are centralized here:
 | `:max-scalar-length` | `16777216` | loaders, composers, and event parsing |
 | `:max-nodes` | `1000000` | loaders and composers |
 | `:max-alias-expansions` | `100000` | loaders and composers |
-| event-parser `:max-depth` | `256` | `map-events`, `parse-events` |
+| event-parser `:max-depth` | `1000` | `map-events`, `parse-events` |
 | `:indent` | `2` | `emit`, `write-yaml`, `emit-events` |
 | `:default-flow-style` | `:block` | `emit`, `write-yaml` |
 | `:explicit-document-start` | `nil` | `emit`, `write-yaml`, `emit-events` |
 
+`read-yaml` accepts the same string, octet-vector, and stream inputs as the
+other reader entry points; its first argument is not restricted to streams.
 The limit values are upper bounds. Exceeding one signals
 `yaml-resource-limit-error`. For strings and character streams,
 `:max-input-length` counts characters. For octet vectors, it counts bytes and
@@ -56,8 +58,11 @@ do not accept `:max-input-length`; raw input limits are enforced by the reader
 entry points. Re-defining an anchor is valid YAML and updates the anchor table,
 so a later alias refers to the most recent definition.
 
-The loader is supported on SBCL only. Floating-point special values are
-implemented in an isolated SBCL-specific source file.
+The loader is supported on SBCL only. Constructed YAML numeric scalars are
+either Common Lisp integers or `double-float` values. Ratios and complex
+numbers are not YAML scalar result types; for example, `1/2` remains a string.
+Floating-point special values are implemented in an isolated SBCL-specific
+source file.
 
 ## Emitting
 

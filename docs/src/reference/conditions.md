@@ -17,9 +17,10 @@ and cause readers. Readers not listed as exports are implementation details.
 
 The mark readers return a `mark` or `nil`. A mark contains line, column, and
 offset fields read with `mark-line`, `mark-column`, and `mark-offset`. Parse
-errors store the coordinates directly as zero-based line and column values
-from the scanner; offsets are zero-based. Compose, emit, and resource errors
-may carry the mark at which the operation detected the failure.
+Scanner-derived parse errors use zero-based line, column, and offset values.
+When the parser has no token mark, its fallback line and column are `1` and its
+offset is `0`. Compose, emit, and resource errors may carry the mark at which
+the operation detected the failure.
 
 ## Resource limits
 

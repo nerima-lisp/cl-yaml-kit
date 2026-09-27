@@ -11,9 +11,9 @@ the values for a release decision.
 | Loader isolated | 231 | 231 | 0 | 0 |
 | Loader end-to-end | 231 | 231 | 0 | 0 |
 | Emitter isolated | 31 | 31 | 0 | 0 |
-| Dumper end-to-end | 204 | 213 | 9 | 0 |
+| Dumper end-to-end | 204 | 213 | 0 | 0 |
 
 These measurements are not a claim of full YAML 1.2.2 conformance. The status
-file records the applicable fixtures and their current diagnostics. The nine
-Dumper end-to-end skips are fixtures whose expected `out.yaml` cannot be
-loaded by the test harness; they are not passing or failing dumper cases.
+file records the applicable fixtures and their current diagnostics. The
+Dumper end-to-end stage compares the round-tripped value with the input model;
+the current run reports no failures, exclusions, or drift.

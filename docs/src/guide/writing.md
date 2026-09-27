@@ -5,8 +5,9 @@ sequence (`[]`), while `+yaml-null+` is represented as YAML null (`null`).
 The two values are distinct YAML outputs. Reading the emitted `[]` with the
 default loader produces an empty vector; it does not reconstruct `NIL`.
 
-Supported values include strings, characters, numbers, lists, vectors,
-`yaml-mapping` values, hash tables, `T`, `+yaml-null+`, and `+yaml-false+`.
+Supported values include strings, characters, integers, double-floats, lists,
+vectors, `yaml-mapping` values, hash tables, `T`, `+yaml-null+`, and
+`+yaml-false+`. Ratios and complex numbers are unsupported values.
 An unsupported value signals `yaml-emit-error`; it is never silently converted
 with `princ-to-string`.
 

@@ -30,12 +30,10 @@ independently testable.
 
 ## Performance and coverage policy
 
-`benchmark/run.lisp` generates six deterministic corpus cases: large block
-mapping, large block sequence, deep nesting, long scalar, anchor-heavy input,
-and multi-document input. It measures every case through the public
-`yaml-kit:parse`, `yaml-kit:emit`, and `yaml-kit:map-events` paths. Each TSV row
-reports the case, operation, input size, throughput in MB/s, bytes consed, and
-the time used by the full GC immediately before the sample. Timing uses
+`benchmark/run.lisp` generates nine deterministic corpus cases and measures
+the public `yaml-kit:parse-events`, `yaml-kit:parse`, and `yaml-kit:emit` paths.
+Each TSV row reports the case, operation, input size, throughput in MB/s, bytes
+consed, GC time, and a status. Timing uses
 `cl-weave:measure`; warmups and sample counts are controlled by
 `BENCH_WARMUP`, `BENCH_SAMPLES`, and `BENCH_ITERATIONS`. Case sizes are
 controlled by the `BENCH_*` variables in the script. The TSV is observational,
