@@ -68,8 +68,7 @@
                  (cond
                    ((find character +yaml-indicator-characters+)
                     (setf flow-indicators t block-indicators t))
-                   ((find character "-?:")
-                    (setf flow-indicators t block-indicators t)))
+                   )
                  (progn
                    (when (find character ",?[]{}") (setf flow-indicators t))
                    (when (char= character #\:)
