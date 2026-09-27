@@ -18,45 +18,46 @@
                       (expect (nreverse actual) :to-equal (third ',case)))))
                cases)))
 
-(flow-scalar-cases
-  ("single quote escape" "'it''s'" (("it's" :single-quoted)))
-  ("double quote escapes" "\"\\n\\t\\\\\"" ((#.(format nil "~C~C~C" #\Newline #\Tab #\\) :double-quoted)))
-  ("hex escapes" "\"\\x41\\u0042\\U00000043\"" (("ABC" :double-quoted)))
-  ("hex escape for NUL" "\"\\x00A\""
-   ((#.(format nil "~CA" #\Nul) :double-quoted)))
-  ("plain colon in word" "a:b" (("a:b" :plain)))
-  ("plain folding" #.(format nil "one~%two") (("one two" :plain)))
-  ("quoted line folding"
-   #.(format nil "\"So does this~%  quoted scalar.\\n\"")
-   ((#.(format nil "So does this quoted scalar.~%") :double-quoted)))
-  ("double-quoted escaped line break"
-   #.(format nil "\"first\\~%  second\"")
-   (("firstsecond" :double-quoted)))
-  ("escaped break ends before the closing quote"
-   #.(format nil "\"value\\~%  \"")
-   (("value" :double-quoted)))
-  ("double-quoted escape table"
-   "\"\\0\\a\\b\\e\\f\\r\\v\\N\\_\\L\\P\\/\""
-   ((#.(format nil "~C~C~C~C~C~C~C~C~C~C~C/"
-               #\Nul (code-char 7) #\Backspace #\Escape #\Page #\Return #\Vt
-               (code-char #x85) (code-char #xa0) (code-char #x2028) (code-char #x2029))
-      :double-quoted)))
-  ("quoted empty-line folding"
-   #.(format nil "\"Empty line~%  ~C~%  as a line feed\"" #\Tab)
-   ((#.(format nil "Empty line~%as a line feed") :double-quoted)))
-  ("quoted scalar closes after folded blanks"
-   #.(format nil "\"value~%  \"")
-   (("value " :double-quoted)))
-  ("single-quoted line folding"
-   #.(format nil "' 1st non-empty~%~% 2nd non-empty ~% ~C3rd non-empty '" #\Tab)
-   ((#.(format nil " 1st non-empty~%2nd non-empty 3rd non-empty ") :single-quoted)))
-  ("plain folding with an empty line"
-   #.(format nil "plain: a~% b~%~% c")
-   (("plain" :plain) (#.(format nil "a b~%c") :plain)))
-  ("flow plain colon boundary"
-   #.(format nil "{~%unquoted : \"separate\",~%http://foo.com,~%omitted value:,~%}")
-   (("unquoted" :plain) ("separate" :double-quoted)
-    ("http://foo.com" :plain) ("omitted value" :plain))))
+(describe "flow scalar scanner"
+  (flow-scalar-cases
+    ("single quote escape" "'it''s'" (("it's" :single-quoted)))
+    ("double quote escapes" "\"\\n\\t\\\\\"" ((#.(format nil "~C~C~C" #\Newline #\Tab #\\) :double-quoted)))
+    ("hex escapes" "\"\\x41\\u0042\\U00000043\"" (("ABC" :double-quoted)))
+    ("hex escape for NUL" "\"\\x00A\""
+     ((#.(format nil "~CA" #\Nul) :double-quoted)))
+    ("plain colon in word" "a:b" (("a:b" :plain)))
+    ("plain folding" #.(format nil "one~%two") (("one two" :plain)))
+    ("quoted line folding"
+     #.(format nil "\"So does this~%  quoted scalar.\\n\"")
+     ((#.(format nil "So does this quoted scalar.~%") :double-quoted)))
+    ("double-quoted escaped line break"
+     #.(format nil "\"first\\~%  second\"")
+     (("firstsecond" :double-quoted)))
+    ("escaped break ends before the closing quote"
+     #.(format nil "\"value\\~%  \"")
+     (("value" :double-quoted)))
+    ("double-quoted escape table"
+     "\"\\0\\a\\b\\e\\f\\r\\v\\N\\_\\L\\P\\/\""
+     ((#.(format nil "~C~C~C~C~C~C~C~C~C~C~C/"
+                 #\Nul (code-char 7) #\Backspace #\Escape #\Page #\Return #\Vt
+                 (code-char #x85) (code-char #xa0) (code-char #x2028) (code-char #x2029))
+        :double-quoted)))
+    ("quoted empty-line folding"
+     #.(format nil "\"Empty line~%  ~C~%  as a line feed\"" #\Tab)
+     ((#.(format nil "Empty line~%as a line feed") :double-quoted)))
+    ("quoted scalar closes after folded blanks"
+     #.(format nil "\"value~%  \"")
+     (("value " :double-quoted)))
+    ("single-quoted line folding"
+     #.(format nil "' 1st non-empty~%~% 2nd non-empty ~% ~C3rd non-empty '" #\Tab)
+     ((#.(format nil " 1st non-empty~%2nd non-empty 3rd non-empty ") :single-quoted)))
+    ("plain folding with an empty line"
+     #.(format nil "plain: a~% b~%~% c")
+     (("plain" :plain) (#.(format nil "a b~%c") :plain)))
+    ("flow plain colon boundary"
+     #.(format nil "{~%unquoted : \"separate\",~%http://foo.com,~%omitted value:,~%}")
+     (("unquoted" :plain) ("separate" :double-quoted)
+      ("http://foo.com" :plain) ("omitted value" :plain)))))
 
 (describe "flow scalar error cases"
   (macrolet ((flow-error-cases (&body cases)
@@ -84,6 +85,25 @@
       ("rejects an unexpected document indicator"
        (format nil "\"value~%--- ~%more\""))
       )))
+(describe "plain scalar scanner"
+  (it "covers direct and folded plain scalar branches"
+    (dolist (case '(("word" ("word"))
+                    ("a:b" ("a:b"))
+                    ("key: value" ("key" "value"))
+                    ("a b" ("a b"))
+                    (#.(format nil "a~%") ("a"))
+                    (#.(format nil "a~%  b") ("a b"))))
+      (destructuring-bind (text expected) case
+        (let ((scanner (yaml-kit:make-scanner
+                        (make-array (length text)
+                                    :element-type 'character
+                                    :initial-contents text)))
+              (actual nil))
+          (loop for token = (yaml-kit:scanner-next-token scanner)
+                while token
+                when (eq (yaml-kit:token-kind token) :scalar)
+                  do (push (yaml-kit:token-value token) actual))
+          (expect (nreverse actual) :to-equal expected))))))
 
 (it "rejects an under-indented tab while folding a plain scalar"
   (let* ((text (format nil "a~% ~Abad" #\Tab))

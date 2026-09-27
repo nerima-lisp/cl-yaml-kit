@@ -41,7 +41,27 @@
   (it "does not fetch after stream end is produced"
     (let ((scanner (yaml-kit:make-scanner (scanner-source ""))))
       (setf (yaml-kit::scanner-stream-end-produced scanner) t)
-      (expect (yaml-kit::fetch-more-tokens scanner) :to-equal nil))))
+      (expect (yaml-kit::fetch-more-tokens scanner) :to-equal nil)))
+  (it "clears stale simple-key candidates at line and offset limits"
+  (dolist (case '((0 0 1 0) (0 0 0 1025) (0 0 0 0)))
+    (destructuring-bind (mark-line mark-offset current-line current-position) case
+      (let* ((scanner (yaml-kit:make-scanner (scanner-source "x")))
+             (key (first (yaml-kit::scanner-simple-keys scanner))))
+        (setf (yaml-kit::simple-key-possible key) t
+              (yaml-kit::simple-key-required key) nil
+              (yaml-kit::simple-key-mark key)
+              (yaml-kit:make-mark mark-line 0 mark-offset)
+              (yaml-kit::scanner-line scanner) current-line
+              (yaml-kit::scanner-pos scanner) current-position)
+        (yaml-kit::stale-simple-keys scanner)
+        (expect (yaml-kit::simple-key-possible key)
+                :to-be (if (equal case '(0 0 0 0)) t nil)))))
+  (let* ((scanner (yaml-kit:make-scanner (scanner-source "x")))
+         (key (first (yaml-kit::scanner-simple-keys scanner))))
+    (setf (yaml-kit::simple-key-possible key) t
+          (yaml-kit::simple-key-required key) nil)
+    (yaml-kit::remove-simple-key scanner)
+    (expect (yaml-kit::simple-key-possible key) :to-be-falsy))))
 
 (describe "token payload validation"
   (it "identifies JSON-like node endings"

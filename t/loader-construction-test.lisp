@@ -159,6 +159,11 @@
       (expect (handler-case (progn (funcall parse-number "0o" :int) nil)
                 (yaml-kit:yaml-compose-error () t))
               :to-be-truthy)))
+  (it "covers unsigned base-prefixed numbers"
+  (let ((parse-number (symbol-function 'yaml-kit::%parse-number)))
+    (dolist (case '(("0o17" 15) ("0x10" 16)))
+      (destructuring-bind (text expected) case
+        (expect (funcall parse-number text :int) :to-equal expected)))))
 
   (it "distinguishes implicit scalar kinds from quoted strings"
     (let ((scalar-kind (symbol-function 'yaml-kit::%scalar-kind)))
