@@ -32,19 +32,20 @@
 
 (it "expands a %TAG handle and suffix"
   (let* ((events (yaml-kit:parse-events
-                  "%TAG !e! tag:example.com,2000:\n--- !e!foo\n"))
+                  (test-text (format nil "%TAG !e! tag:example.com,2000:~%--- !e!foo~%"))))
          (scalar (find-if #'yaml-kit:scalar-event-p events)))
     (expect (yaml-kit:scalar-event-tag scalar)
             :to-equal "tag:example.com,2000:foo")))
 
 (it "preserves a trailing bang in a verbatim tag"
-  (let* ((events (yaml-kit:parse-events "!<tag:yaml.org,2002:str!> value\n"))
+  (let* ((events (yaml-kit:parse-events
+                  (test-text (format nil "!<tag:yaml.org,2002:str!> value~%"))))
          (scalar (find-if #'yaml-kit:scalar-event-p events)))
     (expect (yaml-kit:scalar-event-tag scalar)
             :to-equal "tag:yaml.org,2002:str!")))
 
 (defparameter *reader-termination-fragments*
-  '("--- "
+  (list "--- "
     "..."
     "- "
     "? "
@@ -56,10 +57,10 @@
     "}"
     "| "
     "> "
-    "\n"
-    "\r\n"
+    (string (code-char 10))
+    (format nil "~C~C" (code-char 13) (code-char 10))
     " "
-    "\t"
+    (string (code-char 9))
     "#c"
     "&a"
     "*a"
@@ -82,7 +83,11 @@ The seed is fixed so a failure is reproducible; no generator dependency."
           collect (with-output-to-string (out)
                     (loop
                       (setf state (mod (+ (* state 1103515245) 12345) 2147483648))
-                      (write-string (nth (mod state (length fragments)) fragments) out)
+                      ;; WRITE-STRING wants a character vector it can see at
+                      ;; compile time, so copy the fragment out one character.
+                      (let ((fragment (nth (mod state (length fragments)) fragments)))
+                        (loop for i below (length fragment)
+                              do (write-char (char fragment i) out)))
                       (when (zerop (mod state 3)) (return)))))))
 
 (defun reader-parse-outcome (text)

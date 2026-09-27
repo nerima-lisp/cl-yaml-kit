@@ -106,14 +106,16 @@
     (expect (parser-event-signature
              (nth 2 (yaml-kit:parse-events "{a: b}")))
             :to-equal '(:mapping-start t :flow nil nil)))
+  ;; c-ns-properties makes the node's tag explicit, so implicit-p is off even
+  ;; though the collection is a flow collection.
   (it "PARSER-FLOW-SEQUENCE-START-EXPLICIT-TAG"
     (expect (parser-event-signature
              (nth 2 (yaml-kit:parse-events "!!seq [a]")))
-            :to-equal '(:sequence-start t :flow nil "tag:yaml.org,2002:seq")))
+            :to-equal '(:sequence-start nil :flow nil "tag:yaml.org,2002:seq")))
   (it "PARSER-FLOW-MAPPING-START-EXPLICIT-TAG"
     (expect (parser-event-signature
              (nth 2 (yaml-kit:parse-events "!!map {a: b}")))
-            :to-equal '(:mapping-start t :flow nil "tag:yaml.org,2002:map")))
+            :to-equal '(:mapping-start nil :flow nil "tag:yaml.org,2002:map")))
   (it "PARSER-EMPTY-ANCHOR-SCALAR-PRESERVES-PROPERTIES"
     (expect (parser-event-signature
              (nth 2 (parse-parser-token-events

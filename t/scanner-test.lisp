@@ -1,12 +1,12 @@
 ;;;; t/scanner-test.lisp
 (in-package #:cl-yaml-kit/test)
 
+(defun scanner-source (text)
+  (make-array (length text) :element-type 'character :initial-contents text))
+
 (defun scanner-token-kinds (text)
-  (let* ((source (make-array (length text)
-                             :element-type 'character
-                             :initial-contents text))
-         (scanner (yaml-kit:make-scanner source))
-         (kinds nil))
+  (let ((scanner (yaml-kit:make-scanner (scanner-source text)))
+        (kinds nil))
     (loop for token = (yaml-kit:scanner-next-token scanner)
           while token
           do (push (yaml-kit:token-kind token) kinds))
@@ -31,34 +31,51 @@
          "? a"
          '(:stream-start :block-mapping-start :key :scalar :block-end
            :stream-end))
-   (list "simple key is invalid across a line break"
-         "a\nb: c"
-         '(:stream-start :scalar :block-mapping-start :key :scalar :value
-           :scalar :block-end :stream-end))
+   ;; A line break folds into the plain scalar, so nothing on the next line can
+   ;; close a simple key opened on the previous one.
+   (list "plain scalar folds a line break"
+         (format nil "a~%b")
+         '(:stream-start :scalar :stream-end))
    (list "simple key at the 1024 character limit"
          (concatenate 'string (make-string 1024 :initial-element #\a) ": b")
          '(:stream-start :block-mapping-start :key :scalar :value :scalar
            :block-end :stream-end))
    (list "nested block mapping unrolls its indentation"
-         "a:\n  b: 1\nc: 2"
+         (format nil "a:~%  b: 1~%c: 2")
          '(:stream-start :block-mapping-start :key :scalar :value
            :block-mapping-start :key :scalar :value :scalar :block-end
            :key :scalar :value :scalar :block-end :stream-end))
+   ;; An indentless sequence shares the indentation of the mapping that owns it,
+   ;; so the mapping contributes the only BLOCK-END.
    (list "indentless sequence"
-         "a:\n- b"
+         (format nil "a:~%- b")
          '(:stream-start :block-mapping-start :key :scalar :value :block-entry
-           :scalar :block-end :block-end :stream-end))
+           :scalar :block-end :stream-end))
+   ;; "- c: d" is a compact mapping, and a compact mapping rolls its own
+   ;; indentation, so a nested BLOCK-MAPPING-START precedes its key.
    (list "nested block sequence and mapping"
-         "a:\n  - b\n  - c: d"
+         (format nil "a:~%  - b~%  - c: d")
          '(:stream-start :block-mapping-start :key :scalar :value
-           :block-sequence-start :block-entry :scalar :block-entry :scalar
-           :value :scalar :block-end :block-end :stream-end))
+           :block-sequence-start :block-entry :scalar :block-entry
+           :block-mapping-start :key :scalar :value :scalar :block-end
+           :block-end :block-end :stream-end))
    (list "flow scalar tags"
          "!!str !e!foo"
          '(:stream-start :tag :tag :stream-end))))
 
 (describe "scanner token kinds"
   (scanner-cases *scanner-token-cases*))
+
+(describe "scanner token errors"
+  (it "rejects a value indicator that would close a key from a previous line"
+    (expect (handler-case
+                (progn
+                  (let ((scanner (yaml-kit:make-scanner
+                                  (scanner-source (format nil "a~%b: c")))))
+                    (loop while (yaml-kit:scanner-next-token scanner)))
+                  nil)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
 
 (describe "token payload validation"
   (it "rejects a non-string value"
@@ -78,15 +95,27 @@
       (expect (handler-case (yaml-kit:make-token :scalar mark mark :style :invalid)
                 (type-error () t)) :to-be-truthy))))
 
+(defun suite-case-inputs (root)
+  "Every IN.YAML of a suite case directory, one level below ROOT.
+DIRECTORY-FILES with a \"**/in.yaml\" pattern also reaches into .git, whose
+index and pack files are not text."
+  (loop for directory in (directory (merge-pathnames "*/" root))
+        for input = (merge-pathnames "in.yaml" directory)
+        when (probe-file input)
+          collect input))
+
+(defun fixture-error-p (input)
+  (probe-file (merge-pathnames "error" (make-pathname :name nil :type nil :defaults input))))
+
 (describe "scanner fixture smoke test"
   (it "tokenizes every available non-error fixture without hanging"
-    (let ((root (uiop:getenv "YAML_TEST_SUITE")) (checked 0))
+    (let ((root (uiop:getenv "YAML_TEST_SUITE")))
       (when (and root (probe-file root))
-        (dolist (path (uiop:directory-files (merge-pathnames "**/in.yaml" root)))
-          (unless (probe-file (merge-pathnames "error" path))
-            (let* ((text (uiop:read-file-string path))
-                   (source (make-array (length text) :element-type 'character
-                                       :initial-contents text)))
-              (yaml-kit:make-scanner source)
-              (incf checked)))))
-      (expect (>= checked 0) :to-be-truthy))))
+        ;; 255 of the suite's 333 cases are documents; the other 78 carry an
+        ;; "error" marker, so tokenizing them is not expected to succeed.
+        (let* ((inputs (suite-case-inputs root))
+               (documents (remove-if #'fixture-error-p inputs)))
+          (dolist (path documents)
+            (yaml-kit:make-scanner (scanner-source (uiop:read-file-string path))))
+          (expect (length inputs) :to-be 333)
+          (expect (length documents) :to-be 255))))))
