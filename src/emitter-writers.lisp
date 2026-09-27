@@ -28,7 +28,13 @@
                          (and (not preserve-blank-indentation)
                               end (= start end))
                          (and end (= start end)
-                              (%blank-line-p value (1+ end)))
+                              (let* ((next-start (1+ end))
+                                     (next-end (and (< next-start (length value))
+                                                   (position #\Newline value :start next-start))))
+                                (or (null next-end)
+                                    (= next-start next-end)
+                                    (not (loop for index from next-start below next-end
+                                               always (%yaml-blank-p (char value index))))))))
                (%emit-text context (make-string indent :initial-element #\Space)))
              (when end
                (%emit-text context (subseq value start end))
@@ -40,16 +46,6 @@
                          (not (%yaml-line-break-p (char value (1- (length value))))))
                  (%emit-char context #\Newline))
                (return)))))
-
-(defun %write-scalar (value style context &optional (indent 0)
-                                             (preserve-blank-indentation t))
-  (case style
-    (:plain (%write-plain value context))
-    (:single-quoted (%write-single-quoted value context indent))
-    (:double-quoted (%write-double-quoted value context))
-    (:literal (%write-block-scalar value context nil indent preserve-blank-indentation))
-    (:folded (%write-block-scalar value context t indent preserve-blank-indentation))))
-)
 
 (defun %blank-line-p (value start)
   (let ((end (position #\Newline value :start start)))
