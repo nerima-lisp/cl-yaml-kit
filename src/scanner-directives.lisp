@@ -100,15 +100,14 @@
   "yaml_parser_scan_anchor."
   (let ((start (sc-mark s)) (b (make-scan-buffer)))
     (sc-skip s)
-    ;; ns-anchor-char is ns-char minus c-flow-indicator.  A colon or
-    ;; question mark followed by separation starts the surrounding mapping
-    ;; syntax, so retain the scanner's existing anchor boundary there.
+    ;; YAML 1.2.2 defines ns-anchor-char as ns-char minus c-flow-indicator, and
+    ;; c-flow-indicator is only ",[]{}".  A ":" or "?" is an ordinary anchor
+    ;; character, which is what makes "&a: key" an anchor named "a:" rather than
+    ;; a mapping with an anchored key.
     (loop while (and (sc-printable-p s)
                      (not (sc-bom-p s))
                      (not (sc-blankz-p s))
-                     (not (yaml-flow-indicator-p (sc-char s)))
-                     (not (and (member (sc-char s) '(#\? #\:))
-                               (sc-blankz-p s 1))))
+                     (not (yaml-flow-indicator-p (sc-char s))))
           do (sc-read s b))
     (unless (plusp (fill-pointer b))
       (sc-error s (if (eq kind :anchor)
