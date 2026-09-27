@@ -103,6 +103,8 @@ sub read_rows {
     fail("$path line $number: expected " . scalar(@COLUMNS)
          . " tab-separated columns, got " . scalar(@fields))
       if @fields != @COLUMNS;
+    fail("$path line $number: file must not be empty")
+      if $fields[0] =~ /\A\s*\z/;
     my @counts;
     for my $column (1 .. 4) {
       fail("$path line $number: $COLUMNS[$column] must be a non-negative"
@@ -110,8 +112,24 @@ sub read_rows {
         unless $fields[$column] =~ /\A\d+\z/;
       push @counts, 0 + $fields[$column];
     }
+    fail("$path line $number: line-covered cannot exceed line-total")
+      if $fields[1] > $fields[2];
+    fail("$path line $number: branch-covered cannot exceed branch-total")
+      if $fields[3] > $fields[4];
+    my $uncovered = $fields[5];
+    fail("$path line $number: invalid uncovered-lines syntax '$uncovered'")
+      unless $uncovered eq '-'
+          || $uncovered =~ /\A\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*\z/;
+    if ($uncovered ne '-') {
+      for my $range (split /,/, $uncovered) {
+        my ($start, $end) = split /-/, $range;
+        $end = $start unless defined $end;
+        fail("$path line $number: uncovered-lines range '$range' is backwards")
+          if $start < 1 || $end < $start;
+      }
+    }
     push @rows, { file => $fields[0], counts => \@counts,
-                  uncovered => $fields[5] };
+                  uncovered => $uncovered };
   }
   close $handle or fail("cannot read $path: $!");
   fail("$path is empty") unless $number;
