@@ -31,7 +31,7 @@ jobs:
           - name: macOS arm64
             runner: macos-14
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       # persist-credentials: false — this job runs untrusted PR code via
       # `nix flake check`, and never needs the token, so don't leave it in

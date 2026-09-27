@@ -68,7 +68,8 @@
         cl-json-kit.packages.${ctx.system}.cl-json-kit
       ];
       packageArgs = _: { YAML_TEST_SUITE = yaml-test-suite; };
-      timeoutSeconds = 600;
+      sourceInclude = [ ./docs ];
+      timeoutSeconds = 1200;
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
       extraOutputs = ctx: {
@@ -77,7 +78,7 @@
           # run-coverage.lisp invokes scripts/check-coverage.pl after the
           # report is written, keeping the data and the 100% policy separate.
           entryPoint = "scripts/run-coverage.lisp";
-          timeoutSeconds = 2400;
+          timeoutSeconds = 1200;
           killAfterSeconds = 30;
         };
         apps.benchmark = ctx.cl.mkTestApp {
