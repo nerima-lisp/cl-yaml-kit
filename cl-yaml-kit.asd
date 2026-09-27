@@ -28,7 +28,8 @@
                (:file "emitter-state") (:file "emitter-scalars")
                (:file "emitter-writers")
                (:file "emitter-directives")
-               (:file "emitter-frames") (:file "emitter") (:file "dumper"))
+               (:file "emitter-frames") (:file "emitter-events")
+               (:file "emitter") (:file "dumper"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
 (asdf:defsystem "cl-yaml-kit/test"
@@ -53,7 +54,10 @@
                (:file "scanner-block-scalars-test")
                (:file "scanner-flow-scalars-test")
                (:file "scanner-fetch-test")
-               (:file "loader-test") (:file "dumper-test")
+               (:file "loader-test") (:file "loader-schema-test")
+               (:file "loader-construction-test")
+               (:file "loader-resource-test")
+               (:file "loader-integration-test") (:file "dumper-test")
                (:file "conformance/events") (:file "conformance/values")
                (:file "conformance-test"))
   :perform (test-op (operation component)

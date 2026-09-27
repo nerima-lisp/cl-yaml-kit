@@ -120,3 +120,12 @@
   (%emit-text context prefix)
   (loop for shift downfrom (* 4 (1- digits)) to 0 by 4
         do (%emit-char context (%hex-digit (logand #xf (ash code (- shift)))))))
+
+(defun %write-scalar (value style context &optional (indent 0)
+                                              (preserve-blank-indentation t))
+  (case style
+    (:plain (%write-plain value context))
+    (:single-quoted (%write-single-quoted value context indent))
+    (:double-quoted (%write-double-quoted value context))
+    (:literal (%write-block-scalar value context nil indent preserve-blank-indentation))
+    (:folded (%write-block-scalar value context t indent preserve-blank-indentation))))

@@ -1,12 +1,12 @@
 ;;;; src/serializer.lisp
 (in-package #:yaml-kit)
 
-(defun %node-children (node)
-  (cond ((sequence-node-p node) (sequence-node-items node))
+(defun %walk-node-children (node function)
+  (cond ((sequence-node-p node)
+         (dolist (child (sequence-node-items node)) (funcall function child)))
         ((mapping-node-p node)
-         (loop for pair in (mapping-node-pairs node)
-               nconc (list (car pair) (cdr pair))))
-        (t nil)))
+         (dolist (pair (mapping-node-pairs node))
+           (funcall function (car pair)) (funcall function (cdr pair))))))
 
 (defun %assign-anchors (root)
   (let ((counts (make-hash-table :test #'eq))
@@ -21,7 +21,7 @@
                (incf (gethash node counts 0))
                (unless (gethash node seen)
                  (setf (gethash node seen) t)
-                 (dolist (child (%node-children node)) (count-node child)))))
+                  (%walk-node-children node #'count-node))))
       (count-node root)
       (clrhash seen)
       (let ((counter 0))
@@ -33,7 +33,7 @@
                              (concatenate 'simple-string
                                           "id"
                                           (write-to-string (incf counter)))))
-                     (dolist (child (%node-children node)) (mark-node child)))))
+                      (%walk-node-children node #'mark-node))))
           (mark-node root)))))
   root)
 

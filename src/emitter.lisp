@@ -1,2 +1,35 @@
-;;;; src/emitter.lisp
 (in-package #:yaml-kit)
+
+(defparameter +emitter-event-handlers+
+  '((stream-start-event-p . %emit-stream-start-event)
+    (stream-end-event-p . %emit-stream-end-event)
+    (document-start-event-p . %emit-document-start-event)
+    (document-end-event-p . %emit-document-end-event)
+    (scalar-event-p . %emit-scalar-event) (alias-event-p . %emit-alias-event)
+    (sequence-start-event-p . %emit-sequence-start-event)
+    (sequence-end-event-p . %emit-sequence-end-event)
+    (mapping-start-event-p . %emit-mapping-start-event)
+    (mapping-end-event-p . %emit-mapping-end-event)))
+(defun %emit-dispatch (event state lookahead)
+  (let ((handler (cdr (find-if (lambda (entry) (funcall (car entry) event))
+                               +emitter-event-handlers+))))
+    (unless handler (error 'yaml-emit-error :context "unknown event"))
+    (funcall handler event state lookahead)))
+(defun emit-event-stream (events stream &key (indent 2)
+                                      (explicit-document-start nil)
+                                      (suppress-empty-document-marker nil))
+  (let ((state (make-emitter-frame-state (make-emitter-context stream indent) indent
+                                          explicit-document-start suppress-empty-document-marker))
+        (queue nil))
+    (labels ((consume (event)
+               (when event
+                 (setf queue (nconc queue (list event)))
+                 (when (> (length queue) 2)
+                   (let ((current (pop queue)))
+                     (%emit-dispatch current state queue))))))
+      (if (functionp events) (funcall events #'consume)
+          (dolist (event events) (consume event)))
+      (loop while queue
+            do (let ((current (pop queue)))
+                 (%emit-dispatch current state queue))))
+    stream))

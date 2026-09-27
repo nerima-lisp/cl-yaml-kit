@@ -5,13 +5,8 @@
                                   (explicit-document-start nil))
   "Return YAML text for an event list or event-producing function."
   (with-output-to-string (stream)
-    (let ((items (if (functionp events)
-                     (let ((result nil))
-                       (funcall events (lambda (event) (push event result)))
-                       (nreverse result))
-                     events)))
-      (emit-event-stream items stream :indent indent
-                         :explicit-document-start explicit-document-start))))
+    (emit-event-stream events stream :indent indent
+                       :explicit-document-start explicit-document-start)))
 
 (defun emit (value &key (indent 2) (default-flow-style :block)
                         (explicit-document-start nil))
@@ -31,15 +26,15 @@
                                            (null (mapping-node-pairs node)))))
                              :flow
                              default-flow-style))
-                   (dolist (child (%node-children node)) (apply-style child)))))
+                    (%walk-node-children node #'apply-style))))
         (apply-style root))
       (with-output-to-string (stream)
-        (let ((events nil))
-          (serialize root (lambda (event) (push event events))
-                     :explicit-document-start explicit-document-start)
-          (emit-event-stream (nreverse events) stream :indent indent
-                             :explicit-document-start explicit-document-start
-                             :suppress-empty-document-marker t))))))
+        (emit-event-stream
+         (lambda (handler)
+           (serialize root handler :explicit-document-start explicit-document-start))
+         stream :indent indent
+         :explicit-document-start explicit-document-start
+         :suppress-empty-document-marker t)))))
 
 (defun write-yaml (value stream &key (indent 2)
                                     (default-flow-style :block)
