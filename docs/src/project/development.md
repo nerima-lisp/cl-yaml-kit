@@ -1,93 +1,148 @@
 # Development
 
-Run `nix flake check` for the repository gate. The direct Common Lisp test
-entry point is `run-tests.lisp`; it loads `cl-yaml-kit/test` and runs cl-weave.
-The conformance gate requires the pinned `yaml-test-suite` fixture. Enter
-`nix develop` or run `nix run .#test`; both set `YAML_TEST_SUITE` to the
-flake-provided fixture. The local non-Nix harness command is:
+The supported workflow is Nix: `flake.nix` is one `cl-nix-forge`
+`mkPackageFlake` call, so the packages, checks, apps, dev shell, and
+formatter below are its standard outputs plus one custom benchmark app.
+Run every command from the repository root.
+
+## Nix
 
 ```sh
-CL_YAML_TEST_TIMEOUT_MS=5000 /tmp/cl-yaml-kit-env/run-tests.sh 2400
+nix flake check          # test suite, formatting gate, docs build
+nix develop              # shell with the dependencies on the source registry
+nix run .#test           # the test suite
+nix run .#benchmark      # the deterministic benchmark
+nix build .#docs         # the documentation site
+nix fmt                  # format the Nix files
 ```
 
-The test run fails when the fixture is absent; it never silently skips
-conformance cases. At the reader stage, the harness parses `test.event` into
-event signatures and compares those signatures with `equal`; this is an event
-meaning comparison (option (b)), not raw string matching (option (a)). The
-signatures include event kinds and relevant fields such as explicit document
-markers, collection flow style, anchors, tags, scalar style, and scalar value.
-`in.json` is compared as a JSON/YAML data model at the loader stage, `out.yaml`
-is compared semantically after dumping, and `emit.yaml` is a separate emitter
-expectation. The loader reader accepts one or more consecutive JSON values in
-`in.json`, because multi-document YAML cases use one JSON value per document.
-JSON object key order and whitespace are ignored, while YAML null, false,
-integer, and floating-point values remain distinct.
+`nix flake check` is the repository gate. It builds the test suite, the
+treefmt formatting gate, and the documentation site, and fails on any of
+them. The suite runs against the `yaml-test-suite` checkout pinned in
+`flake.nix`: `packageArgs` passes its store path into the package
+derivation as `YAML_TEST_SUITE`, and the test check inherits that
+environment. The docs build runs `mkdocs build --strict`, so a broken
+internal link fails the gate instead of warning.
 
-The `emitter-isolated` stage feeds the parsed `test.event` events to the
-emitter and requires `string=` equality with `emit.yaml`. `emit.yaml` is the
-yaml-test-suite's libyaml-based emitter fixture, so whitespace, line breaks,
-quoting, indentation, and flow/block style are part of this emitter contract.
-Comparing only parsed YAML meaning would allow representation differences and
-would no longer test that contract. An event-to-emit-to-parse round trip may be
-useful as a supplementary diagnostic, but it is not a replacement for the
-independent text comparison.
-
-Each registered test receives a 120-second default per-test timeout from
-`cl-weave`; the documented command overrides it to 5000 ms with
-`CL_YAML_TEST_TIMEOUT_MS=5000`. `/tmp/cl-yaml-kit-env/run-tests.sh 2400` also
-sets the fixture and applies a 2400-second process-level alarm, so a deadlock
-cannot hold the job indefinitely. The flake check and development shell export
-`YAML_TEST_SUITE` from the pinned `data-2022-01-17` fixture input.
-
-`scripts/run-coverage.lisp` measures the whole test suite under SB-COVER
-instrumentation, so the cl-weave unit tests and the five conformance stages
-count towards the same totals. There is no test-name filter, and the entry
-point is the one the plain test run reaches through `asdf:test-system`. The
-counters are reset after the systems are compiled and loaded, because the
-instrumented load would otherwise be counted as execution. The producer
-command is:
+`nix develop` opens a shell with SBCL and the runtime and test dependencies
+on `CL_SOURCE_REGISTRY`. The check-enabled package derivation backs the
+shell, which is why the test framework is on the registry. Iterate with:
 
 ```sh
-perl -e '$SIG{ALRM}=sub{kill 9,$$}; alarm 2400; exec @ARGV' sbcl --noinform --script scripts/run-coverage.lisp
+sbcl --script run-tests.lisp
 ```
 
-The `perl` wrapper applies the process-level alarm in place of the `timeout`
-command this shell does not provide, and 2400 seconds is enough for the full
-suite. Export `YAML_TEST_SUITE` as for the plain test run, because a missing
-fixture is a hard error here too. Pass `--script` on its own. On the SBCL in
-this environment, adding `--non-interactive` makes the interpreter print its
-banner and exit 0 without evaluating the script, which reads as a clean run
-that measured nothing.
-
-Three artifacts are written, all under `/tmp/cl-yaml-kit-coverage/` by
-default: the SB-COVER data file `cl-yaml-kit.coverage`, an HTML report under
-`report/` restricted to the source directory, and the tab-separated per-file
-summary `per-file.tsv` whose columns are `file`, `line-covered`,
-`line-total`, `branch-covered`, `branch-total`, and `uncovered-lines`. The
-producer exits 0 only when the suite passed, and it writes all three artifacts
-on a failing suite as well, so the per-file numbers stay readable for a tree
-that is not green.
-
-`scripts/check-coverage.pl` turns that summary into the gate:
+The shell and the apps do not set `YAML_TEST_SUITE`. The conformance
+stages require it, so export it before running the suite outside the flake
+check:
 
 ```sh
-perl -e '$SIG{ALRM}=sub{kill 9,$$}; alarm 120; exec @ARGV' perl scripts/check-coverage.pl
+export YAML_TEST_SUITE="$HOME/yaml-test-suite"   # data-2022-01-17 checkout
 ```
 
-It prints a Markdown table of file, line percentage, branch percentage, and
-uncovered lines, a totals row, and a final gate line, and the exit code
-carries the verdict. Exit 0 means every file met both thresholds, exit 1 means
-the table was printed and every offending file is named, and exit 2 means no
-report could be produced, from a bad option or from a missing, empty, or
-malformed summary. The interface is `--input TSV`, `--min-line PERCENT`, and
-`--min-branch PERCENT`, with no positional arguments, and each setting takes
-its value from the option first, then from `COVERAGE_SUMMARY`,
-`CL_YAML_COVERAGE_MIN_LINE`, or `CL_YAML_COVERAGE_MIN_BRANCH`, then from the
-default. Both thresholds default to 100, so any file short of full line or
-branch coverage fails the gate. A file whose total for a kind is zero prints
-`n/a` and is exempt, which is why the branch column of `src/data.lisp` and
-`src/parser-states.lisp` reads `n/a`. `COVERAGE_OUTPUT`,
-`COVERAGE_REPORT_DIRECTORY`, and `COVERAGE_SUMMARY` move the producer's three
-artifacts, and each defaults under `/tmp`, while `COVERAGE_SOURCE_DIRECTORY`
-defaults to `src/` and selects both the files summarised and the ones in the
-HTML report.
+`nix run .#test` runs `run-tests.lisp` from the flake's pinned source tree
+with the dependencies on the registry; it drives the same runner the check
+does. `nix run .#benchmark` runs `benchmark/run.lisp`, a deterministic
+corpus benchmark that prints one TSV row per case and operation with
+throughput, allocation, and GC time. `nix build .#docs` builds the
+documentation site. `nix fmt` rewrites the Nix files to the treefmt
+configuration; the formatting check fails when they are not.
+
+## Without Nix
+
+Nix is the supported path. This procedure is the fallback for a checkout
+where `nix develop` is unavailable. `run-tests.lisp` registers the
+repository itself, so only two things need setting up: the dependencies on
+the source registry, and the conformance fixture.
+
+The runtime dependencies are `cl-regex-kit` and `cl-codec-kit`; the test
+system adds `cl-weave` and `cl-json-kit` (see `cl-yaml-kit.asd`). Check
+them out under one directory and register that directory as a source
+registry tree:
+
+```sh
+mkdir -p ~/lisp-deps
+git clone --branch v2.1.1 https://github.com/nerima-lisp/cl-regex-kit ~/lisp-deps/cl-regex-kit
+git clone --branch v0.5.0 https://github.com/nerima-lisp/cl-codec-kit ~/lisp-deps/cl-codec-kit
+git clone --branch v1.3.0 https://github.com/nerima-lisp/cl-weave ~/lisp-deps/cl-weave
+git clone --branch v1.2.0 https://github.com/nerima-lisp/cl-json-kit ~/lisp-deps/cl-json-kit
+git clone --branch data-2022-01-17 https://github.com/yaml/yaml-test-suite ~/yaml-test-suite
+
+export CL_SOURCE_REGISTRY="$HOME/lisp-deps//"
+export YAML_TEST_SUITE="$HOME/yaml-test-suite"
+```
+
+The tags match the pins in `flake.nix`. These systems have dependencies of
+their own; ASDF reports each missing system by name, so add whatever it
+names to `~/lisp-deps` the same way. Any other way of putting the systems
+on the registry, Quicklisp or one source registry entry per directory,
+works the same.
+
+Then run the suite from the repository root:
+
+```sh
+sbcl --script run-tests.lisp
+```
+
+## The test suite
+
+`run-tests.lisp` registers the repository directory as a source registry
+tree and runs `asdf:test-system "cl-yaml-kit"`, which loads
+`cl-yaml-kit/test` and runs the cl-weave unit tests followed by the five
+conformance stages. It exits 0 only when everything passed.
+
+The fixture is a requirement, not an option. With `YAML_TEST_SUITE` unset,
+the conformance stage signals an error instead of skipping its cases, and
+`scripts/run-coverage.lisp` refuses to start.
+
+Each test has a per-test timeout of 120 seconds by default;
+`CL_YAML_TEST_TIMEOUT_MS` overrides it.
+
+The stages compare different representations, on purpose:
+
+- The reader stage parses `test.event` into event signatures and compares
+  them with `equal`. A signature carries the event kind and the fields
+  that matter: explicit document markers, collection flow style, anchors,
+  tags, scalar style, and scalar value.
+- The loader stage compares `in.json` as a JSON data model, one JSON
+  value per document, with object key order and whitespace ignored while
+  null, false, integer, and float values stay distinct. `out.yaml` is
+  compared semantically after dumping.
+- The `emitter-isolated` stage feeds the parsed events to the emitter and
+  requires `string=` equality with `emit.yaml`, the suite's libyaml-based
+  emitter fixture. Whitespace, line breaks, quoting, indentation, and flow
+  or block style are all part of that contract; a meaning-only comparison
+  would let representation differences through.
+
+## Coverage
+
+`scripts/run-coverage.lisp` runs the whole suite under SB-COVER, so the
+unit tests and the conformance stages count toward the same totals.
+Coverage is reset after the systems are loaded, so the numbers reflect
+only the suite run. It needs `YAML_TEST_SUITE` like the plain run, writes
+all three artifacts even when the suite fails, and exits non-zero unless
+the suite passed:
+
+```sh
+sbcl --noinform --script scripts/run-coverage.lisp
+```
+
+The artifacts default under `/tmp/cl-yaml-kit-coverage/`: the coverage
+data file, an HTML report restricted to the source directory, and the
+tab-separated per-file summary the gate reads. `COVERAGE_OUTPUT`,
+`COVERAGE_REPORT_DIRECTORY`, and `COVERAGE_SUMMARY` move them;
+`COVERAGE_SOURCE_DIRECTORY` (default `src/`) selects the files measured
+and reported.
+
+`scripts/check-coverage.pl` turns the summary into the gate. It prints a
+Markdown table and exits 0 when every file meets both thresholds, 1 when
+a file is below one, and 2 when no report could be produced. The interface
+is `--input TSV`, `--min-line PERCENT`, and `--min-branch PERCENT`; each
+setting falls back to `COVERAGE_SUMMARY`, `CL_YAML_COVERAGE_MIN_LINE`, or
+`CL_YAML_COVERAGE_MIN_BRANCH`, then to the default. Both thresholds
+default to 100. A file whose total for a kind is zero prints `n/a` and is
+exempt from that kind.
+
+```sh
+perl scripts/check-coverage.pl
+```
