@@ -466,6 +466,39 @@
                       (yaml-kit::emitter-context-stream context)))
             :to-equal t)))
 
+(cl-weave:it-each
+    ((empty nil)
+     (tagged "tag:x"))
+  "covers scalar frame stack and tag predicates ~S"
+  (name tag)
+  (declare (ignore name))
+  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+    (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+    (yaml-kit::%emit-scalar-event
+     (yaml-kit:make-scalar-event :value (if tag "x" "") :style :plain :tag tag)
+     state nil)
+    (expect (stringp (get-output-stream-string
+                      (yaml-kit::emitter-context-stream context)))
+            :to-equal t)))
+
+(cl-weave:it-each
+    ((implicit nil)
+     (explicit t))
+  "covers document explicit predicate ~S"
+  (name explicit-p)
+  (declare (ignore name))
+  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+    (yaml-kit::%emit-document-start-event
+     (yaml-kit:make-document-start-event :explicit-p explicit-p)
+     state
+     (list (yaml-kit:make-mapping-start-event)
+           (yaml-kit:make-mapping-end-event)))
+    (expect (stringp (get-output-stream-string
+                      (yaml-kit::emitter-context-stream context)))
+            :to-equal t)))
+
 (cl-weave:it
  "covers a non-line-start explicit-key sequence"
  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
@@ -518,6 +551,8 @@
 
 (cl-weave:it
  "covers plain safety and block scalar fallback"
+ (expect (yaml-kit::%plain-safe-p "-" :tag "tag:yaml.org,2002:int")
+         :to-equal nil)
  (expect (yaml-kit::%plain-safe-p "- value"
                                   :tag "tag:yaml.org,2002:int")
          :to-equal nil)
