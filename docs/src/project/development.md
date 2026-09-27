@@ -180,6 +180,38 @@ The five stages compare different representations, on purpose:
   `out.yaml` file is used to decide whether the fixture applies; it is not the
   semantic comparison target.
 
+## Mutation testing
+
+Run the expanded mutation measurement with the same dependency and fixture
+variables as the test suite:
+
+```sh
+CL_YAML_MUTATION_AREA=reader \
+  sbcl --dynamic-space-size 4096 --non-interactive \
+  --load scripts/run-mutation.lisp
+```
+
+`CL_YAML_MUTATION_AREA` may be `reader`, `loader`, or `dumper`; omit it to
+measure all three areas. Every target must select at least one test. The
+`--timeout-ms` value passed to cl-weave applies to the complete per-mutant
+callback, including evaluating the mutated definition and running its selected
+tests. A timeout is reported as `errored` by cl-weave and therefore fails the
+mutation gate; it is not silently counted as killed. The script exits non-zero
+when any non-equivalent mutant is `survived` or `errored`.
+
+The verified result table is:
+
+| area | functions | mutants | killed | survived | errored | equivalent exclusions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| reader | 15 | 50 | 50 | 0 | 0 | 0 |
+| loader | 7 | 43 | 41 | 0 | 0 | 2 |
+| dumper | 7 | 66 | 66 | 0 | 0 | 0 |
+
+The two loader exclusions are documented in `scripts/run-mutation.lisp` with
+their mutation paths and behavioral reasons: the anchor slot is initialized
+at document start before use, and the stream-event branch return value is
+ignored by the event source. They are not counted as survived mutants.
+
 ## Coverage
 
 `scripts/run-coverage.lisp` compiles the systems with SB-COVER instrumentation
