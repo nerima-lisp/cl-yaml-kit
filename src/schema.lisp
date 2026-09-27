@@ -84,6 +84,13 @@
           (loop for character across characters
                 do (setf (sbit bits (char-code character)) 1)))))))
 
+(defun %schema-row-matches-p (bits value)
+  (or (null bits)
+      (zerop (length value))
+      (let ((code (char-code (char value 0))))
+        (and (< code (length bits))
+             (plusp (sbit bits code))))))
+
 (defun %compile-schema-table (rows)
   (let ((compiled
           (mapcar (lambda (row)
@@ -92,7 +99,8 @@
                                (cl-regex-kit:compile-regex (second row)))
                           (third row)
                           (fourth row)
-                          (fifth row)))
+                          (and (fifth row)
+                               (%schema-first-characters (list row)))))
                   rows)))
     (cons (%schema-first-characters rows) compiled)))
 
@@ -116,8 +124,10 @@
                (zerop (sbit bits (char-code (char value 0)))))
       (return-from %schema-resolve "tag:yaml.org,2002:str"))
     (dolist (row (cdr table) "tag:yaml.org,2002:str")
-      (let ((regexp (second row)))
+      (let ((regexp (second row))
+            (row-bits (fifth row)))
         (when (and regexp
+                   (%schema-row-matches-p row-bits value)
                    (cl-regex-kit:full-match-p regexp value))
           (return (funcall (third row) (first row) value)))))))
 
