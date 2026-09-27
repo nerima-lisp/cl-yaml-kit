@@ -22,6 +22,12 @@
       (expect (typep condition 'error) :to-be-truthy)
       (expect (search "base" (condition-report condition)) :to-be-truthy)
       (expect (yaml-kit::yaml-kit-error-message condition) :to-equal "base")))
+  (it "reports conditions without optional marks or messages"
+    (dolist (condition
+              (list (make-condition 'yaml-kit:yaml-compose-error)
+                    (make-condition 'yaml-kit:yaml-emit-error)
+                    (make-condition 'yaml-kit:yaml-resource-limit-error)))
+      (expect (search ": YAML" (condition-report condition)) :to-be-truthy)))
   (define-condition-contract-test yaml-parse-error
     (make-condition 'yaml-kit:yaml-parse-error :line 4 :column 5 :offset 6
                     :context "context" :message "detail")
