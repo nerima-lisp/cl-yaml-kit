@@ -95,7 +95,13 @@
   (handler-case
       (let* ((events (conformance-events
                       (conformance-file-string (conformance-case-event case))))
-             (actual (yaml-kit:parse-all events))
+             (actual (let ((values nil))
+                       (yaml-kit:compose-all-events
+                        (yaml-kit::event-list-source events)
+                        :document-handler
+                        (lambda (node)
+                          (push (yaml-kit::construct node) values)))
+                       (nreverse values)))
              (expected (conformance-json-value
                         (conformance-case-json case))))
         (let ((passed (conformance-values-equal-p actual expected)))
