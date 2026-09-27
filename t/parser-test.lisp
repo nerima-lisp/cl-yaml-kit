@@ -116,18 +116,17 @@
               :to-be-truthy))))
 
 (it "covers parser tag token forms and implicit tag checks"
-  (declare (notinline yaml-kit::parser-implicit-tag-p yaml-kit::parser-tag-token))
-  (expect (yaml-kit::parser-implicit-tag-p nil) :to-be-truthy)
-  (expect (yaml-kit::parser-implicit-tag-p "") :to-be-truthy)
-  (expect (yaml-kit::parser-implicit-tag-p "tag") :to-equal nil)
+  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) nil) :to-be-truthy)
+  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "") :to-be-truthy)
+  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "tag") :to-equal nil)
   (let* ((mark (yaml-kit:make-mark 0 0 0))
          (parser (yaml-kit::make-parser%
                   :directives '(("!" . "!") ("!!" . "tag:yaml.org,2002:")
                                 ("!e!" . "tag:example:")))))
     (dolist (case '((nil "plain") ("!" "suffix") ("!" "<tag>") ("!e!" "value")))
       (destructuring-bind (handle suffix) case
-        (expect (yaml-kit::parser-tag-token
-                 parser (yaml-kit:make-token :tag mark mark :handle handle :suffix suffix))
+        (expect (funcall (symbol-function 'yaml-kit::parser-tag-token)
+                         parser (yaml-kit:make-token :tag mark mark :handle handle :suffix suffix))
                 :to-be-truthy)))))
 
 (it "reports missing parser nodes and invalid mapping keys"
@@ -153,6 +152,19 @@
               yaml-kit:mapping-start-event yaml-kit:scalar-event
               yaml-kit:scalar-event yaml-kit:mapping-end-event
               yaml-kit:document-end-event yaml-kit:stream-end-event))))
+
+(it "rejects incompatible and duplicate parser directives"
+  (dolist (tokens '((( :stream-start) (:version-directive :major 2 :minor 0)
+                     (:document-start) (:stream-end))
+                    ((:stream-start) (:version-directive :major 1 :minor 2)
+                     (:version-directive :major 1 :minor 2) (:document-start)
+                     (:stream-end))
+                    ((:stream-start) (:tag-directive :handle "!e!" :value "tag:one:")
+                     (:tag-directive :handle "!e!" :value "tag:two:")
+                     (:document-start) (:stream-end))))
+    (expect (handler-case (parse-parser-token-events tokens)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
 
 (it "expands parser states and defines callable state functions"
   (let ((expansion
