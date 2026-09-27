@@ -116,3 +116,59 @@
                 (yaml-kit:yaml-parse-error () t)
                 (error () nil))
               :to-be-truthy))))
+
+(defparameter *reader-limit-cases*
+  '(("scalar at limit" "value: long" :scalar)
+    ("depth at limit" "[[]]" :depth)
+    ("reader macro characters remain scalar text" "value: \"#.(+ 1 2)\"" :macro)))
+
+(defun reader-test-text (text)
+  (make-array (length text) :element-type 'character :initial-contents text))
+
+(describe "reader boundary contracts"
+  (it "limits a scalar at the configured boundary"
+    (expect (yaml-kit:parse (reader-test-text "value: long") :max-scalar-length 5)
+            :to-be-truthy))
+  (it "limits parser depth"
+    (expect (handler-case
+                (progn (yaml-kit:parse-events (reader-test-text "[[]]") :max-depth 1) nil)
+              (yaml-kit:yaml-resource-limit-error () t))
+            :to-be-truthy))
+  (it "keeps reader macro characters as scalar text"
+    (expect (gethash "value"
+                     (yaml-kit:parse (reader-test-text "value: \"#.(+ 1 2)\"")))
+            :to-equal "#.(+ 1 2)"))
+
+  (it "rejects control characters"
+    (let ((input (format nil "value: ~C" (code-char 1))))
+      (expect (handler-case (progn (yaml-kit:parse-events (reader-test-text input)) nil)
+                (yaml-kit:yaml-parse-error () t))
+              :to-be-truthy)))
+
+  (it "limits a stream while it is being read"
+    (with-input-from-string (stream "value: x")
+      (expect (handler-case (progn (yaml-kit:parse-events stream :max-input-length 3) nil)
+                (yaml-kit:yaml-resource-limit-error () t))
+              :to-be-truthy)))
+
+  (it "limits octets before decoding"
+    (let ((input (make-array 4 :element-type '(unsigned-byte 8)
+                             :initial-contents '(35 46 40 49))))
+      (expect (handler-case (progn (yaml-kit:parse-events input :max-input-length 3) nil)
+                (yaml-kit:yaml-resource-limit-error () t))
+              :to-be-truthy)))
+
+#+sbcl
+(progn
+  (defclass infinite-character-stream (sb-gray:fundamental-character-input-stream) ())
+  (defmethod sb-gray:stream-read-char ((stream infinite-character-stream))
+    (declare (ignore stream))
+    #\x)
+  (it "stops an unending character stream at the input limit"
+    (expect (handler-case
+                (yaml-kit:parse-events (make-instance 'infinite-character-stream)
+                                        :max-input-length 8)
+              (yaml-kit:yaml-resource-limit-error () t))
+            :to-be-truthy)))
+
+)
