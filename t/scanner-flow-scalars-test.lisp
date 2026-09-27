@@ -32,6 +32,9 @@
   ("double-quoted escaped line break"
    #.(format nil "\"first\\~%  second\"")
    (("firstsecond" :double-quoted)))
+  ("escaped break ends before the closing quote"
+   #.(format nil "\"value\\~%  \"")
+   (("value" :double-quoted)))
   ("double-quoted escape table"
    "\"\\0\\a\\b\\e\\f\\r\\v\\N\\_\\L\\P\\/\""
    ((#.(format nil "~C~C~C~C~C~C~C~C~C~C~C/"
