@@ -3,12 +3,14 @@
 
 (describe "loader integration"
   (it "parses all documents from an event source"
-    (let ((events (append (loader-document
-                           (loader-event :scalar :value "one"))
-                          (list (loader-event :document-start)
-                                (loader-event :scalar :value "two")
-                                (loader-event :document-end)
-                                (loader-event :stream-end)))))
+    (let ((events (list (loader-event :stream-start)
+                        (loader-event :document-start)
+                        (loader-event :scalar :value "one")
+                        (loader-event :document-end)
+                        (loader-event :document-start)
+                        (loader-event :scalar :value "two")
+                        (loader-event :document-end)
+                        (loader-event :stream-end))))
       (expect (loader-parse-all-events events :schema :failsafe)
               :to-equal '("one" "two"))))
 
