@@ -22,7 +22,9 @@
       (sc-read-line s breaks)
       (setf (car end-mark) (sc-mark s)))
     (when (zerop (car indent))
-      (setf (car indent) (max max-indent (1+ (scanner-indent s)) 1)))
+      ;; A root block scalar may start in column zero; nested scalars still
+      ;; require one column beyond the parent indentation.
+      (setf (car indent) (max max-indent (1+ (scanner-indent s)) 0)))
     nil))
 
 (defun scan-block-scalar (s literal-p)

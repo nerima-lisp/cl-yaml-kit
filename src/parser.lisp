@@ -14,8 +14,10 @@
 (defun process-directives (parser)
   "yaml_parser_process_directives."
   (setf (parser-directives parser) nil (parser-version parser) nil)
+  (let ((saw-directive nil))
   (loop for token = (parser-peek parser)
         while (member (token-kind token) '(:version-directive :tag-directive)) do
+    (setf saw-directive t)
     (parser-next parser)
     (case (token-kind token)
       (:version-directive
@@ -28,7 +30,8 @@
                              nil (token-start-mark token)))))
   (let ((mark (token-start-mark (parser-peek parser))))
     (append-tag-directive parser "!" "!" t mark)
-    (append-tag-directive parser "!!" "tag:yaml.org,2002:" t mark)))
+    (append-tag-directive parser "!!" "tag:yaml.org,2002:" t mark)
+    saw-directive)))
 
 (defun parser-tag-token (parser token)
   (let ((handle (token-handle token)) (suffix (token-suffix token)))
@@ -37,7 +40,8 @@
                 (char= (char suffix 0) #\<)
                 (char= (char suffix (1- (length suffix))) #\>))
            (subseq suffix 1 (1- (length suffix))))
-          (t (let ((prefix (cdr (assoc handle (parser-directives parser) :test #'string=))))
+          (t (let ((prefix (cdr (find handle (parser-directives parser)
+                                   :key #'car :test #'string= :from-end t))))
                (unless prefix (parser-error token "found undefined tag handle"))
                (concatenate 'simple-string prefix suffix))))))
 
@@ -63,19 +67,27 @@
 
 (define-parser-state yaml-parser-parse-document-start (parser)
   "yaml_parser_parse_document_start."
-  (process-directives parser)
-  (let ((token (parser-peek parser)) (explicit nil))
+  (let ((saw-directive (process-directives parser)))
+    (let ((token (parser-peek parser)) (explicit nil))
+    (when (and saw-directive (not (eq (token-kind token) :document-start)))
+      (parser-error token "did not find expected document start"))
     (when (eq (token-kind token) :stream-end)
       (parser-emit parser (make-stream-end-event :start-mark (token-start-mark token)
                                                  :end-mark (token-end-mark token)))
       (parser-next parser)
       (return-from yaml-parser-parse-document-start nil))
+    ;; A document-end marker without a preceding document is a stream gap,
+    ;; not an implicit empty document (libyaml emits no document events).
+    (when (eq (token-kind token) :document-end)
+      (parser-next parser)
+      (return-from yaml-parser-parse-document-start
+        #'yaml-parser-parse-document-start))
     (when (eq (token-kind token) :document-start)
       (setf explicit t) (parser-next parser))
     (parser-emit parser (make-document-start-event :start-mark (token-start-mark token)
                          :end-mark (token-end-mark token) :explicit-p explicit
                          :version (parser-version parser)
-                         :tag-directives (copy-list (parser-directives parser)))))
+                         :tag-directives (copy-list (parser-directives parser))))))
   #'yaml-parser-parse-document-content)
 
 (define-parser-state yaml-parser-parse-document-content (parser)
