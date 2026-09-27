@@ -14,6 +14,38 @@
       (expect (loader-parse-all-events events :schema :failsafe)
               :to-equal '("one" "two"))))
 
+  (it "supports first-only composition and empty event sources"
+    (let ((events (list (loader-event :stream-start)
+                        (loader-event :document-start)
+                        (loader-event :scalar :value "first")
+                        (loader-event :document-end)
+                        (loader-event :document-start)
+                        (loader-event :scalar :value "second")
+                        (loader-event :document-end)
+                        (loader-event :stream-end))))
+      (expect (length (loader-compose-all-events events :first-only t))
+              :to-equal 1))
+    (expect (loader-compose-all-events nil) :to-equal nil))
+
+  (it "delivers completed documents to a document handler"
+    (let ((documents nil)
+          (events (loader-document (loader-event :scalar :value "handled"))))
+      (expect (loader-compose-all-events
+               events
+               :document-handler (lambda (node)
+                                    (push (yaml-kit:scalar-node-value node)
+                                          documents)))
+              :to-equal nil)
+      (expect documents :to-equal '("handled"))))
+
+  (it "rejects an unknown event in the integration path"
+    (expect (handler-case
+                (progn (loader-compose-all-events
+                        (list (loader-event :stream-start) 42))
+                       nil)
+              (yaml-kit:yaml-compose-error () t))
+            :to-be-truthy))
+
   (it "exposes compose-all and reports resource limits"
     (let ((events (loader-document
                    (loader-event :scalar :value "long"))))
