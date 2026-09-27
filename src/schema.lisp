@@ -3,6 +3,38 @@
 
 (defparameter +yaml-tag-prefix+ "tag:yaml.org,2002:")
 
+(defmacro define-tag-table (name &rest rows)
+  `(defparameter ,name
+     (list
+      ,@(mapcar (lambda (row)
+                  (destructuring-bind (short suffix kind category) row
+                    `(list ,short (concatenate 'string +yaml-tag-prefix+ ,suffix)
+                           ,kind ,(eq category :collection))))
+                rows))))
+
+(define-tag-table *yaml-tag-table*
+  ("!!str" "str" :str :scalar)
+  ("!!int" "int" :int :scalar)
+  ("!!float" "float" :float :scalar)
+  ("!!bool" "bool" :bool :scalar)
+  ("!!null" "null" :null :scalar)
+  ("!!seq" "seq" :invalid-collection :collection)
+  ("!!map" "map" :invalid-collection :collection))
+
+(defun %tag-info (tag)
+  (find-if (lambda (row) (or (string= tag (first row))
+                             (string= tag (second row))))
+           *yaml-tag-table*))
+
+(defun %canonical-tag (tag)
+  (let ((row (%tag-info tag))) (if row (second row) tag)))
+
+(defun %tag-kind (tag)
+  (let ((row (%tag-info tag))) (and row (third row))))
+
+(defun %collection-tag-p (tag)
+  (let ((row (%tag-info tag))) (and row (fourth row))))
+
 (defun %schema-return-tag (tag value)
   (declare (ignore value))
   tag)
@@ -87,7 +119,7 @@
   `(defun ,name (value)
      (declare (optimize (speed 3) (safety 1))
               (type string value))
-     (%schema-resolve value (%schema-table ,schema))))
+     (%schema-resolve value (load-time-value (%schema-table ,schema)))))
 
 (define-schema-resolver %failsafe-kind :failsafe)
 (define-schema-resolver %json-kind :json)
@@ -114,14 +146,7 @@ a plain scalar. Quoted and block scalars must not call this resolver."
   "Return NODE's explicit tag or its implicit schema tag."
   (let ((tag (node-tag node)))
     (if (and tag (not (member tag '("!" "?") :test #'string=)))
-        (cond ((string= tag "!!str") "tag:yaml.org,2002:str")
-              ((string= tag "!!int") "tag:yaml.org,2002:int")
-              ((string= tag "!!float") "tag:yaml.org,2002:float")
-              ((string= tag "!!bool") "tag:yaml.org,2002:bool")
-              ((string= tag "!!null") "tag:yaml.org,2002:null")
-              ((string= tag "!!seq") "tag:yaml.org,2002:seq")
-              ((string= tag "!!map") "tag:yaml.org,2002:map")
-              (t tag))
+        (%canonical-tag tag)
         (if (and tag (scalar-node-p node) (string= tag "!"))
             "tag:yaml.org,2002:str"
             (%implicit-node-tag node schema)))))

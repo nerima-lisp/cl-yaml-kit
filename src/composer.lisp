@@ -1,5 +1,11 @@
 (in-package #:yaml-kit)
 
+(defconstant +default-max-input-length+ 104857600)
+(defconstant +default-max-depth+ 1000)
+(defconstant +default-max-scalar-length+ 16777216)
+(defconstant +default-max-nodes+ 1000000)
+(defconstant +default-max-alias-expansions+ 100000)
+
 (declaim (inline %limit!))
 
 (defun %limit! (value limit &optional (name "resource"))
@@ -7,13 +13,15 @@
     (error 'yaml-resource-limit-error
            :limit-name name :limit limit :actual value)))
 
-(defun compose-all-events (events &key (max-input-length 104857600)
-                                     (max-depth 1000)
-                                     (max-scalar-length 16777216)
-                                     (max-nodes 1000000)
-                                     (max-alias-expansions 100000))
+(defun compose-all-events (events &key (max-input-length +default-max-input-length+)
+                                     (max-depth +default-max-depth+)
+                                     (max-scalar-length +default-max-scalar-length+)
+                                     (max-nodes +default-max-nodes+)
+                                     (max-alias-expansions +default-max-alias-expansions+)
+                                     first-only document-handler)
   "Compose EVENTS without retaining an intermediate event list."
-  (declare (optimize (speed 3) (safety 1)))
+  (declare (optimize (speed 3) (safety 1))
+           (ignore max-input-length))
   (let ((documents nil) (current nil) (stack nil) (anchors nil)
         (nodes 0) (depth 0) (aliases 0))
     (labels
@@ -23,9 +31,10 @@
                (if current
                    (error 'yaml-compose-error)
                    (setf current node))))
-         (start-document ()
+        (start-document ()
            (setf current nil stack nil depth 0
-                 anchors (make-hash-table :test #'equal)))
+                 anchors (make-hash-table :test #'equal)
+                 nodes 0 aliases 0))
          (finish-node ()
            (unless stack (error 'yaml-compose-error))
            (let* ((frame (pop stack))
@@ -72,7 +81,14 @@
              ((document-start-event-p event) (start-document))
              ((document-end-event-p event)
               (when stack (error 'yaml-compose-error))
-              (when current (push current documents))
+              (when current
+                (if document-handler
+                    (funcall document-handler current)
+                    (push current documents))
+                (when first-only
+                  (let ((document current))
+                    (setf current nil)
+                    (throw 'first-document document))))
               (setf current nil))
              ((alias-event-p event)
               (incf aliases)
@@ -103,15 +119,11 @@
              ((or (sequence-end-event-p event) (mapping-end-event-p event))
               (finish-node))
              (t (error 'yaml-compose-error)))))
-      (if (listp events)
-          (dolist (event events) (handle event))
-          (map-events #'handle events
-                      :max-input-length max-input-length
-                      :max-depth max-depth
-                      :max-scalar-length max-scalar-length)))
+      (catch 'first-document
+        (funcall events #'handle)))
       (when stack (error 'yaml-compose-error))
       (when current (push current documents))
       (nreverse documents)))
 
 (defun compose-events (events &rest options)
-  (car (apply #'compose-all-events (cons events options))))
+  (car (apply #'compose-all-events (cons events (append options '(:first-only t))))))

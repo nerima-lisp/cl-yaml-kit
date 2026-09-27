@@ -9,24 +9,12 @@
       ((or (null tag) (and tag (string= tag "?")))
        (if (eq (node-style node) :plain)
            (if (member schema '(:core :json))
-               (let ((resolved-tag (resolve-tag node :schema schema)))
-                 (cond ((string= resolved-tag "tag:yaml.org,2002:str") :str)
-                       ((string= resolved-tag "tag:yaml.org,2002:int") :int)
-                       ((string= resolved-tag "tag:yaml.org,2002:float") :float)
-                       ((string= resolved-tag "tag:yaml.org,2002:bool") :bool)
-                       ((string= resolved-tag "tag:yaml.org,2002:null") :null)
-                       (t :str)))
+                (let ((resolved-tag (resolve-tag node :schema schema)))
+                 (or (%tag-kind resolved-tag) :str))
                :str)
            :str))
       ((string= tag "!") :str)
-      ((member tag '("!!str" "tag:yaml.org,2002:str") :test #'string=) :str)
-      ((member tag '("!!int" "tag:yaml.org,2002:int") :test #'string=) :int)
-      ((member tag '("!!float" "tag:yaml.org,2002:float") :test #'string=) :float)
-      ((member tag '("!!bool" "tag:yaml.org,2002:bool") :test #'string=) :bool)
-      ((member tag '("!!null" "tag:yaml.org,2002:null") :test #'string=) :null)
-      ((member tag '("!!seq" "!!map" "tag:yaml.org,2002:seq"
-                    "tag:yaml.org,2002:map") :test #'string=)
-       :invalid-collection)
+      ((%tag-kind tag) (%tag-kind tag))
       (t :str))))
 
 (defun %parse-number (text kind)
@@ -96,18 +84,8 @@
   (let ((tag (node-tag node)))
     (or (null tag)
         (member tag '("!" "?") :test #'string=)
-        (string= tag expected)
-        (and (string= expected "tag:yaml.org,2002:seq")
-             (string= tag "!!seq"))
-        (and (string= expected "tag:yaml.org,2002:map")
-             (string= tag "!!map"))
-        (not (member tag
-                    '("!!str" "!!int" "!!float" "!!bool" "!!null"
-                      "tag:yaml.org,2002:str" "tag:yaml.org,2002:int"
-                      "tag:yaml.org,2002:float" "tag:yaml.org,2002:bool"
-                      "tag:yaml.org,2002:null" "!!seq" "!!map"
-                      "tag:yaml.org,2002:seq" "tag:yaml.org,2002:map")
-                    :test #'string=)))))
+        (string= (%canonical-tag tag) expected)
+        (and (not (%tag-info tag)) (not (%collection-tag-p tag))))))
 
 (defun %construct-sequence (node sequence-type memo walk)
   (multiple-value-bind (cached presentp) (gethash node memo)
@@ -133,65 +111,50 @@
                     do (setf (aref result i) (funcall walk item)))
               result)))))
 
+(defun %alist-mapping (pairs duplicate-key-policy memo node walk)
+  (let ((result (make-list (length pairs))) (tail nil) (last-cell nil)
+        (seen (make-hash-table :test #'equal)))
+    (setf (gethash node memo) result tail result)
+    (dolist (pair pairs)
+      (let ((key (funcall walk (car pair))) (value (funcall walk (cdr pair))))
+        (multiple-value-bind (old presentp) (gethash key seen)
+          (when (and presentp (eq duplicate-key-policy :error))
+            (error 'yaml-compose-error))
+          (unless (and presentp (eq duplicate-key-policy :first))
+            (if (and presentp (eq duplicate-key-policy :last))
+                (setf (cdr old) value)
+                (setf (car tail) (cons key value) last-cell tail tail (cdr tail))))
+          (setf (gethash key seen) (or old (car last-cell))))))
+    (when last-cell (setf (cdr last-cell) nil))
+    result))
+
 (defun %construct-mapping (node mapping-type duplicate-key-policy memo walk)
-  (multiple-value-bind (cached presentp) (gethash node memo)
-    (if presentp
-        cached
-        (let ((pairs (mapping-node-pairs node)))
-          (case mapping-type
-            (:alist
-             (let ((result (make-list (length pairs)))
-                   (tail nil) (last-cell nil))
-               (setf (gethash node memo) result
-                     tail result)
-               (dolist (pair pairs)
-                 (let ((key (funcall walk (car pair)))
-                       (value (funcall walk (cdr pair))))
-                   (when (and (eq duplicate-key-policy :error)
-                              (assoc key result :test #'equal))
+  (or (gethash node memo)
+      (let ((pairs (mapping-node-pairs node)))
+        (case mapping-type
+          (:alist (%alist-mapping pairs duplicate-key-policy memo node walk))
+          (:yaml-mapping
+           (let* ((result (make-yaml-mapping (make-list (length pairs))))
+                  (entries (yaml-mapping-entries result)))
+             (setf (gethash node memo) result)
+             (loop for pair in pairs for cell on entries
+                   do (setf (car cell)
+                            (cons (funcall walk (car pair)) (funcall walk (cdr pair)))))
+             result))
+          (:hash-table
+           (let ((table (make-hash-table :test #'equal :size (max 1 (length pairs)))))
+             (setf (gethash node memo) table)
+             (dolist (pair pairs table)
+               (let ((key (funcall walk (car pair))) (value (funcall walk (cdr pair))))
+                 (when (or (consp key) (and (vectorp key) (not (stringp key)))
+                           (yaml-mapping-p key))
+                   (error 'yaml-compose-error))
+                 (multiple-value-bind (old presentp) (gethash key table)
+                   (declare (ignore old))
+                   (when (and presentp (eq duplicate-key-policy :error))
                      (error 'yaml-compose-error))
-                   (unless (and (eq duplicate-key-policy :first)
-                                (assoc key result :test #'equal))
-                     (if (eq duplicate-key-policy :last)
-                         (let ((old (assoc key result :test #'equal)))
-                           (if old (setf (cdr old) value)
-                               (setf (car tail) (cons key value)
-                                     last-cell tail
-                                     tail (cdr tail))))
-                         (setf (car tail) (cons key value)
-                               last-cell tail
-                               tail (cdr tail))))))
-               (when last-cell (setf (cdr last-cell) nil))
-               result))
-            (:yaml-mapping
-             (let* ((result (make-yaml-mapping (make-list (length pairs))))
-                    (entries (yaml-mapping-entries result)))
-               (setf (gethash node memo) result)
-               (loop for pair in pairs
-                     for cell on entries
-                     do (setf (car cell)
-                              (cons (funcall walk (car pair))
-                                    (funcall walk (cdr pair)))))
-               result))
-            (:hash-table
-             (let ((table (make-hash-table :test #'equal
-                                           :size (max 1 (length pairs)))))
-               (setf (gethash node memo) table)
-               (dolist (pair pairs table)
-                 (let ((key (funcall walk (car pair)))
-                       (value (funcall walk (cdr pair))))
-                   (when (or (consp key)
-                             (and (vectorp key) (not (stringp key)))
-                             (yaml-mapping-p key))
-                     (error 'yaml-compose-error))
-                   (multiple-value-bind (old presentp) (gethash key table)
-                     (declare (ignore old))
-                     (when (and presentp
-                                (eq duplicate-key-policy :error))
-                       (error 'yaml-compose-error))
-                     (unless (and presentp
-                                  (eq duplicate-key-policy :first))
-                       (setf (gethash key table) value))))))))))))
+                   (unless (and presentp (eq duplicate-key-policy :first))
+                     (setf (gethash key table) value)))))))))))
 
 (defun construct (node &key (schema :core) (mapping-type :hash-table)
                               (sequence-type :vector)
