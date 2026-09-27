@@ -135,9 +135,9 @@ The following run used a Mac16,6 with 16 CPUs and SBCL 2.6.0:
 | anchor-alias-heavy | reader | 2,222 | 8.979 | 461,141 |
 | anchor-alias-heavy | loader | 2,222 | 7.383 | 504,704 |
 | anchor-alias-heavy | dumper | 2,222 | 3.629 | 333,909 |
-| realistic-config-1mb | reader | 1,048,765 | 1.381 | 231,483,861 |
-| realistic-config-1mb | loader | 1,048,765 | 0.613 | 252,910,064 |
-| realistic-config-1mb | dumper | 1,048,765 | 0.539 | 145,068,944 |
+| realistic-config-1mb | reader | 1,048,765 | 7.196 | 61,834,112 |
+| realistic-config-1mb | loader | 1,048,765 | 3.912 | 94,623,643 |
+| realistic-config-1mb | dumper | 1,048,765 | 2.980 | 145,233,125 |
 
 An sb-sprof run on the 1 MiB configuration identified scanner plain-scalar
 work (`scan-plain-scalar`), cl-regex-kit matching during scalar construction,
