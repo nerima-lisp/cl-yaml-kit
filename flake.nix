@@ -74,7 +74,10 @@
           export PATH="${ctx.pkgs.perl}/bin:$PATH"
         '';
       };
-      sourceInclude = [ ./docs ./scripts ];
+      sourceInclude = [
+        ./docs
+        ./scripts
+      ];
       timeoutSeconds = 1200;
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
