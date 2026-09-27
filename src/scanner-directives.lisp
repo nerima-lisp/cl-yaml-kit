@@ -107,8 +107,10 @@
                      (not (sc-bom-p s))
                      (not (sc-blankz-p s))
                      (not (yaml-flow-indicator-p (sc-char s)))
-                     (not (and (member (sc-char s) '(#\? #\:))
-                               (sc-blankz-p s 1))))
+                     ;; ':' and '?' terminate an anchor/alias in block
+                     ;; context even without following separation; they are
+                     ;; mapping indicators at this scanner boundary.
+                     (not (member (sc-char s) '(#\? #\:))))
           do (sc-read s b))
     (unless (plusp (fill-pointer b))
       (sc-error s (if (eq kind :anchor)
@@ -154,7 +156,14 @@
     (when head (loop for i from 1 below (length head) do (vector-push-extend (char head i) b)))
     (loop while (or (sc-alpha-p s) (find (sc-char s) ";/?:@&=+$.!~*'()%" :test #'char=)
                     (and uri-char (find (sc-char s) ",[]" :test #'char=))) do
-      (if (sc-check s #\%) (scan-uri-escapes s directive start b) (sc-read s b)) (incf length))
+      (if (and (sc-check s #\%) (sc-hex-p s 1) (sc-hex-p s 2)
+               (< (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2)) #x80))
+          (progn
+            (vector-push-extend
+             (code-char (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2))) b)
+            (dotimes (i 3) (sc-skip s)))
+          (if (sc-check s #\%) (scan-uri-escapes s directive start b) (sc-read s b)))
+      (incf length))
     (when (zerop length) (sc-error s (if directive "while parsing a %TAG directive"
                                         "while parsing a tag") start "did not find expected tag URI"))
     (scan-buffer-string b)))
