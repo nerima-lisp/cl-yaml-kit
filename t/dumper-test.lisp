@@ -421,6 +421,33 @@
            :to-equal ", ")))
 
 (cl-weave:it
+ "covers tagged scalar and mapping frame conditions"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+   (yaml-kit::%frame-start-value
+    state (yaml-kit:make-scalar-event :value "x" :style :plain :tag "tag:x"))
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-mapping-start-frame
+    state (yaml-kit:make-mapping-start-event :style :block :tag "tag:x") nil)
+   (expect (plusp (length (get-output-stream-string
+                           (yaml-kit::emitter-context-stream context))))
+           :to-equal t)))
+
+(cl-weave:it
+ "covers a non-line-start explicit-key sequence"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map-after-explicit-key 0)))
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-sequence-start-frame
+    state (yaml-kit:make-sequence-start-event :style :flow) nil)
+   (expect (plusp (length (get-output-stream-string
+                           (yaml-kit::emitter-context-stream context))))
+           :to-equal t)))
+
+(cl-weave:it
  "covers empty block scalar writer paths"
  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
    (yaml-kit::%write-block-scalar "" context nil 2)
@@ -460,6 +487,21 @@
           (yaml-kit:make-mapping-end-event)))
    (expect (search "---" (get-output-stream-string
                            (yaml-kit::emitter-context-stream context)))
+           :to-be-truthy)))
+
+(cl-weave:it
+ "covers a versioned non-initial document"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-first-document state) nil
+         (yaml-kit::emitter-frame-state-previous-document-explicit-end state) t)
+   (yaml-kit::%emit-document-start-event
+    (yaml-kit:make-document-start-event :explicit-p t :version "1.2")
+    state
+    (list (yaml-kit:make-mapping-start-event)
+          (yaml-kit:make-mapping-end-event)))
+   (expect (search "%YAML 1.2" (get-output-stream-string
+                                 (yaml-kit::emitter-context-stream context)))
            :to-be-truthy)))
 
 (cl-weave:it
