@@ -120,14 +120,14 @@
         (spaces (make-scan-buffer)) (leading-blanks nil)
         (indent (1+ (scanner-indent s))))
     (loop
+      ;; libyaml has exactly one document-indicator test here, and it requires
+      ;; column zero for "---" and "..." alike.  A "..." outside column zero is
+      ;; plain scalar content; testing it without that guard would end the
+      ;; scalar without consuming a character and stall fetch-more-tokens.
       (when (and (zerop (mark-column (sc-mark s)))
                  (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
                      (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
                  (sc-blankz-p s 3)) (return))
-      (when (and (zerop (scanner-flow-level s))
-                 (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)
-                 (sc-blankz-p s 3))
-        (return))
       ;; A block indicator at the current indentation starts a new node;
       ;; it is not a continuation line of the preceding plain scalar.
       (when (and (zerop (scanner-flow-level s))

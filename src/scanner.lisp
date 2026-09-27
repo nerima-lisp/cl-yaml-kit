@@ -23,20 +23,36 @@
         (setf (scanner-stream-end-produced s) t))
       token)))
 
+(defun scanner-token-limit (s)
+  "Upper bound on tokens this scanner may produce for its input.
+Block collections emit :block-end and inserted :key tokens that consume no
+input, so the bound is a multiple of the input length rather than the length."
+  (+ 64 (* 8 (length (scanner-text s)))))
+
+(defun scanner-resource-error (s name limit actual)
+  (error 'yaml-resource-limit-error
+         :limit-name name :limit limit :actual actual :mark (sc-mark s)))
+
 (defun fetch-more-tokens (s)
   "yaml_parser_fetch_more_tokens."
   (when (scanner-stream-end-produced s) (return-from fetch-more-tokens nil))
-  (loop
-    (let ((need-more (not (scanner-queue-nonempty-p s))))
-      (unless need-more
-        (stale-simple-keys s)
-        (dolist (key (scanner-simple-keys s))
-          (when (and (simple-key-possible key)
-                     (= (simple-key-token-number key)
-                        (scanner-tokens-parsed s)))
-            (setf need-more t) (return))))
-      (unless need-more (return (setf (scanner-token-available s) t)))
-      (fetch-next-token s))))
+  (let ((limit (scanner-token-limit s)))
+    (loop
+      (let ((need-more (not (scanner-queue-nonempty-p s))))
+        (unless need-more
+          (stale-simple-keys s)
+          (dolist (key (scanner-simple-keys s))
+            (when (and (simple-key-possible key)
+                       (= (simple-key-token-number key)
+                          (scanner-tokens-parsed s)))
+              (setf need-more t) (return))))
+        (unless need-more (return (setf (scanner-token-available s) t)))
+        (fetch-next-token s)
+        ;; A fetch that stops advancing the position would otherwise enqueue
+        ;; tokens until the heap dies, so bound the queue by the input size.
+        (let ((produced (fill-pointer (scanner-tokens s))))
+          (when (> produced limit)
+            (scanner-resource-error s "tokens" limit produced)))))))
 
 (defun fetch-next-token (s)
   "yaml_parser_fetch_next_token."

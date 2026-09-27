@@ -31,7 +31,10 @@
   ("folded scalar" ">\na\n" (:stream-start :scalar :stream-end))
   ("single quoted scalar" "'a'" (:stream-start :scalar :stream-end))
   ("double quoted scalar" "\"a\"" (:stream-start :scalar :stream-end))
-  ("document indicators" "--- a ..." (:stream-start :document-start :scalar :document-end :stream-end))
+  ;; The "..." sits in column 6, so libyaml scans it as plain scalar content
+  ;; (scanner.c requires column zero for a document end) and the scalar is
+  ;; "a ...".  Tokenising it as a document end once stalled the scanner.
+  ("document indicators" "--- a ..." (:stream-start :document-start :scalar :stream-end))
   ("document end in flow context" "[
 ...
 ]"
