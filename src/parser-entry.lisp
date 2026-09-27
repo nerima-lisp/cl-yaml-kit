@@ -1,5 +1,11 @@
 (in-package #:yaml-kit)
 
+(defconstant +default-max-input-length+ 104857600)
+(defconstant +default-max-depth+ 1000)
+(defconstant +default-max-scalar-length+ 16777216)
+(defconstant +default-max-nodes+ 1000000)
+(defconstant +default-max-alias-expansions+ 100000)
+
 (defun %parser-octet-encoding (input)
   (let ((n (length input)))
     (cond ((and (>= n 4) (= (aref input 0) 0) (= (aref input 1) 0)
@@ -26,9 +32,9 @@
        (coerce (cl-codec-kit:octets-to-string input :start start :encoding encoding :errorp t) 'simple-string)))
     (otherwise (error 'yaml-parse-error :context "invalid YAML input"))))
 
-(defun map-events (handler input &key (max-input-length 104857600)
-                                      (max-depth 256)
-                                      (max-scalar-length 16777216))
+(defun map-events (handler input &key (max-input-length +default-max-input-length+)
+                                      (max-depth +default-max-depth+)
+                                      (max-scalar-length +default-max-scalar-length+))
   (let ((text (%parser-input-string input)))
     (when (> (length text) max-input-length)
       (error 'yaml-resource-limit-error :limit-name "input length"
