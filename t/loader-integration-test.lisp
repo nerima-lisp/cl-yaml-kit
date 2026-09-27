@@ -1,0 +1,93 @@
+;;;; t/loader-integration-test.lisp
+(in-package #:cl-yaml-kit/test)
+
+(describe "loader integration"
+  (it "parses all documents from an event source"
+    (let ((events (append (loader-document
+                           (loader-event :scalar :value "one"))
+                          (list (loader-event :document-start)
+                                (loader-event :scalar :value "two")
+                                (loader-event :document-end)
+                                (loader-event :stream-end)))))
+      (expect (loader-parse-all-events events :schema :failsafe)
+              :to-equal '("one" "two"))))
+
+  (it "exposes compose-all and reports resource limits"
+    (let ((events (loader-document
+                   (loader-event :scalar :value "long"))))
+      (expect (length (loader-compose-all-events events)) :to-equal 1)
+      (expect (handler-case
+                  (progn (loader-compose-all-events events :max-nodes 0) nil)
+                (yaml-kit:yaml-resource-limit-error (condition)
+                  (and (equal (yaml-kit::yaml-resource-limit-error-limit condition)
+                              0)
+                       (equal (yaml-kit::yaml-resource-limit-error-actual condition)
+                              1))))
+              :to-be-truthy)))
+
+  (it "uses list and alist construction options"
+    (let ((events (loader-document
+                   (loader-event :sequence-start)
+                   (loader-event :scalar :value "a")
+                   (loader-event :scalar :value "b")
+                   (loader-event :sequence-end))))
+      (expect (loader-parse-events events :schema :failsafe :sequence-type :list)
+              :to-equal '("a" "b")))
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "value")
+                   (loader-event :mapping-end))))
+      (expect (loader-parse-events events :schema :failsafe :mapping-type :alist)
+              :to-equal '(("key" . "value")))))
+
+  (it "reads reader input through the loader path"
+    (with-input-from-string (stream "answer: 42")
+      (let ((value (yaml-kit:read-yaml stream)))
+        (expect (gethash "answer" value) :to-equal 42))))
+
+  (it "preserves aliases as shared nodes during composition"
+    (let* ((events (loader-document
+                    (loader-event :mapping-start)
+                    (loader-event :scalar :value "left")
+                    (loader-event :sequence-start :anchor "a")
+                    (loader-event :scalar :value "x")
+                    (loader-event :sequence-end)
+                    (loader-event :scalar :value "right")
+                    (loader-event :alias :anchor "a")
+                    (loader-event :mapping-end)))
+           (node (loader-compose-events events)))
+      (expect (eq (yaml-kit:sequence-node-items
+                   (cdr (first (yaml-kit:mapping-node-pairs node))))
+                  (yaml-kit:sequence-node-items
+                   (cdr (second (yaml-kit:mapping-node-pairs node)))))
+              :to-be-truthy)))
+
+  (it "applies duplicate-key policies"
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "first")
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "last")
+                   (loader-event :mapping-end))))
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :first))
+              :to-equal "first")
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :last))
+              :to-equal "last")
+      (expect (handler-case (progn (loader-parse-events events) nil)
+                (yaml-kit:yaml-compose-error () t))
+              :to-be-truthy)))
+
+  (it "rejects incompatible collection tags and enforces limits"
+    (let ((events (loader-document
+                   (loader-event :sequence-start :tag "!!str")
+                   (loader-event :sequence-end))))
+      (expect (handler-case (progn (loader-parse-events events) nil)
+                (yaml-kit:yaml-compose-error () t))
+              :to-be-truthy))
+    (let ((events (loader-document (loader-event :scalar :value "long"))))
+      (expect (handler-case
+                  (progn (loader-parse-events events :max-scalar-length 3) nil)
+                (yaml-kit:yaml-resource-limit-error () t))
+              :to-be-truthy))))
