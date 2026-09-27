@@ -66,7 +66,7 @@ Test them with `yaml-null-p` and `yaml-false-p`.
 
 `map-events` calls a handler for each parser event and returns `nil`.
 `parse-events` collects the same events into a list. `emit-events` accepts an
-event list or a function that sends events to a supplied callback.
+event list.
 
 ```lisp
 (let ((text "answer: 42"))

@@ -116,6 +116,7 @@
                   (string= (resolve-plain-scalar-tag value :core)
                            "tag:yaml.org,2002:str"))
              (and tag
+                  (not (string= tag "tag:yaml.org,2002:str"))
                   (member tag +implicit-scalar-tags+ :test #'string=))
              (or (null tag)
                  (string= (resolve-plain-scalar-tag value :core)

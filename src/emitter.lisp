@@ -1,6 +1,6 @@
 (in-package #:yaml-kit)
 
-(defparameter +emitter-event-handlers+
+(defparameter *emitter-event-handlers*
   '((stream-start-event-p . %emit-stream-start-event)
     (stream-end-event-p . %emit-stream-end-event)
     (document-start-event-p . %emit-document-start-event)
@@ -12,7 +12,7 @@
     (mapping-end-event-p . %emit-mapping-end-event)))
 (defun %emit-dispatch (event state lookahead)
   (let ((handler (cdr (find-if (lambda (entry) (funcall (car entry) event))
-                               +emitter-event-handlers+))))
+                               *emitter-event-handlers*))))
     (unless handler (error 'yaml-emit-error :context "unknown event"))
     (funcall handler event state lookahead)))
 (defun emit-event-stream (events stream &key (indent 2)
@@ -27,8 +27,7 @@
                  (when (> (length queue) 2)
                    (let ((current (pop queue)))
                      (%emit-dispatch current state queue))))))
-      (if (functionp events) (funcall events #'consume)
-          (dolist (event events) (consume event)))
+      (funcall events #'consume)
       (loop while queue
             do (let ((current (pop queue)))
                  (%emit-dispatch current state queue))))

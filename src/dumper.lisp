@@ -3,9 +3,9 @@
 
 (defun emit-events (events &key (indent 2)
                                   (explicit-document-start nil))
-  "Return YAML text for an event list or event-producing function."
+  "Return YAML text for an event list."
   (with-output-to-string (stream)
-    (emit-event-stream events stream :indent indent
+    (emit-event-stream (event-list-source events) stream :indent indent
                        :explicit-document-start explicit-document-start)))
 
 (defun emit (value &key (indent 2) (default-flow-style :block)
