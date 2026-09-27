@@ -108,4 +108,11 @@
                 (progn (yaml-kit:parse-events #(#xff)) nil)
               (yaml-kit:yaml-parse-error () t)
               (error () nil))
-            :to-be-truthy)))
+            :to-be-truthy))
+  (it "reports decode errors for typed octet input"
+    (let ((input (make-array 1 :element-type '(unsigned-byte 8)
+                             :initial-contents '(#xff))))
+      (expect (handler-case (progn (yaml-kit:parse-events input) nil)
+                (yaml-kit:yaml-parse-error () t)
+                (error () nil))
+              :to-be-truthy))))

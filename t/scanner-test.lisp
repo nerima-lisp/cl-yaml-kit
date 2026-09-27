@@ -98,6 +98,18 @@
             :to-be-truthy)))
 
 (describe "token payload validation"
+  (it "identifies JSON-like node endings"
+    (let ((mark (yaml-kit:make-mark 0 0 0)))
+      (dolist (case '((:scalar :single-quoted t)
+                      (:scalar :double-quoted t)
+                      (:flow-sequence-end nil t)
+                      (:flow-mapping-end nil t)
+                      (:scalar :plain nil)
+                      (:alias nil nil)))
+        (destructuring-bind (kind style expected) case
+          (expect (yaml-kit::token-ends-json-like-node-p
+                   (yaml-kit:make-token kind mark mark :style style))
+                  :to-equal expected)))))
   (it "rejects a non-string value"
     (let ((mark (yaml-kit:make-mark 0 0 0)))
       (expect (handler-case (yaml-kit:make-token :scalar mark mark :value 1)

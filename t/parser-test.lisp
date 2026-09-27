@@ -123,5 +123,14 @@
                      (:block-sequence-start) (:block-end)
                      (:flow-sequence-end) (:stream-end)))
                   nil)
-              (yaml-kit:yaml-parse-error () t))
+            (yaml-kit:yaml-parse-error () t))
             :to-be-truthy)))
+  (dolist (case '(("flow sequence key after entry" "[a, ? b]")
+                  ("flow sequence empty mapping value" "[a:]")
+                  ("flow sequence missing value indicator" "[? a]")
+                  ("flow sequence empty mapping key" "[?]")))
+    (destructuring-bind (name input) case
+      (it name
+        (expect (handler-case (yaml-kit:parse-events input)
+                  (yaml-kit:yaml-parse-error () nil))
+                :to-be-truthy))))
