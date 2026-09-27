@@ -52,6 +52,20 @@
         (expect (mapcar #'yaml-kit:scalar-event-value values)
                 :to-equal '("root" "first" "one" "second" "two"
                             "third" "three")))))
+  (dolist (case
+            '(("ZVH3: rejects a block sequence after a completed sibling mapping"
+               "- key: value~% - item1~%")))
+    (destructuring-bind (name format-control) case
+      (it name
+        (let* ((text (format nil format-control))
+               (input (make-array (length text) :element-type 'character
+                                  :initial-contents text)))
+          (expect (handler-case
+                      (progn (yaml-kit:parse-events input) nil)
+                    (yaml-kit:yaml-parse-error (condition)
+                      (string= (yaml-kit:yaml-parse-error-context condition)
+                               "did not find expected node content")))
+                  :to-be-truthy)))))
   (cl-weave:it-fuzz "ends generated inputs with a parse result or a declared error"
     ((text (cl-weave:gen-string :min-length 0 :max-length 64
                                 :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))

@@ -21,6 +21,7 @@
   (scan-spaces (make-scan-buffer) :type vector)
   (token-pool nil :type list)
   (recyclable-token nil :type (or null token))
+  (previous-token-kind nil :type (or null keyword))
   (tokens-head 0 :type fixnum)
   (tokens-parsed 0 :type fixnum)
   (token-available nil :type boolean)

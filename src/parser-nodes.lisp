@@ -103,11 +103,8 @@
         (progn (parser-next parser) (parser-emit parser (make-sequence-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token))) (decf (parser-depth parser)) (parser-pop parser))
         (progn
           (when (and (eq (token-kind token) :block-sequence-start)
-                     (let* ((scanner (parser-scanner parser))
-                            (head (scanner-tokens-head scanner)))
-                       (and (plusp head)
-                            (eq (token-kind (aref (scanner-tokens scanner) (1- head)))
-                                :block-end))))
+                     (eq (scanner-previous-token-kind (parser-scanner parser))
+                         :block-end))
             (parser-error token "did not find expected node content"))
           (when (eq (token-kind token) :block-entry) (parser-next parser))
                ;; Only the branch that parses a node may leave a continuation for

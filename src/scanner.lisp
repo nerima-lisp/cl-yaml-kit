@@ -18,6 +18,7 @@
     (when token
       (incf (scanner-tokens-head s))
       (incf (scanner-tokens-parsed s))
+      (setf (scanner-previous-token-kind s) (token-kind token))
       (setf (aref (scanner-tokens s) (1- (scanner-tokens-head s))) nil
             (scanner-recyclable-token s) token)
       (setf (scanner-token-available s) nil)
