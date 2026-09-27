@@ -132,13 +132,6 @@
 (it "reports missing parser nodes and invalid mapping keys"
   (progn
     (expect (handler-case
-                (yaml-kit::parser-node
-                 (yaml-kit::make-parser%
-                  :peek-function (lambda (scanner) (declare (ignore scanner)) nil))
-                 t nil)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)
-    (expect (handler-case
                 (parse-parser-token-events
                  '((:stream-start) (:block-mapping-start) (:block-entry) (:stream-end)))
               (yaml-kit:yaml-parse-error () t))
@@ -152,6 +145,24 @@
               yaml-kit:mapping-start-event yaml-kit:scalar-event
               yaml-kit:scalar-event yaml-kit:mapping-end-event
               yaml-kit:document-end-event yaml-kit:stream-end-event))))
+
+(it "rejects duplicate node tags and invalid stream-end tokens"
+  (expect (handler-case
+              (parse-parser-token-events
+               '((:stream-start) (:tag :handle "!" :suffix "one")
+                 (:tag :handle "!" :suffix "two")
+                 (:scalar :value "value" :style :plain) (:stream-end)))
+            (yaml-kit:yaml-parse-error () t))
+          :to-be-truthy)
+  (let* ((mark (yaml-kit:make-mark 0 0 0))
+         (token (yaml-kit:make-token :scalar mark mark :value "wrong" :style :plain))
+         (parser (yaml-kit::make-parser%
+                  :next-function (lambda (scanner) (declare (ignore scanner)) token)
+                  :handler (lambda (event) (declare (ignore event))))))
+    (expect (handler-case
+                (funcall (symbol-function 'yaml-kit::yaml-parser-parse-stream-end) parser)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
 
 (it "rejects incompatible and duplicate parser directives"
   (dolist (tokens '((( :stream-start) (:version-directive :major 2 :minor 0)
