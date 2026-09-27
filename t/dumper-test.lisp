@@ -167,3 +167,61 @@
  (let ((value (list nil)))
    (setf (car value) value)
    (expect (yaml-kit:emit value) :to-equal #.(format nil "&id1 ~%- *id1~%"))))
+
+(cl-weave:it-each
+    ((positive-infinity #.(symbol-value 'sb-kernel::double-float-positive-infinity) ".inf")
+     (negative-infinity #.(symbol-value 'sb-kernel::double-float-negative-infinity) "-.inf"))
+  "emits special floating point values ~S"
+  (name value expected)
+  (declare (ignore name))
+  (expect (yaml-kit:emit value) :to-equal (format nil "~A~%" expected)))
+
+(cl-weave:it
+ "emits YAML sentinel values"
+ (expect (yaml-kit:emit yaml-kit:+yaml-null+) :to-equal #.(format nil "null~%"))
+ (expect (yaml-kit:emit yaml-kit:+yaml-false+) :to-equal #.(format nil "false~%")))
+
+(cl-weave:it
+ "supports flow style and custom indentation"
+ (expect (yaml-kit:emit '(1 2) :default-flow-style :flow :indent 4)
+         :to-equal #.(format nil "[1, 2]~%"))
+ (expect (yaml-kit:emit
+          (yaml-kit:make-yaml-mapping (list (cons "a" (list 1 2))))
+          :indent 4)
+         :to-equal #.(format nil "a:~%    - 1~%    - 2~%")))
+
+(cl-weave:it
+ "tracks emitter text state"
+ (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+    (yaml-kit::%emit-text context "abc")
+    (expect (yaml-kit::emitter-context-column context) :to-equal 3)
+    (expect (yaml-kit::emitter-context-line-start context) :to-equal nil)
+    (yaml-kit::%emit-text context (format nil "~%"))
+    (expect (yaml-kit::emitter-context-column context) :to-equal 0)
+    (expect (yaml-kit::emitter-context-line-start context) :to-equal t)
+    (yaml-kit::%emit-text context "a")
+    (yaml-kit::%emit-text context (format nil "~%b"))
+    (expect (yaml-kit::emitter-context-column context) :to-equal 1)
+    (expect (yaml-kit::emitter-context-line-start context) :to-equal nil)))
+
+(cl-weave:it
+ "emits event directives and explicit document ends"
+ (let ((events (list (yaml-kit:make-stream-start-event)
+                     (yaml-kit:make-document-start-event
+                      :explicit-p t :version "1.2"
+                      :tag-directives '(("!e!" . "tag:example.com,2026:")))
+                     (yaml-kit:make-scalar-event :value "ok")
+                     (yaml-kit:make-document-end-event :explicit-p t)
+                     (yaml-kit:make-stream-end-event))))
+   (expect (yaml-kit:emit-events events)
+           :to-equal #.(format nil "%YAML 1.2~%%TAG !e! tag:example.com,2026:~%--- ok~%...~%"))))
+
+(cl-weave:it
+ "emits an empty flow collection from events"
+ (let ((events (list (yaml-kit:make-stream-start-event)
+                     (yaml-kit:make-document-start-event :explicit-p t)
+                     (yaml-kit:make-sequence-start-event :style :flow)
+                     (yaml-kit:make-sequence-end-event)
+                     (yaml-kit:make-document-end-event)
+                     (yaml-kit:make-stream-end-event))))
+   (expect (yaml-kit:emit-events events) :to-equal #.(format nil "--- []~%"))))
