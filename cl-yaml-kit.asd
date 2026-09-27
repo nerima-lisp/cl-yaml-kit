@@ -1,6 +1,9 @@
 ;;;; cl-yaml-kit.asd
 (in-package #:asdf-user)
 
+(unless (member :sbcl *features*)
+  (error "cl-yaml-kit v0.1.0 supports SBCL only"))
+
 (asdf:defsystem "cl-yaml-kit"
   :description "YAML 1.2.2 reader and writer for Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"

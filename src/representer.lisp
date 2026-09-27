@@ -14,9 +14,9 @@
                              "tag:yaml.org,2002:int"
                              "tag:yaml.org,2002:float")
                     :value
-                    (cond ((and (floatp value) (sb-ext:float-infinity-p value))
+                    (cond ((and (floatp value) (%float-infinity-p value))
                            (if (minusp value) "-.inf" ".inf"))
-                          ((and (floatp value) (sb-ext:float-nan-p value)) ".nan")
+                          ((and (floatp value) (%float-nan-p value)) ".nan")
                           (t (let ((*read-default-float-format* 'double-float))
                                (string-downcase (princ-to-string value)))))))
 
