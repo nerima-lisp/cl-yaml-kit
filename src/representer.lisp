@@ -56,31 +56,43 @@
 
 (defun %represent-unsupported (value)
   (signal-yaml-emit-error
-         :cause "unsupported value type"
+         :cause (list :value value :type (type-of value))
          :context "unsupported value type"
          :message (princ-to-string (type-of value))))
 
 (defmacro define-representer-dispatch (name clauses)
   "Define NAME from a declarative type/function table."
-  `(defun ,name (value)
-     (declare (optimize (speed 3) (safety 1)))
-     (handler-case
-         (etypecase value
-           ,@(loop for (type function) in clauses
-                   collect `(,type (,function value))))
-       (type-error () (%represent-unsupported value)))))
+  (let ((eql-clauses (remove-if-not
+                      (lambda (clause)
+                        (and (consp (first clause))
+                             (eq (first (first clause)) 'eql)))
+                      clauses))
+        (type-clauses (remove-if
+                       (lambda (clause)
+                         (and (consp (first clause))
+                              (eq (first (first clause)) 'eql)))
+                       clauses)))
+    `(defun ,name (value)
+       (declare (optimize (speed 3) (safety 1)))
+       (cond
+         ,@(loop for ((eql expected) function) in eql-clauses
+                 collect `((eq value ,expected) (,function value)))
+         (t (typecase value
+              ,@(loop for (type function) in type-clauses
+                      collect `(,type (,function value)))
+              (t (%represent-unsupported value))))))))
 
 (define-representer-dispatch %represent-dispatch
   ((null (lambda (value) (declare (ignore value))
            (make-sequence-node :items nil)))
    ((eql t) (lambda (value) (declare (ignore value))
               (make-scalar-node :tag "tag:yaml.org,2002:bool" :value "true")))
-   (yaml-sentinel (lambda (value)
-                    (make-scalar-node
-                     :tag (if (yaml-null-p value)
-                              "tag:yaml.org,2002:null"
-                              "tag:yaml.org,2002:bool")
-                     :value (if (yaml-null-p value) "null" "false"))))
+   ((eql +yaml-null+) (lambda (value) (declare (ignore value))
+                        (make-scalar-node :tag "tag:yaml.org,2002:null"
+                                          :value "null")))
+   ((eql +yaml-false+) (lambda (value) (declare (ignore value))
+                         (make-scalar-node :tag "tag:yaml.org,2002:bool"
+                                           :value "false")))
    (yaml-mapping %represent-mapping)
    (hash-table %represent-hash-table)
    (string %represent-scalar)
