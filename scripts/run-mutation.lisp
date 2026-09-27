@@ -141,9 +141,21 @@
     (:dumper "src/emitter-writers.lisp" %write-double-quoted "dumper")))
 
 (defparameter *equivalent-exclusions*
-  ;; Each entry is (function mutation reason); keep this empty unless evidence
-  ;; proves that a surviving mutation is behavior-preserving.
-  nil)
+  ;; Each entry is (function path reason).  These are behavior-preserving:
+  ;; the anchor slot is initialized at document start, and the stream-event
+  ;; branch's return value is ignored by the event source.
+  '(("COMPOSE-ALL-EVENTS" (5 1 3 1)
+     "ANCHORS is initialized at every document start before it is read.")
+    ("COMPOSE-ALL-EVENTS" (5 2 1 4 2 1 1)
+     "The stream-event branch return value is ignored by the event source.")))
+
+(defun equivalent-mutation-p (name result)
+  (some (lambda (entry)
+          (and (string-equal name (first entry))
+               (equal (cl-weave:mutation-path
+                       (cl-weave:mutation-result-mutation result))
+                      (second entry))))
+        *equivalent-exclusions*))
 
 (defun expanded-mutation-results (name form name-filter)
   (let ((test-count (selected-test-count name-filter)))
@@ -168,7 +180,9 @@
         (when (member (cl-weave:mutation-result-status result)
                       '(:survived :errored))
           (format t "  ~A operator=~A path=~S~%"
-                  (cl-weave:mutation-result-status result)
+                  (if (equivalent-mutation-p name result)
+                      :equivalent
+                      (cl-weave:mutation-result-status result))
                   (cl-weave:mutation-operator
                    (cl-weave:mutation-result-mutation result))
                   (cl-weave:mutation-path
@@ -183,7 +197,13 @@
                          (string-equal area-filter
                                        (symbol-name (first target)))))
                    *expanded-targets*))
-         (all-results nil) (summaries nil))
+         (all-results nil) (summaries nil)
+         (active-equivalents
+           (count-if (lambda (entry)
+                       (member (first entry) targets
+                               :key (lambda (target) (symbol-name (third target)))
+                               :test #'string-equal))
+                     *equivalent-exclusions*)))
     (dolist (target targets)
       (destructuring-bind (area relative-file name name-filter) target
         (declare (ignore area))
@@ -199,18 +219,27 @@
     (format t "mutation-total targets=~D mutants=~D killed=~D survived=~D errored=~D equivalent=~D~%"
             (length targets) (length all-results)
             (count :killed all-results :key #'cl-weave:mutation-result-status)
-            (count :survived all-results :key #'cl-weave:mutation-result-status)
+            (- (count :survived all-results :key #'cl-weave:mutation-result-status)
+               (min active-equivalents
+                    (count :survived all-results
+                           :key #'cl-weave:mutation-result-status)))
             (count :errored all-results :key #'cl-weave:mutation-result-status)
-            (length *equivalent-exclusions*))
+            active-equivalents)
     (dolist (summary (nreverse summaries))
       (let ((results (second summary)))
         (format t "mutation-function ~A mutants=~D killed=~D survived=~D errored=~D~%"
                 (first summary) (length results)
                 (count :killed results :key #'cl-weave:mutation-result-status)
-                (count :survived results :key #'cl-weave:mutation-result-status)
+                (count-if (lambda (result)
+                            (and (eq :survived (cl-weave:mutation-result-status result))
+                                 (not (equivalent-mutation-p (first summary) result))))
+                          results)
                 (count :errored results :key #'cl-weave:mutation-result-status))))
-    (let ((survived (count :survived all-results
-                           :key #'cl-weave:mutation-result-status))
+    (let ((survived (- (count :survived all-results
+                              :key #'cl-weave:mutation-result-status)
+                       (min active-equivalents
+                            (count :survived all-results
+                                   :key #'cl-weave:mutation-result-status))))
           (errored (count :errored all-results
                           :key #'cl-weave:mutation-result-status)))
       (uiop:quit (if (and (zerop survived) (zerop errored)) 0 1)))))
