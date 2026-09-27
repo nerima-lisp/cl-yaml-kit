@@ -170,8 +170,69 @@
              (yaml-kit:make-document-start-event)
              (yaml-kit:make-document-end-event)
              (yaml-kit:make-stream-end-event))
-       #.(format nil "---~%")))
+       ""))
   "emits empty event input ~S"
   (name events expected)
   (declare (ignore name))
   (expect (emit-events-to-string events) :to-equal expected))
+
+(cl-weave:it-each
+    ((character #\A #.(format nil "A~%"))
+     (float 1.5d0 #.(format nil "1.5~%"))
+     (vector #(1 2) #.(format nil "- 1~%- 2~%")))
+  "dumps representer dispatch cases ~S"
+  (name value expected)
+  (declare (ignore name))
+  (expect (yaml-kit:emit value) :to-equal expected))
+
+(cl-weave:it
+ "dumps a hash table and preserves an explicit document marker"
+ (let ((table (make-hash-table :test #'equal)))
+   (setf (gethash "answer" table) 42)
+   (expect (yaml-kit:emit table :explicit-document-start t)
+           :to-equal #.(format nil "---~%answer: 42~%"))))
+
+(cl-weave:it
+ "dumps an empty mapping"
+ (expect (yaml-kit:emit (yaml-kit:make-yaml-mapping nil))
+         :to-equal #.(format nil "{}~%")))
+
+(cl-weave:it
+ "supports function event producers and write-yaml"
+ (let ((events (list (yaml-kit:make-stream-start-event)
+                     (yaml-kit:make-document-start-event)
+                     (yaml-kit:make-scalar-event :value "ok")
+                     (yaml-kit:make-document-end-event)
+                     (yaml-kit:make-stream-end-event))))
+   (expect (yaml-kit:emit-events (lambda (sink)
+                                   (dolist (event events) (funcall sink event))))
+           :to-equal #.(format nil "ok~%"))
+   (with-output-to-string (stream)
+     (expect (yaml-kit:write-yaml 7 stream) :to-equal 7)
+     (expect (get-output-stream-string stream) :to-equal #.(format nil "7~%")))))
+
+(cl-weave:it-each
+    ((plain-analysis "plain")
+     (flow-analysis "a,b")
+     (line-break-analysis #.(format nil "a~%b"))
+     (control-analysis #.(string (code-char 1)))
+     (unicode-analysis #.(string (code-char #x2028))))
+  "covers scalar analysis and escaping boundaries ~S"
+  (name value)
+  (declare (ignore name))
+  (expect (not (null (yaml-kit::%scalar-analysis value))) :to-equal t)
+  (expect (not (null (member (yaml-kit::%scalar-style value :plain nil 80)
+                             '(:plain :single-quoted :double-quoted))))
+          :to-equal t))
+
+(cl-weave:it
+ "reports unsupported representer values"
+ (expect (handler-case (progn (yaml-kit:emit :unsupported) nil)
+           (yaml-kit:yaml-emit-error () t))
+         :to-equal t))
+
+(cl-weave:it
+ "serializes a cyclic list with an alias"
+ (let ((value (list nil)))
+   (setf (car value) value)
+   (expect (yaml-kit:emit value) :to-equal #.(format nil "&id1 ~%- *id1~%"))))
