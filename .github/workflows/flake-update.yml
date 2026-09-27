@@ -32,10 +32,10 @@ jobs:
       # (they spanned 2026-04-14 to 2026-07-23 before this workflow existed) and
       # no amount of manual alignment holds for more than a week.
       #
-      # NOTE: this uses the default GITHUB_TOKEN, so GitHub will NOT trigger CI
-      # on the bot's PR (loop-prevention). Re-run CI by pushing an empty commit
-      # or closing and reopening the PR; swap in a PAT via `token:` if
-      # self-triggering CI is required.
+      # NOTE: this uses the default GITHUB_TOKEN, so GitHub will not trigger CI
+      # on the bot's PR directly (loop-prevention). ci.yml listens for this
+      # workflow's completion and dispatches a CI run for each open
+      # bot-authored update PR.
       - name: Update flake.lock
         uses: DeterminateSystems/update-flake-lock@834c491b2ece4de0bbd00d85214bb5e83b4da5c6 # v28
         with:
