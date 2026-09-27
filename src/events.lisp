@@ -7,7 +7,7 @@
   (column 0 :type (integer 0 #.most-positive-fixnum) :read-only t)
   (offset 0 :type (integer 0 #.most-positive-fixnum) :read-only t))
 
-(defstruct (event (:constructor make-event (&key start-mark end-mark))
+(defstruct (event (:constructor nil)
                   (:copier nil) (:predicate nil))
   "Base class for YAML parsing and emitting events."
   (start-mark nil :type (or null mark))

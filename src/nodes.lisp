@@ -1,7 +1,7 @@
 ;;;; src/nodes.lisp
 (in-package #:yaml-kit)
 
-(defstruct (node (:constructor make-node (&key tag anchor style start-mark end-mark))
+(defstruct (node (:constructor nil)
                  (:copier nil) (:predicate nil))
   "Base class for YAML representation graph nodes."
   (tag nil :type (or null simple-string))
