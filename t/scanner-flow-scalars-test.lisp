@@ -29,6 +29,15 @@
   ("quoted line folding"
    #.(format nil "\"So does this~%  quoted scalar.\\n\"")
    ((#.(format nil "So does this quoted scalar.~%") :double-quoted)))
+  ("double-quoted escaped line break"
+   #.(format nil "\"first\\~%  second\"")
+   (("firstsecond" :double-quoted)))
+  ("double-quoted escape table"
+   "\"\\0\\a\\b\\e\\f\\r\\v\\N\\_\\L\\P\\/\""
+   ((#.(format nil "~C~C~C~C~C~C~C~C~C~C~C/"
+               #\Nul (code-char 7) #\Backspace #\Escape #\Page #\Return #\Vt
+               (code-char #x85) (code-char #xa0) (code-char #x2028) (code-char #x2029))
+      :double-quoted)))
   ("quoted empty-line folding"
    #.(format nil "\"Empty line~%  ~C~%  as a line feed\"" #\Tab)
    ((#.(format nil "Empty line~%as a line feed") :double-quoted)))
@@ -67,4 +76,32 @@
       ("rejects an unterminated quoted scalar" "\"unterminated")
       ("rejects a comment after a quoted scalar" "\"value\"#comment")
       ("rejects an unexpected document indicator"
-       (format nil "\"value~%--- ~%more\"")))))
+       (format nil "\"value~%--- ~%more\""))
+      )))
+
+(it "rejects an under-indented tab while folding a plain scalar"
+  (let* ((text (format nil "a~% ~Abad" #\Tab))
+         (scanner (yaml-kit:make-scanner
+                   (make-array (length text) :element-type 'character
+                               :initial-contents text)))
+         (start (yaml-kit::sc-mark scanner))
+         (out (yaml-kit::make-scan-buffer))
+         (end (yaml-kit::sc-mark scanner))
+         (leading (yaml-kit::make-scan-buffer))
+         (trailing (yaml-kit::make-scan-buffer))
+         (spaces (yaml-kit::make-scan-buffer)))
+    (setf (yaml-kit::scanner-indent scanner) 3)
+    (expect (handler-case
+                (yaml-kit::%scan-plain-scalar-body
+                 scanner start out end leading trailing spaces nil 3)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
+
+(it "handles an escaped line break directly"
+  (let* ((text (format nil "\\~%"))
+         (scanner (yaml-kit:make-scanner
+                   (make-array (length text) :element-type 'character
+                               :initial-contents text)))
+         (out (yaml-kit::make-scan-buffer)))
+    (expect (yaml-kit::%flow-escape scanner out (yaml-kit::sc-mark scanner))
+            :to-be nil)))

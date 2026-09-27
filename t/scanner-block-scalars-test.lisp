@@ -68,7 +68,10 @@
                (list "text" :plain)))
    (list "detected indentation allows a tab in content"
          (format nil ">~% ~A~% detected~%" #\Tab)
-         (list (list (format nil "~C~%detected~%" #\Tab) :folded)))))
+         (list (list (format nil "~C~%detected~%" #\Tab) :folded)))
+   (list "document marker ends a root scalar"
+         (format nil "|~%text~%---~%")
+         (list (list (format nil "text~%") :literal)))))
 
 (defun scanner-block-scalar-error-rows ()
   (list
@@ -76,6 +79,9 @@
    (list "invalid block scalar header" (format nil "|x~%  value~%"))
    (list "leading content line is not indented" (format nil "- |~%text~%"))
    (list "tab is not valid block indentation" (format nil "- |~%~Atext~%" #\Tab))
+   (list "tab is not valid explicit block indentation"
+         (format nil "|2~% ~Atext~%" #\Tab))
+   (list "explicit zero after chomping indicator" (format nil "|+0~%  value~%"))
    (list "leading blank line has too much indentation" (format nil "- |~%   ~%  text~%"))
    (list "folded leading blank line has too much indentation" (format nil "- >~%   ~%  text~%"))))
 
