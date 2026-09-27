@@ -434,6 +434,38 @@
                            (yaml-kit::emitter-context-stream context))))
            :to-equal t)))
 
+(cl-weave:it-each
+    ((plain "x")
+     (reserved "true")
+     (colon ": value"))
+  "covers scalar event key and tag conditions ~S"
+  (name value)
+  (declare (ignore name))
+  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+    (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 0)))
+    (yaml-kit::%emit-scalar-event
+     (yaml-kit:make-scalar-event :value value :style :plain)
+     state nil)
+    (expect (plusp (length (get-output-stream-string
+                            (yaml-kit::emitter-context-stream context))))
+            :to-equal t)))
+
+(cl-weave:it-each
+    ((plain nil)
+     (tagged "tag:x"))
+  "covers empty scalar event tag condition ~S"
+  (name tag)
+  (declare (ignore name))
+  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+    (yaml-kit::%emit-scalar-event
+     (yaml-kit:make-scalar-event :value "" :style :plain :tag tag)
+     state nil)
+    (expect (stringp (get-output-stream-string
+                      (yaml-kit::emitter-context-stream context)))
+            :to-equal t)))
+
 (cl-weave:it
  "covers a non-line-start explicit-key sequence"
  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
@@ -446,6 +478,31 @@
    (expect (plusp (length (get-output-stream-string
                            (yaml-kit::emitter-context-stream context))))
            :to-equal t)))
+
+(cl-weave:it
+ "covers non-line-start block sequence and mapping frames"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map-after-explicit-key 0)))
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-sequence-start-frame
+    state (yaml-kit:make-sequence-start-event :style :block) nil)
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-mapping-start-frame
+    state (yaml-kit:make-mapping-start-event :style :block) nil)
+   (expect (plusp (length (get-output-stream-string
+                           (yaml-kit::emitter-context-stream context))))
+           :to-equal t)))
+
+(cl-weave:it
+ "covers plain safety and block scalar fallback"
+ (expect (yaml-kit::%plain-safe-p "- value"
+                                  :tag "tag:yaml.org,2002:int")
+         :to-equal nil)
+ (expect (yaml-kit::%scalar-style (string (code-char 1)) :literal t)
+         :to-equal :double-quoted))
 
 (cl-weave:it
  "covers empty block scalar writer paths"
