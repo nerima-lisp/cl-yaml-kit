@@ -130,6 +130,30 @@
                  parser (yaml-kit:make-token :tag mark mark :handle handle :suffix suffix))
                 :to-be-truthy)))))
 
+(it "reports missing parser nodes and invalid mapping keys"
+  (progn
+    (expect (handler-case
+                (yaml-kit::parser-node
+                 (yaml-kit::make-parser%
+                  :peek-function (lambda (scanner) (declare (ignore scanner)) nil))
+                 t nil)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)
+    (expect (handler-case
+                (parse-parser-token-events
+                 '((:stream-start) (:block-mapping-start) (:block-entry) (:stream-end)))
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)
+    (expect (mapcar #'type-of
+                    (parse-parser-token-events
+                     '((:stream-start) (:block-mapping-start) (:key)
+                       (:block-end) (:stream-end))))
+            :to-equal
+            '(yaml-kit:stream-start-event yaml-kit:document-start-event
+              yaml-kit:mapping-start-event yaml-kit:scalar-event
+              yaml-kit:scalar-event yaml-kit:mapping-end-event
+              yaml-kit:document-end-event yaml-kit:stream-end-event))))
+
 (it "expands parser states and defines callable state functions"
   (let ((expansion
           (macroexpand-1

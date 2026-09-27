@@ -68,7 +68,7 @@
     (yaml-kit::sc-skip scanner)
     (expect (yaml-kit::scanner-pos scanner) :to-equal 1)
     (expect (yaml-kit::scanner-column scanner) :to-equal 1))
-  (dolist (text '("\r\n" "\n"))
+  (dolist (text '("\r\n" "\n" "\r" "x"))
     (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
       (funcall (symbol-function 'yaml-kit::sc-skip-line) scanner)
       (expect (yaml-kit::scanner-line scanner) :to-equal 1)
