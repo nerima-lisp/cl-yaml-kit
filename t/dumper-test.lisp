@@ -295,6 +295,14 @@
    (expect (first expansion) :to-equal 'defun)
    (expect (second expansion) :to-equal 'test-builder)))
 
+(cl-weave:it
+ "expands the representer dispatch macro"
+ (let ((expansion (macroexpand-1
+                   '(yaml-kit::define-representer-dispatch test-dispatch
+                      ((string yaml-kit::%represent-scalar))))) )
+   (expect (first expansion) :to-equal 'defun)
+   (expect (second expansion) :to-equal 'test-dispatch)))
+
 (cl-weave:it-each
     ((tagged "tag:example.org,2026:str> \"value\"" :double-quoted "tag:example.org,2026:str" "value\"")
      (anchored "anchor :value" :plain nil "value"))
@@ -402,6 +410,17 @@
            :to-equal "key:")))
 
 (cl-weave:it
+ "covers flow frame separators after a mapping key"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :flow-map 2)))
+   (yaml-kit::%frame-start-value
+    state (yaml-kit:make-sequence-start-event :style :flow))
+   (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
+           :to-equal ", ")))
+
+(cl-weave:it
  "covers empty block scalar writer paths"
  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
    (yaml-kit::%write-block-scalar "" context nil 2)
@@ -419,6 +438,7 @@
         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
    (setf (yaml-kit::emitter-frame-state-stack state)
          (list (cons :map 0)))
+   (yaml-kit::%emit-text context "x")
    (yaml-kit::%emit-sequence-start-frame
     state (yaml-kit:make-sequence-start-event :style :block)
     nil)
