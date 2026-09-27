@@ -18,6 +18,9 @@
     (when token
       (incf (scanner-tokens-head s))
       (incf (scanner-tokens-parsed s))
+      (when (scanner-token-recycling-enabled s)
+        (setf (aref (scanner-tokens s) (1- (scanner-tokens-head s))) nil
+              (scanner-recyclable-token s) token))
       (setf (scanner-token-available s) nil)
       (when (eq (token-kind token) :stream-end)
         (setf (scanner-stream-end-produced s) t))
@@ -38,6 +41,13 @@ Block collections emit :block-end and inserted :key tokens that consume no
 input, so the bound is a multiple of the input length rather than the length."
   (+ 64 (* 8 (length (scanner-text s)))))
 
+(defun recycle-scanner-token (s)
+  (when (and (scanner-token-recycling-enabled s)
+             (scanner-recyclable-token s))
+    (push (scanner-recyclable-token s) (scanner-token-pool s))
+    (setf (scanner-recyclable-token s) nil))
+  t)
+
 (defun scanner-resource-error (s name limit actual)
   (error 'yaml-resource-limit-error
          :limit-name name :limit limit :actual actual :mark (sc-mark s)))
@@ -55,7 +65,11 @@ input, so the bound is a multiple of the input length rather than the length."
                           (scanner-tokens-parsed s)))
               (setf need-more t) (return))))
         (unless need-more (return (setf (scanner-token-available s) t)))
-        (fetch-next-token s)
+        (if (scanner-token-recycling-enabled s)
+            (let ((*token-pool* (scanner-token-pool s)))
+              (fetch-next-token s)
+              (setf (scanner-token-pool s) *token-pool*))
+            (fetch-next-token s))
         ;; A fetch that stops advancing the position would otherwise enqueue
         ;; tokens until the heap dies, so bound the queue by the input size.
         (let ((produced (fill-pointer (scanner-tokens s))))

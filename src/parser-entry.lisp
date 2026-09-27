@@ -46,14 +46,17 @@
     (when (> (length text) max-input-length)
       (error 'yaml-resource-limit-error :limit-name "input length"
              :limit max-input-length :actual (length text)))
-    (let ((parser (make-parser% :scanner (make-scanner text)
+    (let ((scanner (make-scanner text)))
+      (setf (scanner-token-recycling-enabled scanner) t)
+      (let ((parser (make-parser% :scanner scanner
                                 :state 'yaml-parser-parse-stream-start
                                 :states nil :handler handler :directives nil
                                 :version nil :depth 0 :max-depth max-depth
                                 :max-scalar-length max-scalar-length)))
       (loop for state = (parser-state parser)
             while state
-            do (setf (parser-state parser) (funcall state parser)))))
+            do (setf (parser-state parser) (funcall state parser))
+               (recycle-scanner-token scanner)))))
   nil)
 
 (defun parse-events (input &rest keys)

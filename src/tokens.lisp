@@ -5,15 +5,17 @@
                     (kind start-mark end-mark
                      &key value handle suffix style major minor))
                 (:copier nil) (:predicate nil))
-  (kind :stream-start :type keyword :read-only t)
-  (start-mark nil :type mark :read-only t)
-  (end-mark nil :type mark :read-only t)
-  (value nil :type (or null simple-string) :read-only t)
-  (handle nil :type (or null simple-string) :read-only t)
-  (suffix nil :type (or null simple-string) :read-only t)
-  (style nil :type (or null scalar-style) :read-only t)
-  (major nil :type (or null fixnum) :read-only t)
-  (minor nil :type (or null fixnum) :read-only t))
+  (kind :stream-start :type keyword)
+  (start-mark nil :type mark)
+  (end-mark nil :type mark)
+  (value nil :type (or null simple-string))
+  (handle nil :type (or null simple-string))
+  (suffix nil :type (or null simple-string))
+  (style nil :type (or null scalar-style))
+  (major nil :type (or null fixnum))
+  (minor nil :type (or null fixnum)))
+
+(defvar *token-pool* nil)
 
 (defun token-ends-json-like-node-p (token)
   "True when TOKEN closes a node that c-flow-json-value allows as a flow key.
@@ -34,6 +36,15 @@ both surround the node with indicators, so a following \":\" needs no separation
   (check-type style (or null scalar-style))
   (check-type major (or null fixnum))
   (check-type minor (or null fixnum))
-  (%make-token kind start-mark end-mark
-               :value value :handle handle :suffix suffix :style style
-               :major major :minor minor))
+  (let ((token (or (pop *token-pool*)
+                   (%make-token kind start-mark end-mark))))
+    (setf (token-kind token) kind
+          (token-start-mark token) start-mark
+          (token-end-mark token) end-mark
+          (token-value token) value
+          (token-handle token) handle
+          (token-suffix token) suffix
+          (token-style token) style
+          (token-major token) major
+          (token-minor token) minor)
+    token))

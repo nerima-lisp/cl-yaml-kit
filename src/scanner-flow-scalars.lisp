@@ -111,9 +111,14 @@
     leading-blanks))
 
 (defun scan-flow-scalar (s single-p)
-  (let ((start (sc-mark s)) (out (make-scan-buffer))
-        (leading (make-scan-buffer)) (trailing (make-scan-buffer))
-        (spaces (make-scan-buffer)) (leading-blanks nil))
+  (let ((start (sc-mark s)) (out (scanner-scan-buffer s))
+        (leading (scanner-scan-leading s))
+        (trailing (scanner-scan-trailing s))
+        (spaces (scanner-scan-spaces s)) (leading-blanks nil))
+    (setf (fill-pointer out) 0
+          (fill-pointer leading) 0
+          (fill-pointer trailing) 0
+          (fill-pointer spaces) 0)
     (sc-skip s)
     (%scan-flow-scalar-body s single-p start out leading trailing spaces leading-blanks)
     (sc-skip s)
@@ -235,11 +240,15 @@
                         :style :plain)))))
     (let ((start start)
           (end (sc-mark s))
-          (out (make-scan-buffer))
-          (leading (make-scan-buffer))
-          (trailing (make-scan-buffer))
-          (spaces (make-scan-buffer))
+          (out (scanner-scan-buffer s))
+          (leading (scanner-scan-leading s))
+          (trailing (scanner-scan-trailing s))
+          (spaces (scanner-scan-spaces s))
           (leading-blanks nil))
+      (setf (fill-pointer out) 0
+            (fill-pointer leading) 0
+            (fill-pointer trailing) 0
+            (fill-pointer spaces) 0)
       (multiple-value-setq (end leading-blanks)
         (%scan-plain-scalar-body s start out end leading trailing spaces
                                  leading-blanks indent))
