@@ -3,8 +3,13 @@
 
 (defparameter +yaml-indicator-characters+ "-?:,[]{}#&*!|>'\"%@`")
 
+(declaim (inline %yaml-line-break-p %yaml-printable-character-p
+                %yaml-plain-character-p %yaml-blank-p))
+
 (defun %yaml-line-break-p (character)
-  (member (char-code character) '(#x0a #x0d #x85 #x2028 #x2029)))
+  (case (char-code character)
+    ((#x0a #x0d #x85 #x2028 #x2029) t)
+    (otherwise nil)))
 
 (defun %yaml-printable-character-p (character)
   (let ((code (char-code character)))
@@ -18,10 +23,11 @@
        (not (= (char-code character) #x0d))))
 
 (defun %yaml-blank-p (character)
-  (member character '(#\Space #\Tab)))
+  (or (char= character #\Space) (char= character #\Tab)))
 
 (defun %scalar-analysis (value)
   "Return the libyaml-style scalar restrictions for VALUE."
+  (declare (optimize (speed 3) (safety 1)) (type simple-string value))
   (let ((length (length value))
         (block-indicators nil) (flow-indicators nil)
         (line-breaks nil) (special-characters nil)
@@ -88,8 +94,8 @@
             :block-plain block-plain :single-quoted single-quoted
             :block block))))
 
-(defun %plain-safe-p (value &key flow tag)
-  (let ((analysis (%scalar-analysis value)))
+(defun %plain-safe-p (value &key flow tag analysis)
+  (let ((analysis (or analysis (%scalar-analysis value))))
     (and (or (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
              (and tag
                   (member tag '("tag:yaml.org,2002:int"
@@ -115,9 +121,9 @@
   (let* ((analysis (%scalar-analysis value))
          (style (if (eq requested :plain) :plain requested)))
     (when (and (eq style :plain)
-               (not (and (null tag) (getf analysis :multiline)))
+             (not (and (null tag) (getf analysis :multiline)))
                (or (zerop (length value))
-                   (not (%plain-safe-p value :flow flow :tag tag))))
+                   (not (%plain-safe-p value :flow flow :tag tag :analysis analysis))))
       (setf style :single-quoted))
     (when (and tag
                (getf analysis :multiline)
@@ -133,67 +139,74 @@
 
 (defun %hex-digit (value) (schar "0123456789ABCDEF" value))
 
-(defun %write-hex-escape (stream prefix code digits)
-  (write-string prefix stream)
+(defun %write-hex-escape (context prefix code digits)
+  (%emit-scalar-text context prefix)
   (loop for shift downfrom (* 4 (1- digits)) to 0 by 4
-        do (write-char (%hex-digit (logand #xf (ash code (- shift)))) stream)))
+        do (%emit-char context (%hex-digit (logand #xf (ash code (- shift)))))))
 
-(defun %write-double-quoted (value stream)
-  (write-char #\" stream)
+(defun %write-double-quoted (value context)
+  (%emit-char context #\")
   (loop for character across value
         for code fixnum = (char-code character)
         do (case character
-             (#\Null (write-string "\\0" stream)) (#\Bell (write-string "\\a" stream))
-             (#\Backspace (write-string "\\b" stream)) (#\Tab (write-string "\\t" stream))
-             (#\Newline (write-string "\\n" stream)) (#\Vt (write-string "\\v" stream))
-             (#\Page (write-string "\\f" stream)) (#\Return (write-string "\\r" stream))
-             (#\Escape (write-string "\\e" stream)) (#\" (write-string "\\\"" stream))
-             (#\\ (write-string "\\\\" stream))
-             (t (cond ((= code #x85) (write-string "\\N" stream))
-                      ((= code #xa0) (write-string "\\_" stream))
-                      ((= code #x2028) (write-string "\\L" stream))
-                      ((= code #x2029) (write-string "\\P" stream))
+             (#\Null (%emit-scalar-text context "\\0")) (#\Bell (%emit-scalar-text context "\\a"))
+             (#\Backspace (%emit-scalar-text context "\\b")) (#\Tab (%emit-scalar-text context "\\t"))
+             (#\Newline (%emit-scalar-text context "\\n")) (#\Vt (%emit-scalar-text context "\\v"))
+             (#\Page (%emit-scalar-text context "\\f")) (#\Return (%emit-scalar-text context "\\r"))
+             (#\Escape (%emit-scalar-text context "\\e")) (#\" (%emit-scalar-text context "\\\""))
+             (#\\ (%emit-scalar-text context "\\\\"))
+             (t (cond ((= code #x85) (%emit-scalar-text context "\\N"))
+                      ((= code #xa0) (%emit-scalar-text context "\\_"))
+                      ((= code #x2028) (%emit-scalar-text context "\\L"))
+                      ((= code #x2029) (%emit-scalar-text context "\\P"))
                       ((or (< code #x20) (= code #x7f) (= code #xfeff))
-                       (%write-hex-escape stream (if (= code #xfeff) "\\u" "\\x")
+                       (%write-hex-escape context (if (= code #xfeff) "\\u" "\\x")
                                            code (if (= code #xfeff) 4 2)))
-                      (t (write-char character stream))))))
-  (write-char #\" stream))
+                      (t (%emit-char context character))))))
+  (%emit-char context #\"))
 
-(defun %write-plain (value stream)
-  (loop for character across value
-        do (if (char= character #\Newline)
-               (progn
-                 (write-char #\Newline stream)
-                 (write-char #\Newline stream))
-               (write-char character stream))))
+(defun %write-plain (value context)
+  (declare (optimize (speed 3) (safety 1)) (type simple-string value))
+  (let ((newline (position #\Newline value)))
+    (if (null newline)
+        (%emit-scalar-text context value)
+        (loop for start = 0 then (1+ end)
+              for end = (position #\Newline value :start start)
+              do (if end
+                     (when (> end start)
+                       (%emit-scalar-text context (subseq value start end)))
+                     (when (< start (length value))
+                       (%emit-scalar-text context (subseq value start))))
+                 (%emit-char context #\Newline)
+                 (%emit-char context #\Newline)
+                 (when (null end) (return))))))
 
-(defun %write-single-quoted (value stream &optional (indent 0))
-  (write-char #\' stream)
+(defun %write-single-quoted (value context &optional (indent 0))
+  (%emit-char context #\')
   (let ((breaks nil))
     (loop for character across value do
       (if (char= character #\Newline)
           (progn
-            (unless breaks (write-char #\Newline stream))
-            (write-char #\Newline stream)
+            (unless breaks (%emit-char context #\Newline))
+            (%emit-char context #\Newline)
             (setf breaks t))
           (progn
             (when breaks
-              (write-string (make-string indent :initial-element #\Space)
-                            stream)
+              (%emit-scalar-text context (make-string indent :initial-element #\Space))
               (setf breaks nil))
-            (write-char character stream)
-            (when (char= character #\') (write-char #\' stream)))))
+            (%emit-char context character)
+            (when (char= character #\') (%emit-char context #\')))))
     (when breaks
-      (write-string (make-string indent :initial-element #\Space) stream)))
-  (write-char #\' stream))
+      (%emit-scalar-text context (make-string indent :initial-element #\Space))))
+  (%emit-char context #\'))
 
-(defun %write-block-scalar (value stream folded indent &optional (preserve-blank-indentation t))
+(defun %write-block-scalar (value context folded indent &optional (preserve-blank-indentation t))
   (let ((chomp (cond ((and (plusp (length value))
                            (%yaml-line-break-p (char value (1- (length value)))))
                       (if (and (> (length value) 1)
                                (%yaml-line-break-p (char value (- (length value) 2)))) "+" ""))
                      (t "-"))))
-    (write-char (if folded #\> #\|) stream)
+    (%emit-char context (if folded #\> #\|))
     (let ((first-content
             (loop for start = 0 then (1+ end)
                   for end = (position #\Newline value :start start)
@@ -204,9 +217,9 @@
       (when (and first-content
                  (or (%yaml-blank-p (char first-content 0))
                      (char= (char first-content 0) #\#)))
-        (write-char #\2 stream)))
-    (write-string chomp stream)
-    (write-char #\Newline stream)
+        (%emit-char context #\2)))
+    (%emit-scalar-text context chomp)
+    (%emit-char context #\Newline)
     (loop for start = 0 then (1+ end)
           for end = (position #\Newline value :start start)
           do (when (>= start (length value)) (return))
@@ -221,23 +234,23 @@
                                     (= next-start next-end)
                                     (not (loop for index from next-start below next-end
                                                always (%yaml-blank-p (char value index))))))))
-               (write-string (make-string indent :initial-element #\Space) stream))
+               (%emit-scalar-text context (make-string indent :initial-element #\Space)))
              (when end
-               (write-string value stream :start start :end end)
-               (write-char #\Newline stream))
+               (%emit-scalar-text context (subseq value start end))
+               (%emit-char context #\Newline))
              (unless end
                (when (< start (length value))
-                 (write-string value stream :start start))
+                 (%emit-scalar-text context (subseq value start)))
                (when (or (zerop (length value))
                          (not (%yaml-line-break-p (char value (1- (length value))))))
-                 (write-char #\Newline stream))
+                 (%emit-char context #\Newline))
                (return)))))
 
-(defun %write-scalar (value style stream &optional (indent 0)
+(defun %write-scalar (value style context &optional (indent 0)
                                              (preserve-blank-indentation t))
   (case style
-    (:plain (%write-plain value stream))
-    (:single-quoted (%write-single-quoted value stream indent))
-    (:double-quoted (%write-double-quoted value stream))
-    (:literal (%write-block-scalar value stream nil indent preserve-blank-indentation))
-    (:folded (%write-block-scalar value stream t indent preserve-blank-indentation))))
+    (:plain (%write-plain value context))
+    (:single-quoted (%write-single-quoted value context indent))
+    (:double-quoted (%write-double-quoted value context))
+    (:literal (%write-block-scalar value context nil indent preserve-blank-indentation))
+    (:folded (%write-block-scalar value context t indent preserve-blank-indentation))))
