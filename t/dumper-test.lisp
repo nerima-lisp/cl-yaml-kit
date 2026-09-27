@@ -278,3 +278,27 @@
                       value))))
    (expect (first expansion) :to-equal 'defun)
    (expect (second expansion) :to-equal 'test-builder)))
+
+(cl-weave:it-each
+    ((tagged "tag:example.org,2026:str> \"value\"" :double-quoted "tag:example.org,2026:str" "value\"")
+     (anchored "anchor :value" :plain nil "value"))
+  "normalizes scalar event prefixes ~S"
+  (name value style tag expected)
+  (declare (ignore name))
+  (let ((event (yaml-kit::%normalize-scalar-event
+                (yaml-kit:make-scalar-event :value value :style :plain))))
+    (expect (yaml-kit::scalar-event-style event) :to-equal style)
+    (expect (yaml-kit::scalar-event-tag event) :to-equal tag)
+    (expect (yaml-kit::scalar-event-value event) :to-equal expected)))
+
+(cl-weave:it
+ "covers direct scalar writer branches"
+ (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+   (yaml-kit::%write-block-scalar (format nil "a~%~%b") context nil 2 nil)
+   (yaml-kit::%write-single-quoted (format nil "a'b~%~%c") context 2)
+   (yaml-kit::%write-plain (format nil "a~%b") context)
+   (yaml-kit::%write-double-quoted
+    (string (code-char #xfeff)) context)
+   (expect (search "|" (get-output-stream-string
+                          (yaml-kit::emitter-context-stream context)))
+           :to-be-truthy)))
