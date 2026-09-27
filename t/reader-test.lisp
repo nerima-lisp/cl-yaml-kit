@@ -42,3 +42,77 @@
          (scalar (find-if #'yaml-kit:scalar-event-p events)))
     (expect (yaml-kit:scalar-event-tag scalar)
             :to-equal "tag:yaml.org,2002:str!")))
+
+(defparameter *reader-termination-fragments*
+  '("--- "
+    "..."
+    "- "
+    "? "
+    ": "
+    ", "
+    "["
+    "]"
+    "{ "
+    "}"
+    "| "
+    "> "
+    "\n"
+    "\r\n"
+    " "
+    "\t"
+    "#c"
+    "&a"
+    "*a"
+    "!t"
+    "%YAML 1.2"
+    "%TAG !e! tag:e,2000:"
+    "'"
+    "\""
+    "a"
+    "1"
+    "x: y"
+    "<<"))
+
+(defun reader-termination-inputs (count)
+  "COUNT deterministic pseudo-random inputs built from the fragment table.
+The seed is fixed so a failure is reproducible; no generator dependency."
+  (let ((state 20260927)
+        (fragments *reader-termination-fragments*))
+    (loop repeat count
+          collect (with-output-to-string (out)
+                    (loop
+                      (setf state (mod (+ (* state 1103515245) 12345) 2147483648))
+                      (write-string (nth (mod state (length fragments)) fragments) out)
+                      (when (zerop (mod state 3)) (return)))))))
+
+(defun reader-parse-outcome (text)
+  (handler-case (progn (yaml-kit:parse-events text) :returned)
+    (yaml-kit:yaml-parse-error () :parse-error)
+    (yaml-kit:yaml-resource-limit-error () :resource-limit)
+    (error (condition) condition)))
+
+(describe "reader termination"
+  (it "ends generated inputs with a parse result or a declared error"
+    ;; A scanner that stops advancing enqueues tokens forever, so termination is
+    ;; the property under test; the per-test timeout catches a regression.
+    (let ((offenders
+            (remove-if (lambda (entry)
+                         (member (cdr entry)
+                                 '(:returned :parse-error :resource-limit)
+                                 :test #'eq))
+                       (mapcar (lambda (text)
+                                 (cons text (reader-parse-outcome text)))
+                               (reader-termination-inputs 400)))))
+      (expect offenders :to-be '())))
+  (it "bounds token production by the input size"
+    (expect (yaml-kit::scanner-token-limit
+             (yaml-kit:make-scanner (coerce "x" 'simple-string)))
+            :to-be 72))
+  (it "signals a resource limit when the token budget is exhausted"
+    (expect (handler-case
+                (progn (yaml-kit::scanner-resource-error
+                        (yaml-kit:make-scanner (coerce "x" 'simple-string))
+                        "tokens" 72 73)
+                       nil)
+              (yaml-kit:yaml-resource-limit-error (condition) condition))
+            :to-be-type-of 'yaml-kit:yaml-resource-limit-error)))
