@@ -22,7 +22,10 @@
     (case (token-kind token)
       (:version-directive
        (when (parser-version parser) (parser-error token "found duplicate %YAML directive"))
-       (unless (and (= (token-major token) 1) (member (token-minor token) '(1 2)))
+       ;; Section 5.3 makes only the major version fatal: a higher minor inside
+       ;; the same family is processed with a warning, so "%YAML 1.3" is a
+       ;; document this reader can handle.
+       (unless (= (token-major token) 1)
          (parser-error token "found incompatible YAML document"))
        (setf (parser-version parser) (cons (token-major token) (token-minor token))))
       (:tag-directive
