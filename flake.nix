@@ -49,7 +49,10 @@
       # The organisation standard narrowed this to x86_64-linux alone, on the
       # grounds that a platform CI does not exercise is not one to promise. The
       # maintainer develops on aarch64-darwin with no Linux builder configured,
-      # so dropping darwin would leave the gate unrunnable, not narrower.
+      # so dropping darwin would leave the gate unrunnable, not narrower. The
+      # cost is that CI, which runs ubuntu-latest alone, checks only the Linux
+      # system and darwin is gated by `nix flake check` on the maintainer's
+      # machine. Closing that needs either a Linux builder or a darwin runner.
       systems = [
         "x86_64-linux"
         "aarch64-darwin"
