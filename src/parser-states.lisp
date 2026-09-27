@@ -1,7 +1,7 @@
 (in-package #:yaml-kit)
 
 (defstruct (parser (:constructor make-parser%))
-  scanner state states marks handler directives version depth
+  scanner state states handler directives version depth
   max-depth max-scalar-length)
 
 (defmacro define-parser-state (name (parser &rest arguments) &body body)

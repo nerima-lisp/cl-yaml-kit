@@ -1,19 +1,19 @@
 ;;;; src/scanner.lisp
 (in-package #:yaml-kit)
 
+(defconstant +max-simple-key-length+ 1024)
+
 (declaim (inline scanner-queue-nonempty-p))
 (defun scanner-queue-nonempty-p (s)
   (< (scanner-tokens-head s) (fill-pointer (scanner-tokens s))))
 
 (defun scanner-peek-token (s)
-  "yaml_parser_scan queue peek."
   (when (scanner-stream-end-produced s) (return-from scanner-peek-token nil))
   (unless (scanner-token-available s) (fetch-more-tokens s))
   (when (scanner-queue-nonempty-p s)
     (aref (scanner-tokens s) (scanner-tokens-head s))))
 
 (defun scanner-next-token (s)
-  "yaml_parser_scan."
   (let ((token (scanner-peek-token s)))
     (when token
       (incf (scanner-tokens-head s))
@@ -21,6 +21,15 @@
       (setf (scanner-token-available s) nil)
       (when (eq (token-kind token) :stream-end)
         (setf (scanner-stream-end-produced s) t))
+      (when (and (> (scanner-tokens-head s) 64)
+                 (> (* 2 (scanner-tokens-head s))
+                    (fill-pointer (scanner-tokens s))))
+        (let* ((tokens (scanner-tokens s))
+               (remaining (- (fill-pointer tokens) (scanner-tokens-head s))))
+          (replace tokens tokens :start1 0 :start2 (scanner-tokens-head s)
+                   :end2 (fill-pointer tokens))
+          (setf (fill-pointer tokens) remaining
+                (scanner-tokens-head s) 0)))
       token)))
 
 (defun scanner-token-limit (s)
@@ -34,7 +43,6 @@ input, so the bound is a multiple of the input length rather than the length."
          :limit-name name :limit limit :actual actual :mark (sc-mark s)))
 
 (defun fetch-more-tokens (s)
-  "yaml_parser_fetch_more_tokens."
   (when (scanner-stream-end-produced s) (return-from fetch-more-tokens nil))
   (let ((limit (scanner-token-limit s)))
     (loop
@@ -55,7 +63,6 @@ input, so the bound is a multiple of the input length rather than the length."
             (scanner-resource-error s "tokens" limit produced)))))))
 
 (defun fetch-next-token (s)
-  "yaml_parser_fetch_next_token."
   (unless (scanner-stream-start-produced s)
     (return-from fetch-next-token (fetch-stream-start s)))
   (scan-to-next-token s)
@@ -73,9 +80,11 @@ input, so the bound is a multiple of the input length rather than the length."
        (fetch-document-indicator s :document-end))
       ((char= c #\[) (fetch-flow-collection-start s :flow-sequence-start))
       ((char= c #\{) (fetch-flow-collection-start s :flow-mapping-start))
-      ((char= c #\]) (fetch-flow-collection-end s :flow-sequence-end))
-      ((char= c #\}) (fetch-flow-collection-end s :flow-mapping-end))
-      ((char= c #\,) (fetch-flow-entry s))
+      ((and (plusp (scanner-flow-level s)) (char= c #\]))
+       (fetch-flow-collection-end s :flow-sequence-end))
+      ((and (plusp (scanner-flow-level s)) (char= c #\}))
+       (fetch-flow-collection-end s :flow-mapping-end))
+      ((and (plusp (scanner-flow-level s)) (char= c #\,)) (fetch-flow-entry s))
       ((and (char= c #\-)
             (or (sc-blankz-p s 1)
                 (and (plusp (scanner-flow-level s))
@@ -104,9 +113,9 @@ input, so the bound is a multiple of the input length rather than the length."
       ((and (char= c #\>) (zerop (scanner-flow-level s))) (fetch-block-scalar s nil))
       ((char= c #\') (fetch-flow-scalar s t))
       ((char= c #\") (fetch-flow-scalar s nil))
-      ((or (not (or (sc-blankz-p s) (member c '(#\- #\? #\: #\, #\[ #\]
-                                                    #\{ #\} #\# #\& #\* #\!
-                                                    #\| #\> #\' #\" #\% #\@ #\`))))
+      ((or (not (or (sc-blankz-p s) (yaml-indicator-p c)))
+           (and (zerop (scanner-flow-level s))
+                (member c '(#\, #\[ #\] #\{ #\})))
            (and (char= c #\-) (not (sc-blank-p s 1)))
            (and (member c '(#\? #\:))
                 (not (sc-blankz-p s 1))))
@@ -115,12 +124,12 @@ input, so the bound is a multiple of the input length rather than the length."
                    "found character that cannot start any token")))))
 
 (defun stale-simple-keys (s)
-  "yaml_parser_stale_simple_keys."
   (dolist (key (scanner-simple-keys s))
     (when (and (simple-key-possible key)
                (let ((mark (simple-key-mark key)))
                  (or (< (mark-line mark) (scanner-line s))
-                     (< (+ (mark-offset mark) 1024) (scanner-pos s)))))
+                     (< (+ (mark-offset mark) +max-simple-key-length+)
+                        (scanner-pos s)))))
       (when (simple-key-required key)
         (sc-error s "while scanning a simple key" (simple-key-mark key)
                   "could not find expected ':'"))
@@ -128,7 +137,6 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun save-simple-key (s)
-  "yaml_parser_save_simple_key."
   (when (scanner-simple-key-allowed s)
     (remove-simple-key s)
     (let ((key (first (scanner-simple-keys s))))
@@ -145,7 +153,6 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun remove-simple-key (s)
-  "yaml_parser_remove_simple_key."
   (let ((key (first (scanner-simple-keys s))))
     (when (and key (simple-key-possible key))
       (when (simple-key-required key)
@@ -155,20 +162,17 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun increase-flow-level (s)
-  "yaml_parser_increase_flow_level."
   (push (make-simple-key) (scanner-simple-keys s))
   (incf (scanner-flow-level s))
   t)
 
 (defun decrease-flow-level (s)
-  "yaml_parser_decrease_flow_level."
   (when (plusp (scanner-flow-level s))
     (decf (scanner-flow-level s))
     (pop (scanner-simple-keys s)))
   t)
 
 (defun roll-indent (s column number kind mark)
-  "yaml_parser_roll_indent."
   (when (and (zerop (scanner-flow-level s)) (> column (scanner-indent s)))
     (push (scanner-indent s) (scanner-indents s))
     (setf (scanner-indent s) column)
@@ -179,7 +183,6 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun unroll-indent (s column)
-  "yaml_parser_unroll_indent."
   (unless (plusp (scanner-flow-level s))
     (loop while (> (scanner-indent s) column)
           do (enqueue-token s (make-token :block-end (sc-mark s) (sc-mark s)))
@@ -187,7 +190,6 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun scan-to-next-token (s)
-  "yaml_parser_scan_to_next_token."
   (let ((after-break nil))
     (loop
       (when (and (zerop (scanner-column s)) (sc-bom-p s)) (sc-skip s))

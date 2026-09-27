@@ -63,8 +63,14 @@
          "!!str !e!foo"
          '(:stream-start :tag :tag :stream-end))))
 
+(defparameter *scanner-block-indicator-cases*
+  (list
+   (list "block plain scalar begins with comma" ",word"
+         '(:stream-start :scalar :stream-end))))
+
 (describe "scanner token kinds"
-  (scanner-cases *scanner-token-cases*))
+  (scanner-cases *scanner-token-cases*)
+  (scanner-cases *scanner-block-indicator-cases*))
 
 (describe "scanner token errors"
   (it "rejects a value indicator that would close a key from a previous line"
@@ -113,9 +119,11 @@ index and pack files are not text."
       (when (and root (probe-file root))
         ;; 255 of the suite's 333 cases are documents; the other 78 carry an
         ;; "error" marker, so tokenizing them is not expected to succeed.
-        (let* ((inputs (suite-case-inputs root))
+          (let* ((inputs (suite-case-inputs root))
                (documents (remove-if #'fixture-error-p inputs)))
           (dolist (path documents)
-            (yaml-kit:make-scanner (scanner-source (uiop:read-file-string path))))
+            (let ((scanner (yaml-kit:make-scanner
+                            (scanner-source (uiop:read-file-string path)))))
+              (loop while (yaml-kit:scanner-next-token scanner))))
           (expect (length inputs) :to-be 333)
           (expect (length documents) :to-be 255))))))

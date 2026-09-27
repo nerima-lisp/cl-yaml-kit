@@ -3,7 +3,6 @@
 (defconstant +max-version-number-length+ 9)
 
 (defun scan-directive (s)
-  "yaml_parser_scan_directive."
   (let ((start (sc-mark s)))
     (sc-skip s)
     (let ((name (scan-directive-name s start)))
@@ -55,7 +54,6 @@
   (when (sc-break-p s) (sc-skip-line s)))
 
 (defun scan-directive-name (s start)
-  "yaml_parser_scan_directive_name."
   (let ((b (make-scan-buffer)))
     (loop while (sc-alpha-p s) do (sc-read s b))
     (when (zerop (fill-pointer b)) (sc-error s "while scanning a directive" start
@@ -65,7 +63,6 @@
     (scan-buffer-string b)))
 
 (defun scan-version-directive-value (s start)
-  "yaml_parser_scan_version_directive_value."
   (loop while (sc-blank-p s) do (sc-skip s))
   (let ((major (scan-version-directive-number s start)))
     (unless (sc-check s #\.) (sc-error s "while scanning a %YAML directive" start
@@ -73,7 +70,6 @@
     (sc-skip s) (values major (scan-version-directive-number s start))))
 
 (defun scan-version-directive-number (s start)
-  "yaml_parser_scan_version_directive_number."
   (let ((value 0) (length 0))
     (loop while (sc-digit-p s) do
       (incf length)
@@ -85,7 +81,6 @@
     value))
 
 (defun scan-tag-directive-value (s start)
-  "yaml_parser_scan_tag_directive_value."
   (loop while (sc-blank-p s) do (sc-skip s))
   (let ((handle (scan-tag-handle s t start)))
     (unless (sc-blank-p s) (sc-error s "while scanning a %TAG directive" start
@@ -97,7 +92,6 @@
       (values handle prefix))))
 
 (defun scan-anchor (s kind)
-  "yaml_parser_scan_anchor."
   (let ((start (sc-mark s)) (b (make-scan-buffer)))
     (sc-skip s)
     ;; YAML 1.2.2 defines ns-anchor-char as ns-char minus c-flow-indicator, and
@@ -109,6 +103,12 @@
                      (not (sc-blankz-p s))
                      (not (yaml-flow-indicator-p (sc-char s))))
           do (sc-read s b))
+    (when (and (zerop (scanner-flow-level s))
+               (yaml-flow-indicator-p (sc-char s)))
+      (sc-error s (if (eq kind :anchor)
+                      "while scanning an anchor"
+                      "while scanning an alias")
+                start "found a flow indicator in an anchor or alias"))
     (unless (plusp (fill-pointer b))
       (sc-error s (if (eq kind :anchor)
                       "while scanning an anchor"
@@ -117,7 +117,6 @@
     (make-token kind start (sc-mark s) :value (scan-buffer-string b))))
 
 (defun scan-tag (s)
-  "yaml_parser_scan_tag."
   (let ((start (sc-mark s)) handle suffix)
     (if (sc-check s #\< 1)
         (progn (setf handle "") (sc-skip s) (sc-skip s)
@@ -137,7 +136,6 @@
     (make-token :tag start (sc-mark s) :handle handle :suffix suffix)))
 
 (defun scan-tag-handle (s directive start)
-  "yaml_parser_scan_tag_handle."
   (let ((b (make-scan-buffer)))
     (unless (sc-check s #\!) (sc-error s (if directive "while scanning a tag directive"
                                              "while scanning a tag") start "did not find expected '!'"))
@@ -148,10 +146,9 @@
     (scan-buffer-string b)))
 
 (defun scan-tag-uri (s uri-char directive head start)
-  "yaml_parser_scan_tag_uri."
   (let ((b (make-scan-buffer)) (length (if head (length head) 0)))
     (when head (loop for i from 1 below (length head) do (vector-push-extend (char head i) b)))
-    (loop while (or (sc-alpha-p s) (find (sc-char s) ";/?:@&=+$.!~*'()%" :test #'char=)
+    (loop while (or (sc-alpha-p s) (find (sc-char s) ";/?:@&=+$.!~*'()%_" :test #'char=)
                     (and uri-char (find (sc-char s) ",[]" :test #'char=))) do
       (if (and (sc-check s #\%) (sc-hex-p s 1) (sc-hex-p s 2)
                (< (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2)) #x80))
@@ -166,7 +163,6 @@
     (scan-buffer-string b)))
 
 (defun scan-uri-escapes (s directive start b)
-  "yaml_parser_scan_uri_escapes."
   (let ((width 0) (octets (make-array 4 :element-type '(unsigned-byte 8)
                                       :adjustable t :fill-pointer 0)))
     (loop while (or (zerop (fill-pointer octets)) (plusp width)) do

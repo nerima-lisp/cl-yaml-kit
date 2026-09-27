@@ -4,7 +4,6 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (defun scan-block-scalar-breaks (s indent breaks start-mark end-mark)
-  "yaml_parser_scan_block_scalar_breaks."
   (let ((max-indent 0))
     (setf (car end-mark) (sc-mark s))
     (loop
@@ -36,7 +35,6 @@
     nil))
 
 (defun scan-block-scalar (s literal-p)
-  "yaml_parser_scan_block_scalar."
   (let ((start-mark (sc-mark s))
         (string (make-scan-buffer))
         (leading-break (make-scan-buffer))

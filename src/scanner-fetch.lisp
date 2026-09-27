@@ -4,7 +4,6 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (defun fetch-stream-start (s)
-  "yaml_parser_fetch_stream_start."
   (setf (scanner-indent s) -1
         (scanner-simple-keys s) (list (make-simple-key))
         (scanner-simple-key-allowed s) t
@@ -13,7 +12,6 @@
     (enqueue-token s (make-token :stream-start mark mark))))
 
 (defun fetch-stream-end (s)
-  "yaml_parser_fetch_stream_end."
   (unless (zerop (scanner-column s))
     (setf (scanner-column s) 0)
     (incf (scanner-line s)))
@@ -24,14 +22,12 @@
     (enqueue-token s (make-token :stream-end mark mark))))
 
 (defun fetch-directive (s)
-  "yaml_parser_fetch_directive."
   (unroll-indent s -1)
   (remove-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-directive s)))
 
 (defun fetch-document-indicator (s kind)
-  "yaml_parser_fetch_document_indicator."
   (unroll-indent s -1)
   (remove-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
@@ -40,7 +36,6 @@
     (enqueue-token s (make-token kind start (sc-mark s)))))
 
 (defun fetch-flow-collection-start (s kind)
-  "yaml_parser_fetch_flow_collection_start."
   (save-simple-key s)
   (increase-flow-level s)
   (setf (scanner-simple-key-allowed s) t)
@@ -49,7 +44,6 @@
     (enqueue-token s (make-token kind start (sc-mark s)))))
 
 (defun fetch-flow-collection-end (s kind)
-  "yaml_parser_fetch_flow_collection_end."
   (when (and (eq kind :flow-sequence-end)
              (sc-check s #\# 1))
     (sc-error s "while scanning a flow collection" (sc-mark s)
@@ -62,7 +56,6 @@
     (enqueue-token s (make-token kind start (sc-mark s)))))
 
 (defun fetch-flow-entry (s)
-  "yaml_parser_fetch_flow_entry."
   ;; YAML 1.2.2 lists "," among the c-flow-indicator characters, so it can only
   ;; separate entries inside a flow collection.
   (unless (plusp (scanner-flow-level s))
@@ -85,7 +78,6 @@
     (enqueue-token s (make-token :flow-entry start (sc-mark s)))))
 
 (defun fetch-block-entry (s)
-  "yaml_parser_fetch_block_entry."
   (unless (plusp (scanner-flow-level s))
     (unless (scanner-simple-key-allowed s)
       (sc-error s nil (sc-mark s)
@@ -100,7 +92,6 @@
     (enqueue-token s (make-token :block-entry start (sc-mark s)))))
 
 (defun fetch-key (s)
-  "yaml_parser_fetch_key."
   (unless (plusp (scanner-flow-level s))
     (unless (scanner-simple-key-allowed s)
       (sc-error s nil (sc-mark s) "mapping keys are not allowed in this context"))
@@ -112,7 +103,6 @@
     (enqueue-token s (make-token :key start (sc-mark s)))))
 
 (defun fetch-value (s)
-  "yaml_parser_fetch_value."
   (let ((simple-key (car (scanner-simple-keys s))))
     (if (simple-key-possible simple-key)
         (progn
@@ -139,31 +129,26 @@
       (enqueue-token s (make-token :value start (sc-mark s))))))
 
 (defun fetch-anchor (s kind)
-  "yaml_parser_fetch_anchor."
   (save-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-anchor s kind)))
 
 (defun fetch-tag (s)
-  "yaml_parser_fetch_tag."
   (save-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-tag s)))
 
 (defun fetch-block-scalar (s literal-p)
-  "yaml_parser_fetch_block_scalar."
   (remove-simple-key s)
   (setf (scanner-simple-key-allowed s) t)
   (enqueue-token s (scan-block-scalar s literal-p)))
 
 (defun fetch-flow-scalar (s single-p)
-  "yaml_parser_fetch_flow_scalar."
   (save-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-flow-scalar s single-p)))
 
 (defun fetch-plain-scalar (s)
-  "yaml_parser_fetch_plain_scalar."
   (save-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-plain-scalar s)))

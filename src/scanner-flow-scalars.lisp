@@ -61,7 +61,6 @@
                   "found unknown escape character")))))
 
 (defun scan-flow-scalar (s single-p)
-  "yaml_parser_scan_flow_scalar."
   (let ((start (sc-mark s)) (out (make-scan-buffer))
         (leading (make-scan-buffer)) (trailing (make-scan-buffer))
         (spaces (make-scan-buffer)) (leading-blanks nil)
@@ -121,7 +120,6 @@
                 :style (if single-p :single-quoted :double-quoted))))
 
 (defun scan-plain-scalar (s)
-  "yaml_parser_scan_plain_scalar."
   (let ((start (sc-mark s)) (end (sc-mark s)) (out (make-scan-buffer))
         (leading (make-scan-buffer)) (trailing (make-scan-buffer))
         (spaces (make-scan-buffer)) (leading-blanks nil)

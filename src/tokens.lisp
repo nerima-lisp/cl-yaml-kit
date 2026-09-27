@@ -24,7 +24,6 @@ both surround the node with indicators, so a following \":\" needs no separation
        t))
 
 (defun make-token (kind start-mark end-mark &key value handle suffix style major minor)
-  "Construct a token after validating every optional payload field."
   (check-type kind keyword)
   (check-type start-mark mark)
   (check-type end-mark mark)
