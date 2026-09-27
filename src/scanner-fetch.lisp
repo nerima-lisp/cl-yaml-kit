@@ -109,16 +109,6 @@
 (defun fetch-value (s)
   "yaml_parser_fetch_value."
   (let ((simple-key (car (scanner-simple-keys s))))
-    (unless (simple-key-possible simple-key)
-      (let ((last-index (1- (fill-pointer (scanner-tokens s)))))
-        (when (and (>= last-index 0)
-                   (eq (token-kind (aref (scanner-tokens s) last-index)) :scalar)
-                   (loop for i from (1- last-index) downto 0
-                         thereis (eq (token-kind (aref (scanner-tokens s) i)) :anchor)))
-          (setf (simple-key-possible simple-key) t
-                (simple-key-token-number simple-key) (1- (scanner-tokens-parsed s))
-                (simple-key-mark simple-key)
-                (token-start-mark (aref (scanner-tokens s) last-index))))))
     (if (simple-key-possible simple-key)
         (progn
           (insert-token s (- (simple-key-token-number simple-key)
@@ -146,9 +136,7 @@
 (defun fetch-anchor (s kind)
   "yaml_parser_fetch_anchor."
   (save-simple-key s)
-  ;; An anchor may prefix a mapping key node, so the following scalar must
-  ;; still be eligible to establish the simple key before its ':' token.
-  (setf (scanner-simple-key-allowed s) t)
+  (setf (scanner-simple-key-allowed s) nil)
   (enqueue-token s (scan-anchor s kind)))
 
 (defun fetch-tag (s)

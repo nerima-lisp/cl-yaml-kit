@@ -113,10 +113,6 @@
       (when (and (not explicit) next
                  (member (token-kind next) '(:version-directive :tag-directive)))
         (parser-error next "did not find expected document end"))
-      (when (and next (not (member (token-kind next)
-                                   '(:stream-end :document-start :version-directive
-                                     :tag-directive))))
-        (parser-error next "did not find expected document start"))
       (if (eq (token-kind next) :stream-end)
           #'yaml-parser-parse-stream-end #'yaml-parser-parse-document-start))))
 
@@ -148,9 +144,6 @@
             (setf end (token-end-mark token))
             (parser-next parser)
             (setf token (parser-peek parser)))
-          (when (and (or anchor tag)
-                     (member (token-kind token) '(:anchor :tag :alias)))
-            (parser-error token "did not find expected node content"))
           (if (and indentless (eq (token-kind token) :block-entry))
               (progn
                 (incf (parser-depth parser))
