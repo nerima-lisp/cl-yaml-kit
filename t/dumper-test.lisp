@@ -497,10 +497,32 @@
            :to-equal t)))
 
 (cl-weave:it
+ "covers both line-start frame transitions"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map-after-explicit-key 1)))
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+   (yaml-kit::%frame-start-value
+    state (yaml-kit:make-scalar-event :value "" :style :plain))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map-after-explicit-key 1)))
+   (yaml-kit::%emit-sequence-start-frame
+    state (yaml-kit:make-sequence-start-event :style :flow) nil)
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
+   (yaml-kit::%emit-mapping-start-frame
+    state (yaml-kit:make-mapping-start-event :style :block) nil)
+   (expect (stringp (get-output-stream-string
+                     (yaml-kit::emitter-context-stream context)))
+           :to-equal t)))
+
+(cl-weave:it
  "covers plain safety and block scalar fallback"
  (expect (yaml-kit::%plain-safe-p "- value"
                                   :tag "tag:yaml.org,2002:int")
          :to-equal nil)
+ (expect (yaml-kit::%scalar-style "" :literal nil)
+         :to-equal :double-quoted)
  (expect (yaml-kit::%scalar-style (string (code-char 1)) :literal t)
          :to-equal :double-quoted))
 

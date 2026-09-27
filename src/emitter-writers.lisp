@@ -42,9 +42,7 @@
              (unless end
                (when (< start (length value))
                  (%emit-text context (subseq value start)))
-               (when (or (zerop (length value))
-                         (not (%yaml-line-break-p (char value (1- (length value))))))
-                 (%emit-char context #\Newline))
+               (%emit-char context #\Newline)
                (return)))))
 
 (defun %blank-line-p (value start)

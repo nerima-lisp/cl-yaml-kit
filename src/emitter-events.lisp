@@ -58,11 +58,7 @@
                          (or (char= (char value 0) #\?)
                              (and (char= (char value 0) #\:) (> (length value) 1)
                                   (not (%yaml-blank-p (char value 1))))))
-                    (if (member value '("true" "True" "TRUE" "false" "False" "FALSE"
-                                        "null" "Null" "NULL" "~" "1.5" "0x1F")
-                                      :test #'string=)
-                        :single-quoted
-                        :plain)
+                    :plain
                     (%scalar-style value (scalar-event-style event) (%frame-flow-p state)
                                    (scalar-event-tag event)))))
     (when (and (string= (or (scalar-event-tag event) "") "tag:yaml.org,2002:str")
