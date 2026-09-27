@@ -13,8 +13,10 @@
                        (sc-space-p s)) do (sc-skip s))
       (let ((column (mark-column (sc-mark s))))
         (when (> column max-indent) (setf max-indent column))
-        (when (and (or (zerop (car indent))
-                       (< column (car indent)))
+        ;; YAML 1.2.2 permits a tab in detected content indentation after
+        ;; the content column is known; only an explicit lower indentation
+        ;; makes a tab an indentation error.
+        (when (and (< column (car indent))
                    (sc-tab-p s))
           (sc-error s "while scanning a block scalar" start-mark
                     "found a tab character where an indentation space is expected")))

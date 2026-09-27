@@ -100,10 +100,17 @@
   "yaml_parser_scan_anchor."
   (let ((start (sc-mark s)) (b (make-scan-buffer)))
     (sc-skip s)
-    (loop while (and (not (sc-blankz-p s))
-                     (not (yaml-flow-indicator-p (sc-char s))))
+    ;; ns-anchor-char is ns-char minus c-flow-indicator.  A colon or
+    ;; question mark followed by separation starts the surrounding mapping
+    ;; syntax, so retain the scanner's existing anchor boundary there.
+    (loop while (and (sc-printable-p s)
+                     (not (sc-bom-p s))
+                     (not (sc-blankz-p s))
+                     (not (yaml-flow-indicator-p (sc-char s)))
+                     (not (and (member (sc-char s) '(#\? #\:))
+                               (sc-blankz-p s 1))))
           do (sc-read s b))
-    (when (zerop (fill-pointer b))
+    (unless (plusp (fill-pointer b))
       (sc-error s (if (eq kind :anchor)
                       "while scanning an anchor"
                       "while scanning an alias")
@@ -156,7 +163,7 @@
   "yaml_parser_scan_uri_escapes."
   (let ((width 0) (octets (make-array 4 :element-type '(unsigned-byte 8)
                                       :adjustable t :fill-pointer 0)))
-    (loop
+    (loop while (or (zerop (fill-pointer octets)) (plusp width)) do
       (unless (and (sc-check s #\%) (sc-hex-p s 1) (sc-hex-p s 2))
         (sc-error s (if directive "while parsing a %TAG directive" "while parsing a tag") start
                   "did not find URI escaped octet"))
@@ -171,8 +178,9 @@
         (when (and (plusp (fill-pointer octets)) (/= (logand octet #xc0) #x80))
           (sc-error s "while parsing a tag" start "found an incorrect trailing UTF-8 octet"))
         (vector-push-extend octet octets) (dotimes (i 3) (sc-skip s)))
-      (decf width) (when (zerop width) (return)))
-    (let ((code (case (length octets)
+      (decf width)
+      (when (zerop width) (return)))
+    (let ((code (case (fill-pointer octets)
                   (1 (aref octets 0))
                   (2 (+ (ash (logand (aref octets 0) #x1f) 6) (logand (aref octets 1) #x3f)))
                   (3 (+ (ash (logand (aref octets 0) #xf) 12) (ash (logand (aref octets 1) #x3f) 6)

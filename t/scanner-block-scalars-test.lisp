@@ -59,7 +59,7 @@
      (("text\n\n" :literal)))
     ("Example 8.6 empty scalar chomping"
      "|+\n"
-     (("\n" :literal)))
+     (("" :literal)))
     ("Example 8.7 literal scalar"
      (concatenate 'string "|\n  literal\n  " (string #\Tab) "text\n")
      (("literal\n\ttext\n" :literal)))
@@ -72,7 +72,10 @@
     ("Example 8.21 block scalar nodes"
      "literal: |2\n    value\nfolded:\n   !foo\n  >1\n value\n"
      (("value\n" :literal)
-      ("value\n" :folded)))))
+      ("value\n" :folded)))
+    ("detected indentation allows a tab in content"
+     (concatenate 'string ">\n \t\n detected\n")
+     ((#.(format nil "~C~%detected~%" #\Tab) :folded)))))
 
 (defparameter *scanner-block-scalar-error-cases*
   '(("Example 8.3 indicator zero" "|0\n  value\n")

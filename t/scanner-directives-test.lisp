@@ -23,29 +23,34 @@
                                    :to-equal ',(third case))))) cases)))
 
 (scanner-directive-cases
-  ("YAML version" "%YAML 1.2\n" ((:version-directive nil nil nil 1 2)))
-  ("reserved directive 6LVF" "%FOO  bar baz # Should be ignored\n--- \"foo\"\n"
+  ("YAML version" (format nil "%YAML 1.2~%") ((:version-directive nil nil nil 1 2)))
+  ("reserved directive 6LVF" (format nil "%FOO  bar baz # Should be ignored~%--- \"foo\"~%")
    ((:document-start nil nil nil nil nil) (:scalar "foo" nil nil nil nil nil)))
-  ("reserved directive 2LFX" "%FOO  bar baz # Should be ignored\n---\n\"foo\"\n"
+  ("reserved directive 2LFX" (format nil "%FOO  bar baz # Should be ignored~%---~%\"foo\"~%")
    ((:document-start nil nil nil nil nil) (:scalar "foo" nil nil nil nil nil)))
-  ("TAG directive" "%TAG !e! tag:example.com,2000:\n"
+  ("TAG directive" (format nil "%TAG !e! tag:example.com,2000:~%")
    ((:tag-directive "tag:example.com,2000:" "!e!" nil nil nil)))
-  ("TAG handle and suffix" "%TAG !e! tag:example.com,2000:\n--- !e!foo\n"
+  ("TAG handle and suffix" (format nil "%TAG !e! tag:example.com,2000:~%--- !e!foo~%")
    ((:document-start nil nil nil nil nil)
     (:tag nil "!e!" "foo" nil nil)))
-  ("verbatim tag keeps trailing bang" "!<tag:yaml.org,2002:str!> value\n"
+  ("verbatim tag keeps trailing bang" (format nil "!<tag:yaml.org,2002:str!> value~%")
    ((:tag nil "" "tag:yaml.org,2002:str!" nil nil)
     (:scalar "value" nil nil nil nil)))
-  ("anchors and aliases" "&a *a\n"
+  ("anchors and aliases" (format nil "&a *a~%")
    ((:anchor "a" nil nil nil nil) (:alias "a" nil nil nil nil)))
-  ("anchor stops before mapping colon" "&a: value\n"
+  ("8XYN unicode anchor" (format nil "--- &😁 unicode anchor~%")
+   ((:document-start nil nil nil nil nil)
+    (:anchor "😁" nil nil nil nil) (:scalar "unicode anchor" nil nil nil nil)))
+  ("anchor accepts non-flow punctuation" (format nil "&a! value~%")
+   ((:anchor "a!" nil nil nil nil) (:scalar "value" nil nil nil nil)))
+  ("anchor stops before mapping colon" (format nil "&a: value~%")
    ((:block-mapping-start nil nil nil nil nil) (:key nil nil nil nil nil)
     (:anchor "a" nil nil nil nil) (:value nil nil nil nil nil)
     (:scalar "value" nil nil nil nil)))
-  ("tag forms" "! !!str !e!foo !<tag:yaml.org,2002:str>\n"
+  ("tag forms" (format nil "! !!str !e!foo !<tag:yaml.org,2002:str>~%")
    ((:tag nil "" "!" nil nil) (:tag nil "!!" "str" nil nil)
     (:tag nil "!e!" "foo" nil nil) (:tag nil "" "tag:yaml.org,2002:str" nil nil)))
-  ("URI escape" "!%21\n" ((:tag nil "!" "!" nil nil))))
+  ("URI escape" (format nil "!%21~%") ((:tag nil "!" "!" nil nil))))
 
 (defmacro scanner-directive-errors (&body cases)
   `(progn ,@(mapcar (lambda (case)
@@ -56,10 +61,10 @@
                            (expect raised :to-be-truthy)))) cases)))
 
 (scanner-directive-errors
-  ("invalid version" "%YAML 2.0\n")
-  ("incomplete version" "%YAML 1.\n")
-  ("unterminated verbatim tag" "!<tag:yaml.org,2002:str\n")
-  ("empty anchor" "&\n")
-  ("empty alias" "*\n")
-  ("invalid anchor character" "&a! value\n")
-  ("invalid alias character" "*a!\n"))
+  ("invalid version" (format nil "%YAML 2.0~%"))
+  ("incomplete version" (format nil "%YAML 1.~%"))
+  ("unterminated verbatim tag" (format nil "!<tag:yaml.org,2002:str~%"))
+  ("empty anchor" (format nil "&~%"))
+  ("empty alias" (format nil "*~%"))
+  ("flow indicator in anchor" (format nil "&a, value~%"))
+  ("flow indicator in alias" (format nil "*a,~%")))
