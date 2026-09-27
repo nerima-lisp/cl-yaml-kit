@@ -80,7 +80,10 @@
 (defun make-scan-buffer ()
   (make-array 64 :element-type 'character :adjustable t :fill-pointer 0))
 (defun scan-buffer-string (buffer)
-  (coerce (subseq buffer 0 (fill-pointer buffer)) 'simple-string))
+  (let* ((length (fill-pointer buffer))
+         (string (make-string length)))
+    (replace string buffer :end2 length)
+    string))
 (defun enqueue-token (s token)
   (vector-push-extend token (scanner-tokens s))
   (setf (scanner-token-available s) t

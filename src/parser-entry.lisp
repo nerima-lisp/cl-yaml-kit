@@ -24,6 +24,7 @@
 
 (defun %parser-input-string (input max-input-length)
   (typecase input
+    (simple-string (the simple-string input))
     (string (%simple-character-string input))
     (stream (%parser-stream-string input max-input-length))
     ((vector (unsigned-byte 8))
@@ -37,15 +38,16 @@
                 :message (princ-to-string condition)))))
     (otherwise (error 'yaml-parse-error :context "invalid YAML input"))))
 
-(defun map-events (handler input &key (max-input-length +default-max-input-length+)
-                                      (max-depth +default-max-depth+)
-                                      (max-scalar-length +default-max-scalar-length+))
+(defun map-events (handler input &key
+                           (max-input-length +default-max-input-length+)
+                           (max-depth +default-max-depth+)
+                           (max-scalar-length +default-max-scalar-length+))
   (let ((text (%parser-input-string input max-input-length)))
     (when (> (length text) max-input-length)
       (error 'yaml-resource-limit-error :limit-name "input length"
              :limit max-input-length :actual (length text)))
     (let ((parser (make-parser% :scanner (make-scanner text)
-                                :state #'yaml-parser-parse-stream-start
+                                :state 'yaml-parser-parse-stream-start
                                 :states nil :handler handler :directives nil
                                 :version nil :depth 0 :max-depth max-depth
                                 :max-scalar-length max-scalar-length)))
