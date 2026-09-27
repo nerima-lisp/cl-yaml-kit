@@ -72,6 +72,12 @@
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
       extraOutputs = ctx: {
+        checks.coverage = ctx.cl.mkCoverageReport {
+          drv = ctx.package;
+          entryPoint = "scripts/run-coverage.lisp";
+          timeoutSeconds = 2400;
+          killAfterSeconds = 30;
+        };
         apps.benchmark = ctx.cl.mkTestApp {
           pname = "cl-yaml-kit-benchmark";
           runner = "benchmark/run.lisp";

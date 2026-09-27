@@ -119,23 +119,26 @@ The stages compare different representations, on purpose:
 
 ## Coverage
 
-`scripts/run-coverage.lisp` runs the whole suite under SB-COVER, so the
-unit tests and the conformance stages count toward the same totals.
-Coverage is reset after the systems are loaded, so the numbers reflect
-only the suite run. It needs `YAML_TEST_SUITE` like the plain run, writes
-all three artifacts even when the suite fails, and exits non-zero unless
-the suite passed:
+`scripts/run-coverage.lisp` compiles the systems with SB-COVER instrumentation
+in a dedicated ASDF cache, then uses cl-weave's coverage API to run the whole
+suite and save expression and branch statistics. Unit tests and conformance
+stages count toward the same totals. It needs `YAML_TEST_SUITE` like the plain
+run and exits non-zero unless the suite passed:
 
 ```sh
-sbcl --noinform --script scripts/run-coverage.lisp
+export CL_SOURCE_REGISTRY='(:source-registry (:tree "/tmp/cl-yaml-kit-env/deps/") :inherit-configuration)'
+export YAML_TEST_SUITE=/path/to/yaml-test-suite
+perl -e '$SIG{ALRM}=sub{kill 9,$$}; alarm 2400; exec @ARGV' \
+  sbcl --dynamic-space-size 4096 --non-interactive \
+  --load scripts/run-coverage.lisp
 ```
 
-The artifacts default under `/tmp/cl-yaml-kit-coverage/`: the coverage
-data file, an HTML report restricted to the source directory, and the
-tab-separated per-file summary the gate reads. `COVERAGE_OUTPUT`,
-`COVERAGE_REPORT_DIRECTORY`, and `COVERAGE_SUMMARY` move them;
-`COVERAGE_SOURCE_DIRECTORY` (default `src/`) selects the files measured
-and reported.
+The artifacts default under `/tmp/cl-yaml-kit-coverage/`: the cl-weave
+coverage data file, an HTML report restricted to `src/`, and the tab-separated
+per-file summary read by the gate. `COVERAGE_OUTPUT`,
+`COVERAGE_REPORT_DIRECTORY`, `COVERAGE_SUMMARY`, and `COVERAGE_ASDF_CACHE` move
+the artifacts or the dedicated compilation cache. `COVERAGE_SOURCE_DIRECTORY`
+(default `src/`) selects the files measured and reported.
 
 `scripts/check-coverage.pl` turns the summary into the gate. It prints a
 Markdown table and exits 0 when every file meets both thresholds, 1 when
