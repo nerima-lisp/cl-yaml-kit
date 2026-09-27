@@ -2,7 +2,8 @@
 
 (defstruct (emitter-frame-state (:constructor make-emitter-frame-state
                                   (context indent explicit suppress)))
-  context indent explicit suppress stack (first-document t) last-key-style)
+  context indent explicit suppress stack (first-document t)
+  previous-document-explicit-end last-key-style)
 
 (defun %frame-flow-p (state)
   (and (emitter-frame-state-stack state)
