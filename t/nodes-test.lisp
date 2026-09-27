@@ -1,5 +1,11 @@
 ;;;; t/nodes-test.lisp
 (in-package #:cl-yaml-kit/test)
+
+(it "expands define-node into a structure definition"
+  (let ((expansion (macroexpand-1
+                    '(yaml-kit::define-node probe-node-contract () "probe"))))
+    (expect (consp expansion) :to-be-truthy)
+    (expect (equal (car expansion) 'progn) :to-be-truthy)))
 (defmacro define-node-contract-tests (name constructor predicate accessors arguments)
   `(it ,(format nil "constructs ~A" name)
      (let ((value (,constructor ,@arguments)))

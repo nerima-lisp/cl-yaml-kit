@@ -1,5 +1,17 @@
 ;;;; t/events-test.lisp
 (in-package #:cl-yaml-kit/test)
+
+(it "constructs a mark and exposes its coordinates"
+  (let ((mark (yaml-kit:make-mark 11 12 13)))
+    (expect (yaml-kit:mark-line mark) :to-equal 11)
+    (expect (yaml-kit:mark-column mark) :to-equal 12)
+    (expect (yaml-kit:mark-offset mark) :to-equal 13)))
+
+(it "expands define-event into a structure definition"
+  (let ((expansion (macroexpand-1
+                    '(yaml-kit:define-event probe-event-contract () "probe"))))
+    (expect (consp expansion) :to-be-truthy)
+    (expect (equal (car expansion) 'progn) :to-be-truthy)))
 (defmacro define-event-contract-tests (name constructor predicate accessors arguments)
   `(it ,(format nil "constructs ~A" name)
      (let ((value (,constructor ,@arguments)))
