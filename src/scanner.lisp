@@ -172,14 +172,14 @@ input, so the bound is a multiple of the input length rather than the length."
     (pop (scanner-simple-keys s)))
   t)
 
-(defun roll-indent (s column number kind mark)
+(defun roll-indent (s column number kind mark &optional additional-tokens)
   (when (and (zerop (scanner-flow-level s)) (> column (scanner-indent s)))
     (push (scanner-indent s) (scanner-indents s))
     (setf (scanner-indent s) column)
     (if (= number -1)
         (enqueue-token s (make-token kind mark mark))
-        (insert-token s (- number (scanner-tokens-parsed s))
-                      (make-token kind mark mark))))
+        (insert-tokens s (- number (scanner-tokens-parsed s))
+                       (cons (make-token kind mark mark) additional-tokens))))
   t)
 
 (defun unroll-indent (s column)

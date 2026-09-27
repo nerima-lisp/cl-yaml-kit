@@ -106,13 +106,16 @@
   (let ((simple-key (car (scanner-simple-keys s))))
     (if (simple-key-possible simple-key)
         (progn
-          (insert-token s (- (simple-key-token-number simple-key)
-                             (scanner-tokens-parsed s))
-                        (make-token :key (simple-key-mark simple-key)
-                                    (simple-key-mark simple-key)))
-          (roll-indent s (mark-column (simple-key-mark simple-key))
-                       (simple-key-token-number simple-key)
-                       :block-mapping-start (simple-key-mark simple-key))
+          (let ((mark (simple-key-mark simple-key))
+                (index (- (simple-key-token-number simple-key)
+                          (scanner-tokens-parsed s))))
+            (if (and (zerop (scanner-flow-level s))
+                     (> (mark-column mark) (scanner-indent s)))
+                (roll-indent s (mark-column mark)
+                             (simple-key-token-number simple-key)
+                             :block-mapping-start mark
+                             (list (make-token :key mark mark)))
+                (insert-token s index (make-token :key mark mark))))
           (setf (simple-key-possible simple-key) nil
                 (scanner-simple-key-allowed s) nil))
         (progn

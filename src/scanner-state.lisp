@@ -82,14 +82,20 @@
         (scanner-json-like-node-end s) (token-ends-json-like-node-p token))
   token)
 (defun insert-token (s index token)
+  (insert-tokens s index (list token)))
+(defun insert-tokens (s index new-tokens)
   (let* ((tokens (scanner-tokens s))
          (absolute (+ (scanner-tokens-head s) index))
-         (length (fill-pointer tokens)))
-    (vector-push-extend nil tokens)
-    (replace tokens tokens :start1 (1+ absolute) :start2 absolute :end2 length)
-    (setf (aref tokens absolute) token
+         (length (fill-pointer tokens))
+         (count (length new-tokens)))
+    (dotimes (i count) (vector-push-extend nil tokens))
+    (replace tokens tokens :start1 (+ absolute count) :start2 absolute :end2 length)
+    (loop for token in new-tokens
+          for i from absolute
+          do (setf (aref tokens i) token))
+    (setf
           (scanner-token-available s) t)
-    token))
+    (car (last new-tokens))))
 (defun make-scanner (text)
   (check-type text (simple-array character (*)))
   (let ((scanner (%make-scanner text)))
