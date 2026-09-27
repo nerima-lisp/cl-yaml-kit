@@ -300,5 +300,65 @@
    (yaml-kit::%write-double-quoted
     (string (code-char #xfeff)) context)
    (expect (search "|" (get-output-stream-string
-                          (yaml-kit::emitter-context-stream context)))
+           (yaml-kit::emitter-context-stream context)))
            :to-be-truthy)))
+
+(cl-weave:it-each
+    ((bang "!")
+     (local "!local")
+     (tag "tag:example.org,2026:type")
+     (plain "custom"))
+  "emits direct tag prefixes ~S"
+  (name tag)
+  (declare (ignore name))
+  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+    (yaml-kit::%emit-prefix
+     (yaml-kit:make-scalar-event :tag tag :value "x") context)
+    (expect (not (null (search "!"
+                               (get-output-stream-string
+                                (yaml-kit::emitter-context-stream context)))))
+            :to-equal t)))
+
+(cl-weave:it
+ "covers blank-line and character state helpers"
+ (expect (yaml-kit::%blank-line-p "" 0) :to-be-truthy)
+ (expect (yaml-kit::%blank-line-p "  " 0) :to-be-truthy)
+ (expect (yaml-kit::%blank-line-p "x" 0) :to-be-truthy)
+ (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+   (yaml-kit::%emit-char context #\A)
+   (expect (yaml-kit::emitter-context-column context) :to-equal 1)
+   (yaml-kit::%emit-char context #\Newline)
+   (expect (yaml-kit::emitter-context-line-start context) :to-equal t)))
+
+(cl-weave:it
+ "covers frame separator and explicit key branches"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map 1))
+         (yaml-kit::emitter-frame-state-last-key-style state) :double-quoted)
+   (yaml-kit::%frame-start-value
+    state (yaml-kit:make-sequence-start-event :style :block))
+   (expect (not (null (search ":"
+                              (get-output-stream-string
+                               (yaml-kit::emitter-context-stream context)))))
+           :to-equal t)))
+
+(cl-weave:it
+ "emits stream termination and explicit-key sequence prefixes"
+ (expect (yaml-kit:emit-events
+          (list (yaml-kit:make-stream-start-event)
+                (yaml-kit:make-scalar-event :value "x")
+                (yaml-kit:make-stream-end-event)))
+         :to-equal #.(format nil "x~%"))
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map 0)))
+   (yaml-kit::%emit-sequence-start-frame
+    state (yaml-kit:make-sequence-start-event :style :block)
+    nil)
+   (expect (not (null (search "? "
+                              (get-output-stream-string
+                               (yaml-kit::emitter-context-stream context)))))
+           :to-equal t)))
