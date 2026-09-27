@@ -106,6 +106,30 @@
             yaml-kit:mapping-end-event yaml-kit:sequence-end-event
             yaml-kit:document-end-event yaml-kit:stream-end-event)))
 
+(it "enforces parser depth and scalar resource limits"
+  (dolist (case '(("depth" "[a]" :max-depth 0)
+                  ("scalar" "long" :max-scalar-length 2)))
+    (destructuring-bind (name input key value) case
+      (declare (ignore name))
+      (expect (handler-case (progn (apply #'yaml-kit:parse-events input (list key value)) nil)
+                (yaml-kit:yaml-resource-limit-error () t))
+              :to-be-truthy))))
+
+(it "covers parser tag token forms and implicit tag checks"
+  (declare (notinline yaml-kit::parser-implicit-tag-p yaml-kit::parser-tag-token))
+  (expect (yaml-kit::parser-implicit-tag-p nil) :to-be-truthy)
+  (expect (yaml-kit::parser-implicit-tag-p "") :to-be-truthy)
+  (expect (yaml-kit::parser-implicit-tag-p "tag") :to-equal nil)
+  (let* ((mark (yaml-kit:make-mark 0 0 0))
+         (parser (yaml-kit::make-parser%
+                  :directives '(("!" . "!") ("!!" . "tag:yaml.org,2002:")
+                                ("!e!" . "tag:example:")))))
+    (dolist (case '((nil "plain") ("!" "suffix") ("!" "<tag>") ("!e!" "value")))
+      (destructuring-bind (handle suffix) case
+        (expect (yaml-kit::parser-tag-token
+                 parser (yaml-kit:make-token :tag mark mark :handle handle :suffix suffix))
+                :to-be-truthy)))))
+
 (it "expands parser states and defines callable state functions"
   (let ((expansion
           (macroexpand-1
