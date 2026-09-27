@@ -132,6 +132,13 @@
 (it "reports missing parser nodes and invalid mapping keys"
   (progn
     (expect (handler-case
+                (yaml-kit::parser-node
+                 (yaml-kit::make-parser%
+                  :scanner (yaml-kit::make-scanner ""))
+                 t nil)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)
+    (expect (handler-case
                 (parse-parser-token-events
                  '((:stream-start) (:block-mapping-start) (:block-entry) (:stream-end)))
               (yaml-kit:yaml-parse-error () t))
