@@ -188,22 +188,33 @@ input, so the bound is a multiple of the input length rather than the length."
 
 (defun scan-to-next-token (s)
   "yaml_parser_scan_to_next_token."
-  (loop
-    (when (and (zerop (scanner-column s)) (sc-bom-p s)) (sc-skip s))
-    ;; YAML 1.2.2 permits tabs as non-indentation whitespace.
-    (loop while (or (sc-space-p s) (sc-tab-p s)) do
-      (when (and (zerop (scanner-flow-level s))
-                 (zerop (scanner-column s))
-                 (not (= (scanner-indent s) -1))
-                 (sc-tab-p s))
+  (let ((after-break nil))
+    (loop
+      (when (and (zerop (scanner-column s)) (sc-bom-p s)) (sc-skip s))
+      ;; YAML 1.2.2 permits tabs as non-indentation whitespace.
+      (loop while (or (sc-space-p s) (sc-tab-p s)) do
+        (when (and (zerop (scanner-flow-level s))
+                   (zerop (scanner-column s))
+                   (not (= (scanner-indent s) -1))
+                   (sc-tab-p s))
+          (sc-error s "while scanning for the next token" (sc-mark s)
+                    "found a tab character that violates indentation"))
+        (sc-skip s))
+      ;; s-flow-line-prefix: a flow collection that is itself a block node
+      ;; continues on lines indented past that block node, so
+      ;; "flow: [a,\nb]" is not a legal document.
+      (when (and after-break (plusp (scanner-flow-level s))
+                 (< (scanner-column s) (1+ (scanner-indent s))))
         (sc-error s "while scanning for the next token" (sc-mark s)
-                  "found a tab character that violates indentation"))
-      (sc-skip s))
-    (when (sc-check s #\#)
-      (loop until (sc-breakz-p s) do (sc-skip s)))
-    (if (sc-break-p s)
-        (progn
-          (sc-skip-line s)
-          (when (zerop (scanner-flow-level s))
-            (setf (scanner-simple-key-allowed s) t)))
-        (return t))))
+                  "found a line that is not indented enough to continue the flow collection"))
+      (when (sc-check s #\#)
+        (loop until (sc-breakz-p s) do (sc-skip s))
+        ;; s-l-comments lets a comment line start at any column.
+        (setf after-break nil))
+      (if (sc-break-p s)
+          (progn
+            (sc-skip-line s)
+            (when (zerop (scanner-flow-level s))
+              (setf (scanner-simple-key-allowed s) t))
+            (setf after-break t))
+          (return t)))))

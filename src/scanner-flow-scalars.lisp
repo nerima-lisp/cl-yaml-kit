@@ -77,6 +77,13 @@
       (when (sc-z-p s)
         (sc-error s "while scanning a quoted scalar" start
                   "found unexpected end of stream"))
+      ;; s-flow-line-prefix: once the scalar has folded over a line break, the
+      ;; continuation line must be indented past the block node holding it, so
+      ;; "quoted: \"a\nb\"" is not a legal document.
+      (when (and leading-blanks
+                 (< (scanner-column s) (1+ (scanner-indent s))))
+        (sc-error s "while scanning a quoted scalar" start
+                  "found a line that is not indented enough to continue the quoted scalar"))
       (loop while (not (sc-blankz-p s)) do
         (when leading-blanks
           (%flow-fold out leading trailing)
