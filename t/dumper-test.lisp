@@ -427,6 +427,41 @@
    (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
            :to-equal (format nil "|-~%"))))
 
+(cl-weave:it-each
+    ((plain "a")
+     (kept "a~%")
+     (more-kept "a~%~%")
+     (indented "  value")
+     (comment "# value")
+     (blank-lines "a~%~%b"))
+  "covers block scalar chomp and indentation paths ~S"
+  (name value)
+  (declare (ignore name))
+  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+    (yaml-kit::%write-block-scalar (if (member value '("a~%" "a~%~%" "a~%~%b"))
+                                       (format nil value)
+                                       value)
+                                      context nil 2
+                                      (not (string= value "a~%~%b")))
+    (expect (plusp (length (get-output-stream-string
+                            (yaml-kit::emitter-context-stream context))))
+            :to-equal t)))
+
+(cl-weave:it
+ "covers the non-initial document separator path"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-first-document state) nil)
+   (yaml-kit::%emit-text context "x")
+   (yaml-kit::%emit-document-start-event
+    (yaml-kit:make-document-start-event :explicit-p t)
+    state
+    (list (yaml-kit:make-mapping-start-event)
+          (yaml-kit:make-mapping-end-event)))
+   (expect (search "---" (get-output-stream-string
+                           (yaml-kit::emitter-context-stream context)))
+           :to-be-truthy)))
+
 (cl-weave:it
  "emits stream termination and explicit-key sequence prefixes"
  (expect (yaml-kit:emit-events
