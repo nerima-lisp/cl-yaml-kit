@@ -95,24 +95,32 @@
               ((= line (1+ previous)) (setf previous line))
               (t (emit-run) (setf start line previous line)))))))
 
+(defun source-line-lengths (source)
+  (let ((lengths nil)
+        (start 0))
+    (loop for end = (position #\Newline source :start start)
+          do (push (- (or end (length source)) start) lengths)
+             (if end
+                 (setf start (1+ end))
+                 (return (coerce (nreverse lengths) 'vector))))))
+
 (defun sample-counts (counts kind)
   (values (funcall (sb-cover-function "OK-OF") (getf counts kind))
           (funcall (sb-cover-function "ALL-OF") (getf counts kind))))
 
 (defun source-coverage-row (file)
-  (let ((counts (funcall (sb-cover-function "COMPUTE-FILE-INFO")
-                         (namestring file) :default)))
-    (multiple-value-bind (ignored states linelengths)
-        (funcall (sb-cover-function "COMPUTE-FILE-STATES") (namestring file))
-      (declare (ignore ignored))
+  (multiple-value-bind (counts states source)
+      (funcall (sb-cover-function "COMPUTE-FILE-INFO")
+               (namestring file) :default)
     (if (null counts)
         (list (file-namestring file) 0 0 0 0 "-")
         (multiple-value-bind (line-covered line-total) (sample-counts counts :expression)
           (multiple-value-bind (branch-covered branch-total) (sample-counts counts :branch)
             (list (file-namestring file) line-covered line-total branch-covered branch-total
-                  (or (and states linelengths
-                           (compress-line-ranges (uncovered-line-numbers states linelengths)))
-                      "-"))))))))
+                  (or (and states source
+                           (compress-line-ranges
+                            (uncovered-line-numbers states (source-line-lengths source))))
+                      "-")))))))
 
 (defun tab-separated (columns)
   (with-output-to-string (stream)
