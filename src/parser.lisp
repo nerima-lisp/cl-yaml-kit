@@ -144,10 +144,16 @@
         (progn
           (setf start (token-start-mark token)
                 end start)
+          ;; c-ns-properties admits one tag and one anchor in either order, so a
+          ;; second property of the same kind is not a node property at all.
           (loop while (member (token-kind token) '(:anchor :tag)) do
             (if (eq (token-kind token) :tag)
-                (setf tag (parser-tag-token parser token))
-                (setf anchor (token-value token)))
+                (progn
+                  (when tag (parser-error token "did not find expected node content"))
+                  (setf tag (parser-tag-token parser token)))
+                (progn
+                  (when anchor (parser-error token "did not find expected node content"))
+                  (setf anchor (token-value token))))
             (setf end (token-end-mark token))
             (parser-next parser)
             (setf token (parser-peek parser)))
@@ -293,6 +299,17 @@
            (parser-push parser #'yaml-parser-parse-flow-sequence-entry)
            (parser-push parser #'yaml-parser-parse-flow-sequence-entry-mapping-end)
            #'yaml-parser-parse-flow-sequence-entry-mapping-key-state)
+          ;; c-s-implicit-json-key: a ":" that opens an entry gives the pair an
+          ;; empty JSON-like key.  Only the first entry can do this; a ":" after
+          ;; a node without a "," is a key spanning lines, which the spec forbids.
+          ((eq (token-kind token) :value)
+           (let ((mark (token-start-mark token)))
+             (parser-emit parser (make-mapping-start-event :start-mark mark :end-mark (token-end-mark token)
+                                                           :implicit-p t :style :flow))
+             (parser-push parser #'yaml-parser-parse-flow-sequence-entry)
+             (parser-push parser #'yaml-parser-parse-flow-sequence-entry-mapping-end)
+             (parser-empty-scalar parser mark)
+             #'yaml-parser-parse-flow-sequence-entry-mapping-value))
           (t (parser-push parser #'yaml-parser-parse-flow-sequence-entry)
              #'yaml-parser-parse-node-flow))))
 
@@ -313,7 +330,6 @@
            (parser-push parser #'yaml-parser-parse-flow-sequence-entry-mapping-end)
            #'yaml-parser-parse-flow-sequence-entry-mapping-key-state)
           (t (parser-error token "did not find expected ',' or ']'")))))
-
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry-mapping-value (parser)
   "yaml_parser_parse_flow_sequence_entry_mapping_value."
@@ -350,12 +366,20 @@
            (parser-next parser)
            (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token)))
            (decf (parser-depth parser)) (parser-pop parser))
+          ;; c-ns-flow-map-empty-key-entry: a ":" where a key belongs gives the
+          ;; entry an empty key and stays in this mapping.  Only reachable right
+          ;; after "{" or ","; a ":" after a node would be a key spanning lines,
+          ;; which the spec forbids.
+          ((eq (token-kind token) :value)
+           (parser-empty-scalar parser (token-start-mark token))
+           #'yaml-parser-parse-flow-mapping-value)
           ((eq (token-kind token) :key)
-           (parser-next parser)
-           (parser-push parser #'yaml-parser-parse-flow-mapping-value)
-           (if (eq (token-kind (parser-peek parser)) :value)
-               (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-flow-mapping-value)
-               #'yaml-parser-parse-node-flow))
+           (let ((next-token (progn (parser-next parser) (parser-peek parser))))
+             (if (member (token-kind next-token) '(:value :flow-entry :flow-mapping-end))
+                 (progn (parser-empty-scalar parser (token-start-mark next-token))
+                        #'yaml-parser-parse-flow-mapping-value)
+                 (progn (parser-push parser #'yaml-parser-parse-flow-mapping-value)
+                        #'yaml-parser-parse-node-flow))))
           (t (parser-push parser #'yaml-parser-parse-flow-mapping-value)
              #'yaml-parser-parse-node-flow))))
 

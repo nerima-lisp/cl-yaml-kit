@@ -21,6 +21,7 @@
   (simple-key-allowed nil :type boolean)
   (simple-keys nil :type list)
   (flow-level 0 :type fixnum)
+  (json-like-node-end nil :type boolean)
   (stream-start-produced nil :type boolean)
   (stream-end-produced nil :type boolean))
 
@@ -74,7 +75,8 @@
   (coerce (subseq buffer 0 (fill-pointer buffer)) 'simple-string))
 (defun enqueue-token (s token)
   (vector-push-extend token (scanner-tokens s))
-  (setf (scanner-token-available s) t)
+  (setf (scanner-token-available s) t
+        (scanner-json-like-node-end s) (token-ends-json-like-node-p token))
   token)
 (defun insert-token (s index token)
   (let* ((tokens (scanner-tokens s))

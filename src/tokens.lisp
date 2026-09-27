@@ -14,6 +14,15 @@
   (major nil :type (or null fixnum) :read-only t)
   (minor nil :type (or null fixnum) :read-only t))
 
+(defun token-ends-json-like-node-p (token)
+  "True when TOKEN closes a node that c-flow-json-value allows as a flow key.
+YAML 1.2.2 spells that set as a quoted scalar or a completed flow collection;
+both surround the node with indicators, so a following \":\" needs no separation."
+  (and (or (and (eq (token-kind token) :scalar)
+                 (member (token-style token) '(:single-quoted :double-quoted)))
+           (member (token-kind token) '(:flow-sequence-end :flow-mapping-end)))
+       t))
+
 (defun make-token (kind start-mark end-mark &key value handle suffix style major minor)
   "Construct a token after validating every optional payload field."
   (check-type kind keyword)

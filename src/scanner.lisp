@@ -86,13 +86,16 @@ input, so the bound is a multiple of the input length rather than the length."
                 (and (plusp (scanner-flow-level s))
                      (yaml-flow-indicator-p c1))))
        (fetch-key s))
-      ((and (char= c #\:) (or (sc-blankz-p s 1)
-                               (and (plusp (scanner-flow-level s))
-                                    (or (member c1 '(#\, #\? #\[ #\] #\{ #\}))
-                                        (and (plusp (scanner-column s))
-                                             (member (sc-char s -1) '(#\Space #\Tab #\Newline #\Return)))
-                                        (simple-key-possible (car (scanner-simple-keys s)))
-                                        (scanner-simple-key-allowed s)))))
+      ;; YAML 1.2.2 has two value indicators in flow context.
+      ;; c-ns-flow-map-separate-value needs separation after ":", and
+      ;; c-ns-flow-map-adjacent-value follows a c-flow-json-node whose closing
+      ;; indicator makes the ":" unambiguous.  libyaml only tests flow_level
+      ;; against the next character, which rejects every adjacent JSON key.
+      ((and (char= c #\:)
+            (or (sc-blankz-p s 1)
+                (and (plusp (scanner-flow-level s))
+                     (or (member c1 '(#\, #\? #\[ #\] #\{ #\}))
+                         (scanner-json-like-node-end s)))))
        (fetch-value s))
       ((char= c #\*) (fetch-anchor s :alias))
       ((char= c #\&) (fetch-anchor s :anchor))
