@@ -42,6 +42,64 @@
                             :to-equal ,(fourth case))))
                cases)))
 
+(defmacro loader-value-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect ,(second case) :to-equal ,(third case))))
+               cases)))
+
+(defmacro loader-predicate-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (funcall ,(third case) ,(second case))
+                            :to-be-truthy)))
+               cases)))
+
+(defmacro loader-error-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (handler-case
+                                (progn ,(second case) nil)
+                              (,(third case) () t))
+                            :to-be-truthy)))
+               cases)))
+
+(defmacro loader-limit-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (handler-case
+                                (progn ,(second case) nil)
+                              (yaml-kit:yaml-resource-limit-error (condition)
+                                (string= (yaml-kit::yaml-resource-limit-error-limit-name
+                                          condition)
+                                         ,(third case))))
+                            :to-be-truthy)))
+               cases)))
+
+(defun loader-empty-collection-events (kind tag)
+  (loader-document
+   (if (eq kind :sequence)
+       (loader-event :sequence-start :tag tag)
+       (loader-event :mapping-start :tag tag))
+   (if (eq kind :sequence)
+       (loader-event :sequence-end)
+       (loader-event :mapping-end))))
+
+(defmacro loader-collection-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (funcall ,(fourth case)
+                                     (yaml-kit:parse
+                                      (loader-empty-collection-events
+                                       ,(second case) ,(third case))))
+                            :to-be-truthy)))
+               cases)))
+
 (describe "loader"
   (loader-scalar-cases
     ("core null" :core "" "tag:yaml.org,2002:null")
@@ -55,13 +113,216 @@
     ("failsafe scalar" :failsafe "true" "tag:yaml.org,2002:str")
     ("core underscore scalar" :core "1_000" "tag:yaml.org,2002:str")
     ("core hexadecimal" :core "0x10" "tag:yaml.org,2002:int")
-    ("core nan" :core ".NaN" "tag:yaml.org,2002:float"))
+    ("core nan" :core ".NaN" "tag:yaml.org,2002:float")
+    ("core positive infinity" :core ".inf" "tag:yaml.org,2002:float")
+    ("core negative infinity" :core "-.Inf" "tag:yaml.org,2002:float")
+    ("json null" :json "null" "tag:yaml.org,2002:null")
+    ("json boolean" :json "false" "tag:yaml.org,2002:bool")
+    ("schema fast path" :core "#" "tag:yaml.org,2002:str"))
 
   (loader-parse-cases
     ("signed octal" "-0o17" () -15)
     ("signed hexadecimal" "+0x10" () 16)
     ("decimal float" "0.278" () 0.278d0)
-    ("integral decimal float" "450.00" () 450))
+    ("integral decimal float" "450.00" () 450)
+    ("positive infinity" ".INF" () sb-kernel::double-float-positive-infinity)
+    ("negative infinity" "-.INF" () sb-kernel::double-float-negative-infinity))
+
+  (loader-value-cases
+    ("empty input has no documents"
+     (yaml-kit:parse-all nil)
+     nil)
+    ("empty sequence can be a list"
+     (yaml-kit:parse
+      (loader-empty-collection-events :sequence nil)
+      :sequence-type :list)
+     nil))
+
+  (loader-value-cases
+    ("explicit string tag resolves"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "true" :tag "!!str" :style :plain))
+     "tag:yaml.org,2002:str")
+    ("explicit integer tag resolves"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "1" :tag "!!int" :style :plain))
+     "tag:yaml.org,2002:int")
+    ("explicit float tag resolves"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "1.0" :tag "!!float" :style :plain))
+     "tag:yaml.org,2002:float")
+    ("explicit boolean tag resolves"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "true" :tag "!!bool" :style :plain))
+     "tag:yaml.org,2002:bool")
+    ("explicit null tag resolves"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "null" :tag "!!null" :style :plain))
+     "tag:yaml.org,2002:null")
+    ("explicit sequence tag resolves"
+     (yaml-kit::resolve-tag (yaml-kit:make-sequence-node :tag "!!seq"))
+     "tag:yaml.org,2002:seq")
+    ("explicit mapping tag resolves"
+     (yaml-kit::resolve-tag (yaml-kit:make-mapping-node :tag "!!map"))
+     "tag:yaml.org,2002:map")
+    ("non-specific scalar tag resolves as string"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "true" :tag "!" :style :plain))
+     "tag:yaml.org,2002:str")
+    ("non-specific tag resolves by schema"
+     (yaml-kit::resolve-tag
+      (yaml-kit:make-scalar-node :value "true" :tag "?" :style :plain)
+      :schema :core)
+     "tag:yaml.org,2002:bool"))
+
+  (loader-predicate-cases
+    ("empty mapping can be a YAML mapping"
+     (yaml-kit:parse
+      (loader-empty-collection-events :mapping nil)
+      :mapping-type :yaml-mapping)
+     (lambda (value)
+       (and (yaml-kit:yaml-mapping-p value)
+            (null (yaml-kit:yaml-mapping-entries value)))))
+    ("positive infinity is a double float"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :value ".INF")))
+     (lambda (value)
+       (and (floatp value) (= value sb-kernel::double-float-positive-infinity))))
+    ("negative infinity is a double float"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :value "-.INF")))
+     (lambda (value)
+       (and (floatp value) (= value sb-kernel::double-float-negative-infinity)))))
+
+  (loader-collection-cases
+    ("sequence accepts primary tag" :sequence "tag:yaml.org,2002:seq"
+     (lambda (value) (and (vectorp value) (= (length value) 0))))
+    ("sequence accepts shorthand tag" :sequence "!!seq"
+     (lambda (value) (and (vectorp value) (= (length value) 0))))
+    ("sequence accepts non-specific tags" :sequence "!"
+     (lambda (value) (and (vectorp value) (= (length value) 0))))
+    ("mapping accepts primary tag" :mapping "tag:yaml.org,2002:map"
+     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0))))
+    ("mapping accepts shorthand tag" :mapping "!!map"
+     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0))))
+    ("mapping accepts application tag" :mapping "!app/map"
+     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0)))))
+
+  (loader-error-cases
+    ("rejects an unknown alias"
+     (yaml-kit:compose
+      (loader-document (loader-event :alias :anchor "missing")))
+     yaml-kit:yaml-compose-error)
+    ("rejects two root nodes"
+     (yaml-kit:compose
+      (loader-document
+       (loader-event :scalar :value "one")
+       (loader-event :scalar :value "two")))
+     yaml-kit:yaml-compose-error)
+    ("rejects an unmatched collection end"
+     (yaml-kit:compose
+      (loader-document (loader-event :sequence-end)))
+     yaml-kit:yaml-compose-error)
+    ("rejects an odd mapping"
+     (yaml-kit:compose
+      (loader-document
+       (loader-event :mapping-start)
+       (loader-event :scalar :value "key")
+       (loader-event :mapping-end)))
+     yaml-kit:yaml-compose-error)
+    ("rejects an invalid mapping type"
+     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+                     :mapping-type :invalid)
+     yaml-kit:yaml-compose-error)
+    ("rejects an invalid sequence type"
+     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+                     :sequence-type :invalid)
+     yaml-kit:yaml-compose-error)
+    ("rejects an invalid duplicate policy"
+     (yaml-kit:parse (loader-document (loader-event :scalar :value "x"))
+                     :duplicate-key-policy :invalid)
+     yaml-kit:yaml-compose-error)
+    ("rejects a malformed integer tag"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :tag "!!int" :value "nope")))
+     sb-int:simple-parse-error)
+    ("rejects a malformed boolean tag"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :tag "!!bool" :value "maybe")))
+     yaml-kit:yaml-compose-error)
+    ("rejects a malformed null tag"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :tag "!!null" :value "nope")))
+     yaml-kit:yaml-compose-error)
+    ("rejects a non-scalar hash key"
+     (yaml-kit:parse
+      (loader-document
+       (loader-event :mapping-start)
+       (loader-event :sequence-start)
+       (loader-event :sequence-end)
+       (loader-event :scalar :value "value")
+       (loader-event :mapping-end)))
+     yaml-kit:yaml-compose-error)
+    ("rejects a malformed float tag"
+     (yaml-kit:parse
+      (loader-document (loader-event :scalar :tag "!!float" :value "nope")))
+     type-error))
+
+  (loader-error-cases
+    ("rejects a mapping with a scalar collection tag"
+     (yaml-kit:parse
+      (loader-document
+       (loader-event :mapping-start :tag "!!str")
+       (loader-event :mapping-end)))
+     yaml-kit:yaml-compose-error)
+    ("rejects an unclosed collection"
+     (yaml-kit:compose
+      (list (loader-event :stream-start)
+            (loader-event :document-start)
+            (loader-event :sequence-start)))
+     yaml-kit:yaml-compose-error)
+    ("rejects document end inside collection"
+     (yaml-kit:compose
+      (list (loader-event :stream-start)
+            (loader-event :document-start)
+            (loader-event :sequence-start)
+            (loader-event :document-end)))
+     yaml-kit:yaml-compose-error)
+    ("rejects an unknown event"
+     (yaml-kit:compose (list (loader-event :stream-start) 42))
+     yaml-kit:yaml-compose-error)
+    ("rejects an unknown schema"
+     (yaml-kit::%schema-table :unknown)
+     simple-error)
+    ("rejects a non-node"
+     (yaml-kit::construct 42)
+     yaml-kit:yaml-compose-error))
+
+  (loader-limit-cases
+    ("enforces maximum depth"
+     (yaml-kit:compose
+      (loader-document
+       (loader-event :sequence-start)
+       (loader-event :sequence-end))
+      :max-depth 0)
+     "depth")
+    ("enforces maximum nodes"
+     (yaml-kit:compose
+      (loader-document (loader-event :scalar :value "x"))
+      :max-nodes 0)
+     "nodes")
+    ("enforces alias expansion limits"
+     (yaml-kit:compose
+      (loader-document
+       (loader-event :sequence-start :anchor "a")
+       (loader-event :sequence-end)
+       (loader-event :alias :anchor "a"))
+      :max-alias-expansions 0)
+     "alias expansions")
+    ("enforces reader input limits"
+     (with-input-from-string (stream "x")
+       (yaml-kit:parse stream :max-input-length 0))
+     "input length"))
 
   (it "parses all documents from an event list"
     (let ((events (append (loader-document
