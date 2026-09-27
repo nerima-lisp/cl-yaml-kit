@@ -25,6 +25,18 @@
                               1))))
               :to-be-truthy)))
 
+  (it "covers the direct resource limit contract"
+    (let ((limit (symbol-function 'yaml-kit::%limit!)))
+      (expect (funcall limit 0 nil) :to-be-falsy)
+      (expect (handler-case
+                  (progn (funcall limit 2 1 "nodes") nil)
+                (yaml-kit:yaml-resource-limit-error (condition)
+                  (and (equal (yaml-kit::yaml-resource-limit-error-limit-name condition)
+                              "nodes")
+                       (equal (yaml-kit::yaml-resource-limit-error-limit condition) 1)
+                       (equal (yaml-kit::yaml-resource-limit-error-actual condition) 2))))
+              :to-be-truthy)))
+
   (it "uses list and alist construction options"
     (let ((events (loader-document
                    (loader-event :sequence-start)

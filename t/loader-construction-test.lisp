@@ -55,6 +55,7 @@
     (let* ((node (yaml-kit:make-sequence-node
                   :items (list (yaml-kit:make-scalar-node :value "a" :style :plain)
                                (yaml-kit:make-scalar-node :value "b" :style :plain))))
+           (empty-node (yaml-kit:make-sequence-node))
            (list-memo (make-hash-table :test #'eq))
            (vector-memo (make-hash-table :test #'eq))
            (list-value (funcall (symbol-function 'yaml-kit::%construct-sequence)
@@ -67,7 +68,13 @@
       (expect (eq list-cache-hit list-value) :to-be-truthy)
       (expect (coerce vector-value 'list) :to-equal
               (yaml-kit:sequence-node-items node))
-      (expect (eq (gethash node vector-memo) vector-value) :to-be-truthy)))
+      (expect (eq (gethash node vector-memo) vector-value) :to-be-truthy)
+      (expect (funcall (symbol-function 'yaml-kit::%construct-sequence)
+                       empty-node :list (make-hash-table :test #'eq) #'identity)
+              :to-be-falsy)
+      (expect (length (funcall (symbol-function 'yaml-kit::%construct-sequence)
+                               empty-node :vector (make-hash-table :test #'eq) #'identity))
+              :to-equal 0)))
 
   (it "calls collection construction contracts directly"
     (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
@@ -86,6 +93,14 @@
                          (yaml-kit:make-mapping-node :tag tag)
                          "tag:yaml.org,2002:map")
                 :to-be-truthy))
+      (expect (funcall compatible
+                       (yaml-kit:make-mapping-node :tag "!!str")
+                       "tag:yaml.org,2002:map")
+              :to-be-falsy)
+      (expect (funcall compatible
+                       (yaml-kit:make-mapping-node :tag "!!seq")
+                       "tag:yaml.org,2002:map")
+              :to-be-falsy)
       (expect (yaml-kit:yaml-mapping-p
                (funcall mapping node :yaml-mapping :error memo walk))
               :to-be-truthy)
@@ -145,6 +160,10 @@
   (it "accepts an unknown application collection tag"
     (expect (funcall (symbol-function 'yaml-kit::%collection-tag-compatible-p)
                      (yaml-kit:make-mapping-node :tag "!app/map")
+                     "tag:yaml.org,2002:map")
+            :to-be-truthy)
+    (expect (funcall (symbol-function 'yaml-kit::%collection-tag-compatible-p)
+                     (yaml-kit:make-mapping-node :tag "!app")
                      "tag:yaml.org,2002:map")
             :to-be-truthy))
 
