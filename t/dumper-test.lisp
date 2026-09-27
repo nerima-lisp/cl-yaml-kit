@@ -502,6 +502,19 @@
             :to-equal t)))
 
 (cl-weave:it
+ "covers scalar event stack presence directly"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (yaml-kit::%emit-scalar-event
+    (yaml-kit:make-scalar-event :value "") state nil)
+   (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 0)))
+   (yaml-kit::%emit-scalar-event
+    (yaml-kit:make-scalar-event :value "x") state nil)
+   (expect (stringp (get-output-stream-string
+                     (yaml-kit::emitter-context-stream context)))
+           :to-equal t)))
+
+(cl-weave:it
  "covers a non-line-start explicit-key sequence"
  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
@@ -580,12 +593,13 @@
          (yaml-kit::%emit-mapping-start-frame
           state (yaml-kit:make-mapping-start-event
                  :style :block :tag (and tagged "tag:x")) nil))))
-   (dolist (tag '(nil "tag:x"))
+   (dolist (event (list (yaml-kit:make-scalar-event :value "" :style :plain)
+                        (yaml-kit:make-scalar-event :value "" :style :plain
+                                                    :tag "tag:x")))
      (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
             (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
        (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 1)))
-       (yaml-kit::%frame-start-value
-        state (yaml-kit:make-scalar-event :value "" :style :plain :tag tag))))
+       (yaml-kit::%frame-start-value state event)))
    (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
           (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
      (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 0)))
