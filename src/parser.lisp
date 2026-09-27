@@ -93,7 +93,7 @@
 (define-parser-state yaml-parser-parse-document-content (parser)
   "yaml_parser_parse_document_content."
   (let ((token (parser-peek parser)))
-    (if (member (token-kind token) '(:document-end :stream-end :block-end))
+    (if (member (token-kind token) '(:document-start :document-end :stream-end :block-end))
         (progn (parser-empty-scalar parser (token-start-mark token)) #'yaml-parser-parse-document-end)
         (progn (parser-push parser #'yaml-parser-parse-document-end) #'yaml-parser-parse-node-block))))
 
@@ -102,10 +102,19 @@
   (let ((token (parser-peek parser)) (explicit nil))
     (when (eq (token-kind token) :document-end) (setf explicit t) (parser-next parser))
     (parser-emit parser (make-document-end-event :start-mark (token-start-mark token)
-                         :end-mark (token-end-mark token) :explicit-p explicit)))
-  (setf (parser-directives parser) nil (parser-version parser) nil)
-  (if (eq (token-kind (parser-peek parser)) :stream-end)
-      #'yaml-parser-parse-stream-end #'yaml-parser-parse-document-start))
+                         :end-mark (token-end-mark token) :explicit-p explicit))
+    (setf (parser-directives parser) nil (parser-version parser) nil)
+    (let ((next (parser-peek parser)))
+      (when (and explicit next
+                 (= (mark-line (token-end-mark token))
+                    (mark-line (token-start-mark next)))
+                 (not (member (token-kind next) '(:stream-end :document-start :version-directive :tag-directive))))
+        (parser-error next "did not find expected document start"))
+      (when (and (not explicit) next
+                 (member (token-kind next) '(:version-directive :tag-directive)))
+        (parser-error next "did not find expected document end"))
+      (if (eq (token-kind next) :stream-end)
+          #'yaml-parser-parse-stream-end #'yaml-parser-parse-document-start))))
 
 (define-parser-state yaml-parser-parse-stream-end (parser)
   "yaml_parser_parse_stream_end."
@@ -242,7 +251,9 @@
 (define-parser-state yaml-parser-parse-block-mapping-key (parser)
   "yaml_parser_parse_block_mapping_key."
   (let ((token (parser-peek parser)))
-    (if (eq (token-kind token) :block-end)
+    (if (eq (token-kind token) :block-entry)
+        (parser-error token "did not find expected mapping key")
+        (if (eq (token-kind token) :block-end)
         (progn (parser-next parser)
                (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token)))
                (decf (parser-depth parser)) (parser-pop parser))
@@ -250,7 +261,7 @@
                (parser-push parser #'yaml-parser-parse-block-mapping-value)
                (if (member (token-kind (parser-peek parser)) '(:value :block-end))
                    (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-value)
-                   #'yaml-parser-parse-node-block-indentless)))))
+                   #'yaml-parser-parse-node-block-indentless))))))
 
 (define-parser-state yaml-parser-parse-block-mapping-value (parser)
   "yaml_parser_parse_block_mapping_value."
@@ -274,6 +285,7 @@
            (parser-push parser #'yaml-parser-parse-flow-sequence-entry-mapping-value)
            #'yaml-parser-parse-node-flow)
           (t (parser-push parser #'yaml-parser-parse-flow-sequence-entry) #'yaml-parser-parse-node-flow))))
+
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry-mapping-value (parser)
   "yaml_parser_parse_flow_sequence_entry_mapping_value."

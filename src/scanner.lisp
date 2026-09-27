@@ -66,7 +66,10 @@
                 (and (plusp (scanner-flow-level s))
                      (yaml-flow-indicator-p c1))))
        (fetch-key s))
-      ((and (char= c #\:) (or (plusp (scanner-flow-level s)) (sc-blankz-p s 1)))
+      ((and (char= c #\:) (or (sc-blankz-p s 1)
+                               (and (plusp (scanner-flow-level s))
+                                    (or (member c1 '(#\, #\? #\[ #\] #\{ #\}))
+                                        (simple-key-possible (car (scanner-simple-keys s)))))))
        (fetch-value s))
       ((char= c #\*) (fetch-anchor s :alias))
       ((char= c #\&) (fetch-anchor s :anchor))
@@ -79,7 +82,7 @@
                                                     #\{ #\} #\# #\& #\* #\!
                                                     #\| #\> #\' #\" #\% #\@ #\`))))
            (and (char= c #\-) (not (sc-blank-p s 1)))
-           (and (zerop (scanner-flow-level s)) (member c '(#\? #\:))
+           (and (member c '(#\? #\:))
                 (not (sc-blankz-p s 1))))
        (fetch-plain-scalar s))
       (t (sc-error s "while scanning for the next token" (sc-mark s)
@@ -162,10 +165,7 @@
   (loop
     (when (and (zerop (scanner-column s)) (sc-bom-p s)) (sc-skip s))
     ;; YAML 1.2.2 permits tabs as non-indentation whitespace.
-    (loop while (or (sc-space-p s)
-                    (and (sc-tab-p s)
-                         (or (plusp (scanner-flow-level s))
-                             (not (scanner-simple-key-allowed s)))))
+    (loop while (or (sc-space-p s) (sc-tab-p s))
           do (sc-skip s))
     (when (sc-check s #\#)
       (loop until (sc-breakz-p s) do (sc-skip s)))
