@@ -17,6 +17,20 @@
      (it (first case)
        (expect (scanner-token-kinds (second case)) :to-equal (third case)))))
 
+(describe "scanner character classes"
+  (dolist (case '(("digit accepts ASCII" yaml-kit::sc-digit-p "7" t)
+                  ("digit rejects fullwidth" yaml-kit::sc-digit-p "７" nil)
+                  ("hex accepts ASCII" yaml-kit::sc-hex-p "F" t)
+                  ("hex rejects fullwidth" yaml-kit::sc-hex-p "Ｆ" nil)
+                  ("alpha accepts ASCII" yaml-kit::sc-alpha-p "A" t)
+                  ("alpha accepts ASCII digit" yaml-kit::sc-alpha-p "7" t)
+                  ("alpha accepts lowercase" yaml-kit::sc-alpha-p "a" t)
+                  ("alpha rejects Unicode digit" yaml-kit::sc-alpha-p "あ" nil)))
+    (destructuring-bind (name predicate text expected) case
+      (it name
+        (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
+          (expect (funcall predicate scanner) :to-equal expected))))))
+
 (defparameter *scanner-token-cases*
   (list
    (list "plain mapping and implicit simple key"
