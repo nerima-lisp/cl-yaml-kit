@@ -54,6 +54,9 @@
        (setf increment (- (char-code (sc-char s)) (char-code #\0))) (sc-skip s)
        (when (or (sc-check s #\+) (sc-check s #\-))
          (setf chomping (if (sc-check s #\+) 1 -1)) (sc-skip s))))
+    (when (sc-check s #\#)
+      (sc-error s "while scanning a block scalar" start-mark
+                "found unexpected character after block scalar indicator"))
     (loop while (sc-blank-p s) do (sc-skip s))
     (when (sc-check s #\#)
       (loop until (sc-breakz-p s) do (sc-skip s)))
@@ -67,6 +70,10 @@
       (scan-block-scalar-breaks s indent-cell trailing-breaks start-mark end-cell)
       (loop while (and (= (mark-column (sc-mark s)) (car indent-cell))
                        (not (sc-z-p s))) do
+        (when (and (zerop (mark-column (sc-mark s)))
+                   (or (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2))
+                       (sc-check s #\%)))
+          (return))
         (let ((trailing-blank (sc-blank-p s)))
           (if (and (not literal-p) (plusp (fill-pointer leading-break))
                    (char= (char leading-break 0) #\Newline)

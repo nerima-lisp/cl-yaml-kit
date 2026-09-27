@@ -107,6 +107,9 @@
                    (vector-push-extend (aref spaces i) out))
                  (setf (fill-pointer spaces) 0))))
     (sc-skip s)
+    (when (sc-check s #\#)
+      (sc-error s "while scanning a quoted scalar" start
+                "found unexpected comment indicator"))
     (make-token :scalar start (sc-mark s) :value (scan-buffer-string out)
                 :style (if single-p :single-quoted :double-quoted))))
 

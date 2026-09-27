@@ -22,7 +22,7 @@
     (case (token-kind token)
       (:version-directive
        (when (parser-version parser) (parser-error token "found duplicate %YAML directive"))
-       (unless (and (= (token-major token) 1) (= (token-minor token) 2))
+       (unless (and (= (token-major token) 1) (member (token-minor token) '(1 2)))
          (parser-error token "found incompatible YAML document"))
        (setf (parser-version parser) (cons (token-major token) (token-minor token))))
       (:tag-directive
@@ -113,6 +113,13 @@
       (when (and (not explicit) next
                  (member (token-kind next) '(:version-directive :tag-directive)))
         (parser-error next "did not find expected document end"))
+      (when (and (not explicit) next
+                 (= (mark-line (token-end-mark token))
+                    (mark-line (token-start-mark next)))
+                 (not (member (token-kind next)
+                              '(:stream-end :document-start :version-directive
+                                :tag-directive))))
+        (parser-error next "did not find expected document start"))
       (if (eq (token-kind next) :stream-end)
           #'yaml-parser-parse-stream-end #'yaml-parser-parse-document-start))))
 
@@ -144,6 +151,9 @@
             (setf end (token-end-mark token))
             (parser-next parser)
             (setf token (parser-peek parser)))
+          (when (and (or anchor tag)
+                     (member (token-kind token) '(:anchor :tag :alias)))
+            (parser-error token "did not find expected node content"))
           (if (and indentless (eq (token-kind token) :block-entry))
               (progn
                 (incf (parser-depth parser))

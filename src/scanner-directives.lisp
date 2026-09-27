@@ -107,10 +107,8 @@
                      (not (sc-bom-p s))
                      (not (sc-blankz-p s))
                      (not (yaml-flow-indicator-p (sc-char s)))
-                     ;; ':' and '?' terminate an anchor/alias in block
-                     ;; context even without following separation; they are
-                     ;; mapping indicators at this scanner boundary.
-                     (not (member (sc-char s) '(#\? #\:))))
+                     (not (and (member (sc-char s) '(#\? #\:))
+                               (sc-blankz-p s 1))))
           do (sc-read s b))
     (unless (plusp (fill-pointer b))
       (sc-error s (if (eq kind :anchor)
