@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use List::Util qw(all);
 
 # Exit 0 when every file meets both thresholds, 1 when a report was produced but
 # a file is below one, 2 when no report could be produced at all.
@@ -8,6 +9,8 @@ my $EXIT_CANNOT_RUN = 2;
 
 my @COLUMNS = qw(file line-covered line-total branch-covered branch-total
                  uncovered-lines);
+my $EXCLUSIONS = 'scripts/coverage-exclusions.sexp';
+my $SOURCE_ROOT = 'src';
 my %ENVIRONMENT = (
   input        => 'COVERAGE_SUMMARY',
   'min-line'   => 'CL_YAML_COVERAGE_MIN_LINE',
@@ -31,6 +34,7 @@ sub fail {
 sub usage {
   print STDERR <<"USAGE";
 usage: $0 [--input TSV] [--min-line PERCENT] [--min-branch PERCENT]
+             [--source-root DIRECTORY] [--exclusions FILE]
 
   --input TSV          per-file coverage summary (default: \$COVERAGE_SUMMARY,
                        else /tmp/cl-yaml-kit-coverage/per-file.tsv)
@@ -38,6 +42,8 @@ usage: $0 [--input TSV] [--min-line PERCENT] [--min-branch PERCENT]
                        \$CL_YAML_COVERAGE_MIN_LINE, else 100)
   --min-branch PERCENT required branch coverage (default:
                        \$CL_YAML_COVERAGE_MIN_BRANCH, else 100)
+  --source-root DIRECTORY source files used to classify exclusions (default: src)
+  --exclusions FILE    exclusion data (default: scripts/coverage-exclusions.sexp)
 
 exit 0 when every file meets both thresholds, 1 when a file is below one, and 2
 when the settings are invalid or the summary cannot be read.
@@ -77,11 +83,95 @@ sub parse_arguments {
     my $argument = shift @ARGV;
     my ($setting) = $argument =~ /\A--([a-z][a-z-]*)\z/;
     fail_usage("unexpected argument '$argument'") unless defined $setting;
-    fail_usage("unknown option --$setting") unless exists $DEFAULT{$setting};
+    fail_usage("unknown option --$setting")
+      unless exists $DEFAULT{$setting}
+          || $setting eq 'source-root' || $setting eq 'exclusions';
     fail_usage("option --$setting requires a value") unless @ARGV;
     $given{$setting} = shift @ARGV;
   }
   return %given;
+}
+
+sub exclusion_rules {
+  my ($path) = @_;
+  open my $handle, '<', $path or fail("cannot read exclusions $path: $!");
+  my @rules;
+  while (my $line = <$handle>) {
+    next if $line =~ /\A\s*(?:;|\z)/;
+    my ($kind, $head, $reproduction)
+      = $line =~ /:kind\s+([^\s()]+).*?:head\s+"([^"]+)".*?:reproduction\s+"([^"]+)"/;
+    fail("$path: expected :kind and :head in '$line'")
+      unless defined $kind && defined $head && defined $reproduction;
+    fail("$path: missing reproduction $reproduction") unless -f $reproduction;
+    push @rules, { kind => $kind, head => $head, reproduction => $reproduction };
+  }
+  close $handle or fail("cannot read exclusions $path: $!");
+  fail("$path has no exclusion rules") unless @rules;
+  return \@rules;
+}
+
+sub source_exclusion_lines {
+  my ($path, $rules) = @_;
+  open my $handle, '<', $path or fail("cannot read source $path: $!");
+  my @lines = <$handle>;
+  close $handle or fail("cannot read source $path: $!");
+  my %allowed = map { $_->{head} => 1 } @$rules;
+  my @excluded;
+  my $depth = 0;
+  my $start;
+  for my $index (0 .. $#lines) {
+    my $line = $lines[$index];
+    my $clean = $line;
+    $clean =~ s/;.*//;
+    my $countable = $clean;
+    $countable =~ s/"(?:\\.|[^"\\])*"//g;
+    my $opens = () = $countable =~ /\(/g;
+    my $closes = () = $countable =~ /\)/g;
+    if ($depth == 0 && $clean =~ /\(\s*([A-Za-z0-9*+!?_-]+)/) {
+      $start = $index + 1;
+      my $head = $1;
+      if ($allowed{$head}) {
+        my $balance = 0;
+        my $end = $index;
+        for my $j ($index .. $#lines) {
+          my $part = $lines[$j];
+          $part =~ s/;.*//;
+          $part =~ s/"(?:\\.|[^"\\])*"//g;
+          $balance += (() = $part =~ /\(/g);
+          $balance -= (() = $part =~ /\)/g);
+          if ($balance <= 0) {
+            $end = $j;
+            last;
+          }
+        }
+        push @excluded, [$start, $end + 1, $head];
+      } elsif ($head eq 'defun' || $head eq 'defmacro') {
+        my $balance = 0;
+        my $header_end = $index + 1;
+        for my $j ($index .. $#lines) {
+          my $part = $lines[$j];
+          $part =~ s/;.*//;
+          $part =~ s/"(?:\\.|[^"\\])*"//g;
+          $balance += (() = $part =~ /\(/g);
+          $balance -= (() = $part =~ /\)/g);
+          if ($j > $index && $part =~ /\(\s*[^\s()]+/ && $balance <= 1) {
+            $header_end = $j;
+            last;
+          }
+        }
+        push @excluded, [$start, $header_end, $head]
+          if grep { $_->{kind} eq 'defun-header' } @$rules;
+      }
+    }
+    $depth += $opens - $closes;
+  }
+  return \@excluded;
+}
+
+sub line_is_excluded {
+  my ($line, $ranges) = @_;
+  return 1 if grep { $line >= $_->[0] && $line <= $_->[1] } @$ranges;
+  return 0;
 }
 
 sub read_rows {
@@ -151,12 +241,19 @@ sub percent_text {
 
 my %given = parse_arguments();
 my ($input) = resolve('input', $given{input});
+my $source_root = $given{'source-root'} // $SOURCE_ROOT;
+my $exclusions = $given{exclusions} // $EXCLUSIONS;
 my @minimum
   = map { resolve_percent($KINDS[$_][1], $given{ $KINDS[$_][1] }) } 0 .. $#KINDS;
 my $rows = read_rows($input);
+my $rules = exclusion_rules($exclusions);
 
 my (@failures, @totals);
 for my $row (@$rows) {
+  my $ranges = [];
+  my $source = "$source_root/$row->{file}";
+  $ranges = source_exclusion_lines($source, $rules) if -f $source;
+  $row->{excluded} = $ranges;
   my @values;
   for my $index (0 .. $#KINDS) {
     my ($covered, $total) = @{$row->{counts}}[2 * $index, 2 * $index + 1];
@@ -172,7 +269,16 @@ for my $row (@$rows) {
     push @reasons, sprintf '%s %s, required %s', $KINDS[$index][0],
       percent_text($values[$index]), percent_text($minimum[$index]);
   }
-  push @failures, { file => $row->{file}, reasons => \@reasons } if @reasons;
+  if (@reasons) {
+    my $uncovered = $row->{uncovered};
+    my $residual_is_excluded = $uncovered eq '-'
+      ? @$ranges
+      : all { my $line = $_; line_is_excluded($line, $ranges) }
+            map { my ($start, $end) = split /-/, $_; $end //= $start;
+                  ($start .. $end) } split /,/, $uncovered;
+    push @failures, { file => $row->{file}, reasons => \@reasons }
+      unless $residual_is_excluded;
+  }
 }
 
 print "| file | line | branch | uncovered lines |\n";

@@ -111,33 +111,33 @@ The following run used a Mac16,6 with 16 CPUs and SBCL 2.6.0:
 
 | case | stage | input bytes | MiB/s | consed bytes/op |
 | --- | --- | ---: | ---: | ---: |
-| large-block-mapping | reader | 10,752 | 9.468 | 2,792,704 |
-| large-block-mapping | loader | 10,752 | 8.463 | 2,899,977 |
-| large-block-mapping | dumper | 10,752 | 4.993 | 1,710,387 |
-| large-block-sequence | reader | 6,656 | 12.636 | 1,540,949 |
-| large-block-sequence | loader | 6,656 | 11.065 | 1,579,093 |
-| large-block-sequence | dumper | 6,656 | 4.151 | 957,406 |
-| deep-nesting | reader | 1,011,895 | 179.728 | 7,740,843 |
-| deep-nesting | loader | 1,011,895 | 177.720 | 8,584,380 |
-| deep-nesting | dumper | 1,011,895 | 138.228 | 19,073,254 |
-| long-plain-scalar | reader | 65,543 | 35.793 | 4,793,839 |
-| long-plain-scalar | loader | 65,543 | 25.797 | 4,794,547 |
-| long-plain-scalar | dumper | 65,543 | 7.696 | 6,795,477 |
-| long-double-quoted-scalar | reader | 65,545 | 56.552 | 1,320,457 |
-| long-double-quoted-scalar | loader | 65,545 | 51.014 | 1,319,518 |
-| long-double-quoted-scalar | dumper | 65,545 | 7.624 | 6,801,604 |
-| long-block-literal | reader | 68,004 | 65.931 | 2,316,322 |
-| long-block-literal | loader | 68,004 | 58.887 | 2,317,662 |
-| long-block-literal | dumper | 68,004 | 7.466 | 6,703,514 |
-| flow-collection-heavy | reader | 22,275 | 6.413 | 8,381,884 |
-| flow-collection-heavy | loader | 22,275 | 1.945 | 12,417,587 |
-| flow-collection-heavy | dumper | 22,275 | 1.809 | 6,486,893 |
-| anchor-alias-heavy | reader | 2,222 | 10.812 | 514,611 |
-| anchor-alias-heavy | loader | 2,222 | 7.488 | 540,928 |
-| anchor-alias-heavy | dumper | 2,222 | 6.233 | 288,623 |
-| realistic-config-1mb | reader | 1,048,765 | 5.624 | 369,006,208 |
-| realistic-config-1mb | loader | 1,048,765 | 1.475 | 514,095,834 |
-| realistic-config-1mb | dumper | 1,048,765 | 1.803 | 211,870,099 |
+| large-block-mapping | reader | 10,752 | 7.857 | 2,228,864 |
+| large-block-mapping | loader | 10,752 | 6.990 | 2,229,547 |
+| large-block-mapping | dumper | 10,752 | 4.644 | 1,680,725 |
+| large-block-sequence | reader | 6,656 | 11.215 | 1,273,685 |
+| large-block-sequence | loader | 6,656 | 10.982 | 1,259,733 |
+| large-block-sequence | dumper | 6,656 | 5.449 | 977,877 |
+| deep-nesting | reader | 1,011,895 | 172.294 | 2,781,696 |
+| deep-nesting | loader | 1,011,895 | 112.460 | 3,535,232 |
+| deep-nesting | dumper | 1,011,895 | 72.313 | 17,448,053 |
+| long-plain-scalar | reader | 65,543 | 47.971 | 896,405 |
+| long-plain-scalar | loader | 65,543 | 49.886 | 896,747 |
+| long-plain-scalar | dumper | 65,543 | 7.341 | 6,375,755 |
+| long-double-quoted-scalar | reader | 65,545 | 34.843 | 896,107 |
+| long-double-quoted-scalar | loader | 65,545 | 49.297 | 896,747 |
+| long-double-quoted-scalar | dumper | 65,545 | 7.454 | 6,375,755 |
+| long-block-literal | reader | 68,004 | 46.028 | 1,841,611 |
+| long-block-literal | loader | 68,004 | 51.966 | 1,785,205 |
+| long-block-literal | dumper | 68,004 | 2.973 | 6,243,813 |
+| flow-collection-heavy | reader | 22,275 | 6.455 | 6,938,795 |
+| flow-collection-heavy | loader | 22,275 | 3.401 | 8,232,747 |
+| flow-collection-heavy | dumper | 22,275 | 3.363 | 5,273,813 |
+| anchor-alias-heavy | reader | 2,222 | 8.979 | 461,141 |
+| anchor-alias-heavy | loader | 2,222 | 7.383 | 504,704 |
+| anchor-alias-heavy | dumper | 2,222 | 3.629 | 333,909 |
+| realistic-config-1mb | reader | 1,048,765 | 1.381 | 231,483,861 |
+| realistic-config-1mb | loader | 1,048,765 | 0.613 | 252,910,064 |
+| realistic-config-1mb | dumper | 1,048,765 | 0.539 | 145,068,944 |
 
 An sb-sprof run on the 1 MiB configuration identified scanner plain-scalar
 work (`scan-plain-scalar`), cl-regex-kit matching during scalar construction,
@@ -243,15 +243,29 @@ per-file summary read by the gate. `COVERAGE_OUTPUT`,
 the artifacts or the dedicated compilation cache. `COVERAGE_SOURCE_DIRECTORY`
 (default `src/`) selects the files measured and reported.
 
-`scripts/check-coverage.pl` turns the summary into the gate. It prints a
-Markdown table and exits 0 when every file meets both thresholds, 1 when
-a file is below one, and 2 when no report could be produced. The interface
-is `--input TSV`, `--min-line PERCENT`, and `--min-branch PERCENT`; each
-setting falls back to `COVERAGE_SUMMARY`, `CL_YAML_COVERAGE_MIN_LINE`, or
-`CL_YAML_COVERAGE_MIN_BRANCH`, then to the default. Both thresholds
-default to 100. A file whose total for a kind is zero prints `n/a` and is
-exempt from that kind.
+`scripts/check-coverage.pl` turns the summary into the gate. The coverage
+runner invokes it after writing the summary, so `checks.coverage` in
+`flake.nix`, and therefore the CI `nix flake check`, enforce the same gate.
+The gate requires 100% expression and branch coverage after applying the
+single data file `scripts/coverage-exclusions.sexp`. That file names only
+form categories; the checker reads the source forms and derives their current
+spans, so ordinary line movement does not require editing the exclusions.
+Each category has a reason and a small reproduction under
+`scripts/coverage-reproductions/`. These are SB-COVER limitations such as
+compile-time package/declaration forms, `defstruct` metadata, and definition
+headers. Executable function bodies are not excluded.
+
+The checker prints a Markdown table and exits 0 when every file meets both
+thresholds, 1 when a non-excluded residual remains, and 2 when no report
+could be produced. The interface is `--input TSV`, `--min-line PERCENT`,
+`--min-branch PERCENT`, `--source-root DIRECTORY`, and `--exclusions FILE`;
+the first three settings also have the existing environment fallbacks. Both
+thresholds default to 100. A file whose total for a kind is zero prints
+`n/a` and is exempt from that kind.
 
 ```sh
-perl scripts/check-coverage.pl
+perl scripts/check-coverage.pl \
+  --input scripts/cl-yaml-kit-coverage/per-file.tsv \
+  --source-root src \
+  --exclusions scripts/coverage-exclusions.sexp
 ```

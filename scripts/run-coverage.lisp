@@ -190,6 +190,12 @@
         (let ((table (coverage-source-table)))
           (require-coverage-entries table files)
           (write-summary summary-file (mapcar #'source-coverage-row files)))
+        (uiop:run-program
+         (list "perl" "scripts/check-coverage.pl"
+               "--input" (namestring summary-file)
+               "--source-root" (namestring source-directory)
+               "--exclusions" "scripts/coverage-exclusions.sexp")
+         :output t :error-output t)
         (format t "~&Coverage: ~D/~D expressions, ~D/~D branches.~%"
                 (getf statistics :expression-covered) (getf statistics :expression-total)
                 (getf statistics :branch-covered) (getf statistics :branch-total))

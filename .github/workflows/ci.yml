@@ -46,7 +46,9 @@ jobs:
           cachix-auth-token: ${{ github.event_name == 'push' && secrets.CACHIX_AUTH_TOKEN || '' }}
 
       # Runs the SBCL test suite (checks.default), the treefmt formatting gate
-      # (checks.formatting), and the mkdocs --strict build (checks.docs).
+      # (checks.formatting), the coverage gate (checks.coverage), and the
+      # mkdocs --strict build (checks.docs). The coverage check has its own
+      # 2400-second timeout in flake.nix and the job has a 30-minute ceiling.
       #
       # Each matrix runner checks its native flake system. No --all-systems is
       # needed because that would ask each runner to realise the other system.

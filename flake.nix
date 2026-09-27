@@ -74,6 +74,8 @@
       extraOutputs = ctx: {
         checks.coverage = ctx.cl.mkCoverageReport {
           drv = ctx.package;
+          # run-coverage.lisp invokes scripts/check-coverage.pl after the
+          # report is written, keeping the data and the 100% policy separate.
           entryPoint = "scripts/run-coverage.lisp";
           timeoutSeconds = 2400;
           killAfterSeconds = 30;
