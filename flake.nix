@@ -3,7 +3,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     cl-nix-forge = {
-      url = "github:nerima-lisp/cl-nix-forge/v0.6.0";
+      url = "github:nerima-lisp/cl-nix-forge/v0.6.1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     cl-weave = {
@@ -46,6 +46,10 @@
     cl-nix-forge.lib.aarch64-darwin.mkPackageFlake {
       inherit self nixpkgs;
       pname = "cl-yaml-kit";
+      # The organisation standard narrowed this to x86_64-linux alone, on the
+      # grounds that a platform CI does not exercise is not one to promise. The
+      # maintainer develops on aarch64-darwin with no Linux builder configured,
+      # so dropping darwin would leave the gate unrunnable, not narrower.
       systems = [
         "x86_64-linux"
         "aarch64-darwin"
