@@ -67,6 +67,11 @@
 (scanner-directive-errors
   ("invalid version" (format nil "%YAML 2.0~%"))
   ("incomplete version" (format nil "%YAML 1.~%"))
+  ("version missing separator" (format nil "%YAML 1x2~%"))
+  ("version missing number" (format nil "%YAML .2~%"))
+  ("version number too long" (format nil "%YAML 1234567890.1~%"))
+  ("tag directive missing whitespace" (format nil "%TAG !e!tag:example.com,2000:~%"))
+  ("tag URI invalid escape" (format nil "%TAG !e! tag:example.com,%GG~%"))
   ("unterminated verbatim tag" (format nil "!<tag:yaml.org,2002:str~%"))
   ("empty anchor" (format nil "&~%"))
   ("empty alias" (format nil "*~%"))
