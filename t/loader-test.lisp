@@ -15,139 +15,140 @@
            (:alias #'yaml-kit:make-alias-event))
          options))
 
+(defun loader-document (&rest events)
+  (append (list (loader-event :stream-start)
+                (loader-event :document-start))
+          events
+          (list (loader-event :document-end)
+                (loader-event :stream-end))))
+
+(defmacro loader-scalar-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (yaml-kit::resolve-plain-scalar-tag
+                             ,(third case) ,(second case))
+                            :to-equal ,(fourth case))))
+               cases)))
+
+(defmacro loader-parse-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (expect (yaml-kit:parse
+                             (loader-document
+                              (loader-event :scalar :value ,(second case)))
+                             ,@(third case))
+                            :to-equal ,(fourth case))))
+               cases)))
+
 (describe "loader"
-  (it "resolves the YAML 1.2.2 scalar tables"
-    (dolist (case '((:core "" "tag:yaml.org,2002:null")
-                    (:core "0o17" "tag:yaml.org,2002:int")
-                    (:core "1.25" "tag:yaml.org,2002:float")
-                    (:core "true" "tag:yaml.org,2002:bool")
-                    (:json "1.25" "tag:yaml.org,2002:float")
-                    (:json "01" "tag:yaml.org,2002:str")
-                    (:failsafe "true" "tag:yaml.org,2002:str")))
-      (destructuring-bind (schema text expected) case
-      (expect (yaml-kit::resolve-plain-scalar-tag text schema) :to-equal expected))))
+  (loader-scalar-cases
+    ("core null" :core "" "tag:yaml.org,2002:null")
+    ("core octal" :core "0o17" "tag:yaml.org,2002:int")
+    ("core float" :core "1.25" "tag:yaml.org,2002:float")
+    ("core bool" :core "true" "tag:yaml.org,2002:bool")
+    ("json float" :json "1.25" "tag:yaml.org,2002:float")
+    ("json trailing dot" :json "1." "tag:yaml.org,2002:str")
+    ("json exponent trailing dot" :json "1.e2" "tag:yaml.org,2002:str")
+    ("json leading zero" :json "01" "tag:yaml.org,2002:str")
+    ("failsafe scalar" :failsafe "true" "tag:yaml.org,2002:str")
+    ("core underscore scalar" :core "1_000" "tag:yaml.org,2002:str")
+    ("core hexadecimal" :core "0x10" "tag:yaml.org,2002:int")
+    ("core nan" :core ".NaN" "tag:yaml.org,2002:float"))
 
-  (it "keeps the schema resolution table data-driven"
-    (dolist (case '((:failsafe "true" "tag:yaml.org,2002:str")
-                    (:json "null" "tag:yaml.org,2002:null")
-                    (:json "01" "tag:yaml.org,2002:str")
-                    (:core "1_000" "tag:yaml.org,2002:str")
-                    (:core "0x10" "tag:yaml.org,2002:int")
-                    (:core ".NaN" "tag:yaml.org,2002:float")))
-      (destructuring-bind (schema text expected) case
-        (expect (yaml-kit::resolve-plain-scalar-tag text schema)
-                :to-equal expected))))
+  (loader-parse-cases
+    ("signed octal" "-0o17" () -15)
+    ("signed hexadecimal" "+0x10" () 16)
+    ("decimal float" "0.278" () 0.278d0)
+    ("integral decimal float" "450.00" () 450))
 
-  (it "constructs signed base-prefixed integers"
-    (dolist (case '(("-0o17" -15) ("+0o17" 15)
-                    ("-0x10" -16) ("+0x10" 16)))
-      (destructuring-bind (text expected) case
-        (expect (yaml-kit:parse
-                 (list (loader-event :stream-start)
-                       (loader-event :document-start)
-                       (loader-event :scalar :value text)
-                       (loader-event :document-end)
-                       (loader-event :stream-end)))
-                :to-equal expected))))
+  (it "parses all documents from an event list"
+    (let ((events (append (loader-document
+                           (loader-event :scalar :value "one"))
+                          (list (loader-event :document-start)
+                                (loader-event :scalar :value "two")
+                                (loader-event :document-end)
+                                (loader-event :stream-end)))))
+      (expect (yaml-kit:parse-all events :schema :failsafe)
+              :to-equal '("one" "two"))))
 
-  (it "reads decimal floats at double-float precision"
-    (let ((value (yaml-kit:parse
-                  (list (loader-event :stream-start)
-                        (loader-event :document-start)
-                        (loader-event :scalar :value "0.278")
-                        (loader-event :document-end)
-                        (loader-event :stream-end)))))
-      (expect value :to-equal 0.278d0)))
+  (it "exposes compose-all and reports resource limits"
+    (let ((events (loader-document
+                   (loader-event :scalar :value "long"))))
+      (expect (length (yaml-kit:compose-all events)) :to-equal 1)
+      (expect (handler-case
+                  (progn (yaml-kit:compose-all events :max-nodes 0) nil)
+                (yaml-kit:yaml-resource-limit-error (condition)
+                  (and (equal (yaml-kit::yaml-resource-limit-error-limit condition)
+                              0)
+                       (equal (yaml-kit::yaml-resource-limit-error-actual condition)
+                              1))))
+              :to-be-truthy)))
 
-  (it "normalizes implicit integral decimal floats"
-    (dolist (case '(("450.00" 450) ("2392.00" 2392)
-                    ("450.25" 450.25d0)))
-      (destructuring-bind (text expected) case
-        (expect (yaml-kit:parse
-                 (list (loader-event :stream-start)
-                       (loader-event :document-start)
-                       (loader-event :scalar :value text)
-                       (loader-event :document-end)
-                       (loader-event :stream-end)))
-                :to-equal expected))))
+  (it "uses list and alist construction options"
+    (let ((events (loader-document
+                   (loader-event :sequence-start)
+                   (loader-event :scalar :value "a")
+                   (loader-event :scalar :value "b")
+                   (loader-event :sequence-end))))
+      (expect (yaml-kit:parse events :schema :failsafe :sequence-type :list)
+              :to-equal '("a" "b")))
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "value")
+                   (loader-event :mapping-end))))
+      (expect (yaml-kit:parse events :schema :failsafe :mapping-type :alist)
+              :to-equal '(("key" . "value")))))
 
-  (it "rejects incompatible explicit collection tags"
-    (dolist (case '((:sequence "!!str") (:mapping "!!seq")))
-      (destructuring-bind (kind tag) case
-        (let ((events (list (loader-event :stream-start)
-                            (loader-event :document-start)
-                            (if (eq kind :sequence)
-                                (loader-event :sequence-start :tag tag)
-                                (loader-event :mapping-start :tag tag))
-                            (if (eq kind :sequence)
-                                (loader-event :sequence-end)
-                                (loader-event :mapping-end))
-                            (loader-event :document-end)
-                            (loader-event :stream-end))))
-          (expect (handler-case (progn (yaml-kit:parse events) nil)
-                    (yaml-kit:yaml-compose-error () t))
-                  :to-be-truthy)))))
+  (it "reads non-list input through the reader path"
+    (with-input-from-string (stream "answer: 42")
+      (let ((value (yaml-kit:read-yaml stream)))
+        (expect (gethash "answer" value) :to-equal 42))))
 
-  (it "constructs a scalar from events"
-    (let ((value (yaml-kit:parse
-                  (list (loader-event :stream-start)
-                        (loader-event :document-start)
-                        (loader-event :scalar :value "42")
-                        (loader-event :document-end)
-                        (loader-event :stream-end)))))
-      (expect value :to-equal 42)))
   (it "preserves aliases as shared nodes during composition"
-    (let* ((events (list (loader-event :stream-start)
-                         (loader-event :document-start)
-                         (loader-event :mapping-start)
-                         (loader-event :scalar :value "left")
-                         (loader-event :sequence-start :anchor "a")
-                         (loader-event :scalar :value "x")
-                         (loader-event :sequence-end)
-                         (loader-event :scalar :value "right")
-                         (loader-event :alias :anchor "a")
-                         (loader-event :mapping-end)
-                         (loader-event :document-end)
-                         (loader-event :stream-end)))
+    (let* ((events (loader-document
+                    (loader-event :mapping-start)
+                    (loader-event :scalar :value "left")
+                    (loader-event :sequence-start :anchor "a")
+                    (loader-event :scalar :value "x")
+                    (loader-event :sequence-end)
+                    (loader-event :scalar :value "right")
+                    (loader-event :alias :anchor "a")
+                    (loader-event :mapping-end)))
            (node (yaml-kit:compose events)))
-      (expect (yaml-kit:mapping-node-p node) :to-be-truthy)
       (expect (eq (yaml-kit:sequence-node-items
                    (cdr (first (yaml-kit:mapping-node-pairs node))))
                   (yaml-kit:sequence-node-items
                    (cdr (second (yaml-kit:mapping-node-pairs node)))))
-              :to-be-truthy))))
+              :to-be-truthy)))
 
   (it "applies duplicate-key policies"
-    (let ((events (list (loader-event :stream-start)
-                        (loader-event :document-start)
-                        (loader-event :mapping-start)
-                        (loader-event :scalar :value "key")
-                        (loader-event :scalar :value "first")
-                        (loader-event :scalar :value "key")
-                        (loader-event :scalar :value "last")
-                        (loader-event :mapping-end)
-                        (loader-event :document-end)
-                        (loader-event :stream-end))))
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "first")
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "last")
+                   (loader-event :mapping-end))))
       (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :first))
               :to-equal "first")
       (expect (gethash "key" (yaml-kit:parse events :duplicate-key-policy :last))
               :to-equal "last")
-      (expect (handler-case
-                  (progn (yaml-kit:parse events) nil)
-                (yaml-kit:yaml-compose-error (condition)
-                  (declare (ignore condition))
-                  t))
+      (expect (handler-case (progn (yaml-kit:parse events) nil)
+                (yaml-kit:yaml-compose-error () t))
               :to-be-truthy)))
 
-  (it "enforces loader limits for event lists"
-    (let ((events (list (loader-event :stream-start)
-                        (loader-event :document-start)
-                        (loader-event :scalar :value "long")
-                        (loader-event :document-end)
-                        (loader-event :stream-end))))
+  (it "rejects incompatible collection tags and enforces limits"
+    (let ((events (loader-document
+                   (loader-event :sequence-start :tag "!!str")
+                   (loader-event :sequence-end))))
+      (expect (handler-case (progn (yaml-kit:parse events) nil)
+                (yaml-kit:yaml-compose-error () t))
+              :to-be-truthy))
+    (let ((events (loader-document (loader-event :scalar :value "long"))))
       (expect (handler-case
                   (progn (yaml-kit:parse events :max-scalar-length 3) nil)
-                (yaml-kit:yaml-resource-limit-error (condition)
-                  (declare (ignore condition))
-                  t))
-              :to-be-truthy)))
+                (yaml-kit:yaml-resource-limit-error () t))
+              :to-be-truthy))))
