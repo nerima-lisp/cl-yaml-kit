@@ -33,7 +33,7 @@ defaults are centralized here:
 | `:mapping-type` | `:hash-table` | `parse`, `parse-all`, `read-yaml` |
 | `:sequence-type` | `:vector` | `parse`, `parse-all`, `read-yaml` |
 | `:duplicate-key-policy` | `:error` | `parse`, `parse-all`, `read-yaml` |
-| `:max-input-length` | `104857600` | loaders, composers, and event parsing |
+| `:max-input-length` | `104857600` | loaders and event parsing |
 | `:max-depth` | `1000` | loaders and composers |
 | `:max-scalar-length` | `16777216` | loaders, composers, and event parsing |
 | `:max-nodes` | `1000000` | loaders and composers |
@@ -44,7 +44,20 @@ defaults are centralized here:
 | `:explicit-document-start` | `nil` | `emit`, `write-yaml`, `emit-events` |
 
 The limit values are upper bounds. Exceeding one signals
-`yaml-resource-limit-error`.
+`yaml-resource-limit-error`. For strings and character streams,
+`:max-input-length` counts characters. For octet vectors, it counts bytes and
+is checked before decoding. Character streams are read only until the first
+character beyond the limit, so a non-terminating stream cannot bypass the
+bound.
+
+Event sources passed to `compose-events` and `compose-all-events` must emit a
+complete stream with ordered stream and document start/end events. Those APIs
+do not accept `:max-input-length`; raw input limits are enforced by the reader
+entry points. Re-defining an anchor is valid YAML and updates the anchor table,
+so a later alias refers to the most recent definition.
+
+The loader is supported on SBCL only. Floating-point special values are
+implemented in an isolated SBCL-specific source file.
 
 ## Emitting
 

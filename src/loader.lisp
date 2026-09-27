@@ -14,7 +14,7 @@
   "Return the first representation graph in reader INPUT."
   (compose-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
-   :max-input-length max-input-length :max-depth max-depth
+   :max-depth max-depth
    :max-scalar-length max-scalar-length :max-nodes max-nodes
    :max-alias-expansions max-alias-expansions))
 
@@ -26,7 +26,7 @@
   "Return all representation graphs in reader INPUT."
   (compose-all-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
-   :max-input-length max-input-length :max-depth max-depth
+   :max-depth max-depth
    :max-scalar-length max-scalar-length :max-nodes max-nodes
    :max-alias-expansions max-alias-expansions))
 
@@ -58,7 +58,7 @@
   (let ((values nil))
     (compose-all-events
      (%loader-event-source input max-input-length max-depth max-scalar-length)
-     :max-input-length max-input-length :max-depth max-depth
+     :max-depth max-depth
      :max-scalar-length max-scalar-length :max-nodes max-nodes
      :max-alias-expansions max-alias-expansions
      :document-handler
