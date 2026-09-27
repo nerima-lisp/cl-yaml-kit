@@ -41,7 +41,8 @@
   :pathname "t"
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
-               (:file "nodes-test") (:file "reader-test")
+               (:file "nodes-test") (:file "data-test")
+               (:file "conditions-test") (:file "reader-test")
                (:file "scanner-test") (:file "scanner-directives-test")
                (:file "parser-test")
                (:file "scanner-flow-scalars-test")
