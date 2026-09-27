@@ -101,7 +101,7 @@
   (eval '(yaml-kit::define-parser-state probe-parser-state-eval (parser)
            (declare (ignore parser))
            :probe))
-  (let ((state (find-symbol "PROBE-PARSER-STATE-EVAL" *package*)))
+  (let ((state (find-symbol "PROBE-PARSER-STATE-EVAL" :cl-yaml-kit/test)))
     (expect (funcall (symbol-function state) nil) :to-equal :probe)))
 
 (describe "parser event details"
