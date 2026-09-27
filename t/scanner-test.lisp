@@ -18,6 +18,21 @@
        (expect (scanner-token-kinds (second case)) :to-equal (third case)))))
 
 (describe "scanner character classes"
+  (it "expands character productions and defines their predicates"
+    (let ((expansion
+            (macroexpand-1
+             '(yaml-kit::%define-character-production probe-character "AZ"))))
+      (expect (first expansion) :to-equal 'progn))
+    (eval '(yaml-kit::%define-character-production probe-character-eval "AZ"))
+    (let ((predicate (find-symbol "YAML-PROBE-CHARACTER-EVAL-P" *package*)))
+      (expect (funcall (symbol-function predicate) #\A) :to-be-truthy)
+      (expect (funcall (symbol-function predicate) #\B) :to-equal nil)
+      (expect (funcall (symbol-function predicate) 1) :to-equal nil))
+    (eval '(yaml-kit::%define-character-production probe-character-list
+             '(#\A #\Z)))
+    (let ((predicate (find-symbol "YAML-PROBE-CHARACTER-LIST-P" *package*)))
+      (expect (funcall (symbol-function predicate) #\Z) :to-be-truthy)
+      (expect (funcall (symbol-function predicate) #\B) :to-equal nil)))
   (dolist (case '(("digit accepts ASCII" yaml-kit::sc-digit-p "7" t)
                   ("digit rejects fullwidth" yaml-kit::sc-digit-p "７" nil)
                   ("hex accepts ASCII" yaml-kit::sc-hex-p "F" t)

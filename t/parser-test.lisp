@@ -91,6 +91,19 @@
     yaml-kit:sequence-end-event yaml-kit:mapping-end-event
     yaml-kit:document-end-event yaml-kit:stream-end-event)))
 
+(it "expands parser states and defines callable state functions"
+  (let ((expansion
+          (macroexpand-1
+           '(yaml-kit::define-parser-state probe-parser-state (parser)
+              (declare (ignore parser))
+              :probe))))
+    (expect (first expansion) :to-equal 'defun))
+  (eval '(yaml-kit::define-parser-state probe-parser-state-eval (parser)
+           (declare (ignore parser))
+           :probe))
+  (let ((state (find-symbol "PROBE-PARSER-STATE-EVAL" *package*)))
+    (expect (funcall (symbol-function state) nil) :to-equal :probe)))
+
 (describe "parser event details"
   (macrolet ((parser-event-cases (&body cases)
                `(progn
