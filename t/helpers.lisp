@@ -1,6 +1,10 @@
 ;;;; t/helpers.lisp
 (in-package #:cl-yaml-kit/test)
 
+(defun test-text (text)
+  "The scanner takes a simple character array, so hand it one."
+  (make-array (length text) :element-type 'character :initial-contents text))
+
 (defun test-timeout-ms ()
   (or (ignore-errors
         (parse-integer (uiop:getenv "CL_YAML_TEST_TIMEOUT_MS")))

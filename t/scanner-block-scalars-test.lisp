@@ -16,81 +16,80 @@
                      scalars))
     (nreverse scalars)))
 
-(defmacro scanner-block-scalar-cases (table)
-  "Run the input -> scalar value/style rows in TABLE."
-  `(dolist (case ,table)
-     (destructuring-bind (name input expected) case
-       (declare (ignore name))
-       (expect (scanned-scalars input) :to-equal expected))))
+;; The reader in use does not expand a single backslash inside a string, so every
+;; line break here comes from a ~% directive rather than a "\n" escape.  Each row
+;; is (name input expected); expected is a list of (value style) pairs.
+(defun scanner-block-scalar-rows ()
+  (list
+   (list "Example 8.1 header indicators"
+         (format nil "- | # Empty header~% literal~%- >1 # Indentation indicator~%  folded~%- |+ # Chomping indicator~% keep~%~%- >1- # Both indicators~%  strip~%")
+         (list (list (format nil "literal~%") :literal)
+               (list (format nil " folded~%") :folded)
+               (list (format nil "keep~%~%") :literal)
+               (list " strip" :folded)))
+   (list "Example 8.2 detected indentation"
+         (format nil ">~%  ~%    ~%    # detected~%")
+         (list (list (format nil "~%~%# detected~%") :folded)))
+   (list "Example 8.2 explicit indentation"
+         (format nil "|1~%  explicit~%")
+         (list (list (format nil " explicit~%") :literal)))
+   (list "Example 8.4 chomping"
+         (format nil "|-~%  text~%")
+         (list (list "text" :literal)))
+   (list "Example 8.4 clipping"
+         (format nil "|~%  text~%")
+         (list (list (format nil "text~%") :literal)))
+   (list "Example 8.4 keeping"
+         (format nil "|+~%  text~%~%")
+         (list (list (format nil "text~%~%") :literal)))
+   (list "Example 8.6 empty scalar chomping"
+         (format nil "|+~%")
+         (list (list "" :literal)))
+   (list "Example 8.7 literal scalar"
+         (format nil "|~%  literal~%  ~At~%" #\Tab)
+         (list (list (format nil "literal~%~At~%" #\Tab) :literal)))
+   (list "Example 8.9 folded scalar"
+         (format nil ">~%  folded~%  text~%")
+         (list (list (format nil "folded text~%") :folded)))
+   (list "folded scalar preserves an empty line"
+         (format nil ">~%  first~%~%  second~%")
+         (list (list (format nil "first~%second~%") :folded)))
+   (list "Example 8.21 block scalar nodes"
+         (format nil "literal: |2~%    value~%folded:~%   !foo~%  >1~% value~%")
+         (list (list "literal" :plain)
+               (list (format nil "  value~%") :literal)
+               (list "folded" :plain)
+               (list (format nil "value~%") :folded)))
+   ;; A content line indented less than the scalar ends it, and the rest of
+   ;; the line becomes a node of its own.
+   (list "following text line is less indented"
+         (format nil "- >~%  text~% text~%")
+         (list (list (format nil "text~%") :folded)
+               (list "text" :plain)))
+   (list "detected indentation allows a tab in content"
+         (format nil ">~% ~A~% detected~%" #\Tab)
+         (list (list (format nil "~C~%detected~%" #\Tab) :folded)))))
 
-(defmacro scanner-block-scalar-error-cases (table)
-  "Require each input in TABLE to signal a YAML parse error."
-  `(dolist (case ,table)
-     (destructuring-bind (name input) case
-       (declare (ignore name))
-       (let ((signaled nil))
-         (handler-case (progn (scanned-scalars input)
-                              (setf signaled nil))
-           (yaml-kit:yaml-parse-error ()
-             (setf signaled t)))
-         (expect signaled :to-be-truthy)))))
-
-(defparameter *scanner-block-scalar-cases*
-  `(("Example 8.1 header indicators"
-     "- | # Empty header\n literal\n- >1 # Indentation indicator\n  folded\n- |+ # Chomping indicator\n keep\n\n- >1- # Both indicators\n  strip\n"
-     (("literal\n" :literal)
-      (" folded\n" :folded)
-      ("keep\n\n" :literal)
-      (" strip" :folded)))
-    ("Example 8.2 detected indentation"
-     ">\n  \n    \n    # detected\n"
-     (("\n\n# detected\n" :folded)))
-    ("Example 8.2 explicit indentation"
-     "|1\n  explicit\n"
-     ((" explicit\n" :literal)))
-    ("Example 8.4 chomping"
-     "|-\n  text\n"
-     (("text" :literal)))
-    ("Example 8.4 clipping"
-     "|\n  text\n"
-     (("text\n" :literal)))
-    ("Example 8.4 keeping"
-     "|+\n  text\n\n"
-     (("text\n\n" :literal)))
-    ("Example 8.6 empty scalar chomping"
-     "|+\n"
-     (("" :literal)))
-    ("Example 8.7 literal scalar"
-     (concatenate 'string "|\n  literal\n  " (string #\Tab) "text\n")
-     (("literal\n\ttext\n" :literal)))
-    ("Example 8.9 folded scalar"
-     ">\n  folded\n  text\n"
-     (("folded text\n" :folded)))
-    ("folded scalar preserves an empty line"
-     ">\n  first\n\n  second\n"
-     (("first\nsecond\n" :folded)))
-    ("Example 8.21 block scalar nodes"
-     "literal: |2\n    value\nfolded:\n   !foo\n  >1\n value\n"
-     (("value\n" :literal)
-      ("value\n" :folded)))
-    ("detected indentation allows a tab in content"
-     (concatenate 'string ">\n \t\n detected\n")
-     ((#.(format nil "~C~%detected~%" #\Tab) :folded)))))
-
-(defparameter *scanner-block-scalar-error-cases*
-  '(("Example 8.3 indicator zero" "|0\n  value\n")
-    ("invalid block scalar header" "|x\n  value\n")
-    ("leading content line is not indented" "- |\ntext\n")
-    ("tab is not valid block indentation" "- |\n\ttext\n")
-    ("leading blank line has too much indentation"
-     "- |\n   \n  text\n")
-    ("following text line is less indented"
-     "- >\n  text\n text\n")
-    ("explicit indentation is insufficient"
-     "- |2\n text\n")))
+(defun scanner-block-scalar-error-rows ()
+  (list
+   (list "Example 8.3 indicator zero" (format nil "|0~%  value~%"))
+   (list "invalid block scalar header" (format nil "|x~%  value~%"))
+   (list "leading content line is not indented" (format nil "- |~%text~%"))
+   (list "tab is not valid block indentation" (format nil "- |~%~Atext~%" #\Tab))
+   (list "leading blank line has too much indentation" (format nil "- |~%   ~%  text~%"))
+   (list "folded leading blank line has too much indentation" (format nil "- >~%   ~%  text~%"))))
 
 (describe "block scalar scanner"
   (it "scans scalar values and styles from the specification examples"
-    (scanner-block-scalar-cases *scanner-block-scalar-cases*))
+    (dolist (row (scanner-block-scalar-rows))
+      (destructuring-bind (name input expected) row
+        (declare (ignore name))
+        (expect (scanned-scalars input) :to-equal expected))))
   (it "rejects invalid block scalar headers and indentation"
-    (scanner-block-scalar-error-cases *scanner-block-scalar-error-cases*)))
+    (dolist (row (scanner-block-scalar-error-rows))
+      (destructuring-bind (name input) row
+        (declare (ignore name))
+        (let ((signaled nil))
+          (handler-case (progn (scanned-scalars input) (setf signaled nil))
+            (yaml-kit:yaml-parse-error () (setf signaled t)))
+          (expect signaled :to-be-truthy))))))
