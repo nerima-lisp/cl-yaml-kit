@@ -73,7 +73,7 @@ The defaults for these options are in the table above.
 
 | Symbol | Lambda list or value | Returns |
 | --- | --- | --- |
-| `+yaml-null+`, `+yaml-false+` | special variables | Opaque null and false markers |
+| `+yaml-null+`, `+yaml-false+` | constants | Opaque null and false markers |
 | `yaml-null-p`, `yaml-false-p` | `(value)` | Boolean identity test |
 | `make-yaml-mapping` | `(&optional entries)` | New ordered mapping |
 | `yaml-mapping-p` | `(object)` | Boolean |
