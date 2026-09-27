@@ -167,19 +167,18 @@
 
 (defun %write-plain (value context)
   (declare (optimize (speed 3) (safety 1)) (type simple-string value))
-  (let ((newline (position #\Newline value)))
-    (if (null newline)
-        (%emit-scalar-text context value)
-        (loop for start = 0 then (1+ end)
-              for end = (position #\Newline value :start start)
-              do (if end
-                     (when (> end start)
-                       (%emit-scalar-text context (subseq value start end)))
-                     (when (< start (length value))
-                       (%emit-scalar-text context (subseq value start))))
+  (loop for start = 0 then (1+ end)
+        for end = (position #\Newline value :start start)
+        do (if end
+               (progn
+                 (when (> end start)
+                   (%emit-scalar-text context (subseq value start end)))
                  (%emit-char context #\Newline)
-                 (%emit-char context #\Newline)
-                 (when (null end) (return))))))
+                 (%emit-char context #\Newline))
+               (progn
+                 (when (< start (length value))
+                   (%emit-scalar-text context (subseq value start)))
+                 (return)))))
 
 (defun %write-single-quoted (value context &optional (indent 0))
   (%emit-char context #\')

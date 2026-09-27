@@ -74,12 +74,7 @@
         (stack nil)
         (first-document t)
         (previous-document-explicit-end nil)
-        (last-key-style nil)
-        (preserve-blank-indentation
-          (not (some (lambda (candidate)
-                       (and (document-end-event-p candidate)
-                            (document-end-event-explicit-p candidate)))
-                     events))))
+        (last-key-style nil))
     (labels ((flow-p () (and stack (member (caar stack) '(:flow :flow-map))))
              (map-p () (and stack (member (caar stack) '(:map :map-after-explicit-key :flow-map))))
              (separator ()
@@ -239,7 +234,10 @@
                             style
                             context
                             (* (max 1 (length stack)) indent)
-                            preserve-blank-indentation))
+                            (not (some (lambda (candidate)
+                                         (and (document-end-event-p candidate)
+                                              (document-end-event-explicit-p candidate)))
+                                       remaining))))
              (when stack (incf (cdr (car stack))))
              (when key-p
                (setf last-key-style style)))))
