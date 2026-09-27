@@ -23,6 +23,7 @@
 (cl-weave:it
  "covers independent frame predicate states"
  (flet ((state (stack)
+          (declare (ignore stack))
           (yaml-kit::make-emitter-frame-state
            (yaml-kit::make-emitter-context (make-string-output-stream) 2)
            2 nil nil)))

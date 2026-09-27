@@ -1,6 +1,8 @@
 ;;;; t/loader-schema-test.lisp
 (in-package #:cl-yaml-kit/test)
 
+(defvar yaml-kit::*probe-tag-table*)
+
 (describe "loader schema"
   (it "evaluates schema definition macros"
     (eval '(yaml-kit::define-tag-table yaml-kit::*probe-tag-table*

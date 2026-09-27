@@ -6,3 +6,5 @@
   (:export #:run-tests)
   )
 (in-package #:cl-yaml-kit/test)
+
+(defvar *conformance-last-summaries* nil)

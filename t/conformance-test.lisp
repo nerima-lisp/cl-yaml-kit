@@ -4,15 +4,10 @@
 ;;;; The yaml-test-suite is a required fixture for this test system.  The
 ;;;; flake and direct runner both provide YAML_TEST_SUITE explicitly.
 
-(defstruct conformance-case
-  id name directory input event json out emit error)
-
 (defvar *conformance-exclusions* nil)
 
 (defparameter *conformance-stage-names*
   '(:reader :loader-isolated :loader-e2e :emitter-isolated :dumper-e2e))
-
-(defvar *conformance-last-summaries* nil)
 
 (defun conformance-source-root ()
   (handler-case

@@ -1,5 +1,8 @@
 (in-package #:cl-yaml-kit/test)
 
+(defstruct conformance-case
+  id name directory input event json out emit error)
+
 ;;;; JSON is used only as the yaml-test-suite's expected-value syntax.  The
 ;;;; canonical form below keeps JSON null/false distinct from NIL and keeps
 ;;;; integers distinct from floating point numbers.

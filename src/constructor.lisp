@@ -1,7 +1,6 @@
 (in-package #:yaml-kit)
 
-(declaim (inline %collection-tag-compatible-p %construct-sequence
-                %construct-mapping))
+(declaim (inline %collection-tag-compatible-p))
 
 (defun %scalar-kind (node schema)
   (let ((tag (node-tag node)))

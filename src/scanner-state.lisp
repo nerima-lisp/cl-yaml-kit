@@ -27,7 +27,7 @@
   (stream-start-produced nil :type boolean)
   (stream-end-produced nil :type boolean))
 
-(declaim (inline sc-char sc-check sc-mark sc-skip sc-skip-line sc-read
+(declaim (inline sc-check sc-mark sc-skip sc-skip-line sc-read
                  sc-read-line sc-hex-value))
 
 (defun sc-char (s &optional (k 0))

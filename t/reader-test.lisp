@@ -160,7 +160,8 @@
 
 #+sbcl
 (progn
-  (defclass infinite-character-stream (sb-gray:fundamental-character-input-stream) ())
+  (eval-when (:compile-toplevel :load-toplevel :execute)
+    (defclass infinite-character-stream (sb-gray:fundamental-character-input-stream) ()))
   (defmethod sb-gray:stream-read-char ((stream infinite-character-stream))
     (declare (ignore stream))
     #\x)
