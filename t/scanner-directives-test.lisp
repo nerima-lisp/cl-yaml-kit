@@ -88,3 +88,15 @@
   ("URI escape surrogate UTF-8" (format nil "!%ED%A0%80~%"))
   ("URI escape out-of-range UTF-8" (format nil "!%F4%90%80%80~%"))
   ("URI escape truncated UTF-8" (format nil "!%E2%82~%")))
+
+(it "maps codec URI failures to parse errors"
+  (dolist (text '("%E0%80%80" "%ED%A0%80" "%F4%90%80%80" "%E2%82"))
+    (let* ((scanner (yaml-kit:make-scanner
+                     (make-array (length text) :element-type 'character
+                                 :initial-contents text)))
+           (buffer (yaml-kit::make-scan-buffer)))
+      (expect (handler-case
+                  (yaml-kit::scan-uri-escapes
+                   scanner nil (yaml-kit::sc-mark scanner) buffer)
+                (yaml-kit:yaml-parse-error () t))
+              :to-be-truthy))))
