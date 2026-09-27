@@ -59,6 +59,12 @@
                                              (yaml-kit:yaml-parse-error () t))
                                            :to-be-truthy))))
                             cases))))
-    (flow-error-cases
+  (flow-error-cases
       ("rejects an unknown escape" "\"\\q\"")
-      ("rejects a surrogate escape" "\"\\uD800\""))))
+      ("rejects a surrogate escape" "\"\\uD800\"")
+      ("rejects an invalid hexadecimal escape" "\"\\x0G\"")
+      ("rejects an out-of-range escape" "\"\\U00110000\"")
+      ("rejects an unterminated quoted scalar" "\"unterminated")
+      ("rejects a comment after a quoted scalar" "\"value\"#comment")
+      ("rejects an unexpected document indicator"
+       (format nil "\"value~%--- ~%more\"")))))
