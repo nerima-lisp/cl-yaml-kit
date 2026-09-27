@@ -2,6 +2,15 @@
 (in-package #:cl-yaml-kit/test)
 
 (describe "loader schema"
+  (it "evaluates schema definition macros"
+    (eval '(yaml-kit::define-tag-table yaml-kit::*probe-tag-table*
+             ("!probe" "probe" :probe :scalar)))
+    (expect (second (first yaml-kit::*probe-tag-table*))
+            :to-equal "tag:yaml.org,2002:probe")
+    (eval '(yaml-kit::define-schema-resolver yaml-kit::%probe-kind :failsafe))
+    (expect (funcall (symbol-function 'yaml-kit::%probe-kind) "value")
+            :to-equal "tag:yaml.org,2002:str"))
+
   (loader-scalar-cases
     ("core null" :core "" "tag:yaml.org,2002:null")
     ("core octal" :core "0o17" "tag:yaml.org,2002:int")
@@ -81,4 +90,10 @@
      (yaml-kit::resolve-tag
      (yaml-kit:make-scalar-node :value "true" :tag "?" :style :plain)
       :schema :core)
-     "tag:yaml.org,2002:bool")))
+     "tag:yaml.org,2002:bool")
+    ("implicit sequence tag resolves"
+     (yaml-kit::resolve-tag (yaml-kit:make-sequence-node))
+     "tag:yaml.org,2002:seq")
+    ("implicit mapping tag resolves"
+     (yaml-kit::resolve-tag (yaml-kit:make-mapping-node))
+     "tag:yaml.org,2002:map")))

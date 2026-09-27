@@ -19,7 +19,11 @@
      (loader-parse-events
       (loader-document (loader-event :scalar :value "-.INF")))
      (lambda (value)
-       (and (floatp value) (< value (- most-positive-double-float))))))
+       (and (floatp value) (< value (- most-positive-double-float)))))
+    ("NaN is a double float"
+     (loader-parse-events
+      (loader-document (loader-event :scalar :value ".NaN")))
+     (lambda (value) (and (floatp value) (not (= value value))))))
 
   (it "constructs a non-empty YAML mapping"
     (let ((value (loader-parse-events
@@ -47,6 +51,103 @@
                                    :duplicate-key-policy :last)
               :to-equal '(("key" . "last")))))
 
+  (it "constructs sequences directly through the sequence contract"
+    (let* ((node (yaml-kit:make-sequence-node
+                  :items (list (yaml-kit:make-scalar-node :value "a" :style :plain)
+                               (yaml-kit:make-scalar-node :value "b" :style :plain))))
+           (list-memo (make-hash-table :test #'eq))
+           (vector-memo (make-hash-table :test #'eq))
+           (list-value (funcall (symbol-function 'yaml-kit::%construct-sequence)
+                                node :list list-memo #'identity))
+           (list-cache-hit (funcall (symbol-function 'yaml-kit::%construct-sequence)
+                                    node :list list-memo #'identity))
+           (vector-value (funcall (symbol-function 'yaml-kit::%construct-sequence)
+                                  node :vector vector-memo #'identity)))
+      (expect list-value :to-equal (yaml-kit:sequence-node-items node))
+      (expect (eq list-cache-hit list-value) :to-be-truthy)
+      (expect (coerce vector-value 'list) :to-equal
+              (yaml-kit:sequence-node-items node))
+      (expect (eq (gethash node vector-memo) vector-value) :to-be-truthy)))
+
+  (it "calls collection construction contracts directly"
+    (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
+           (value (yaml-kit:make-scalar-node :value "value" :style :plain))
+           (node (yaml-kit:make-mapping-node :pairs (list (cons key value))))
+           (memo (make-hash-table :test #'eq))
+           (compatible (symbol-function 'yaml-kit::%collection-tag-compatible-p))
+           (mapping (symbol-function 'yaml-kit::%construct-mapping))
+           (walk (lambda (object)
+                   (if (yaml-kit:scalar-node-p object)
+                       (yaml-kit:scalar-node-value object)
+                       object))))
+      (expect (funcall compatible node "tag:yaml.org,2002:map") :to-be-truthy)
+      (dolist (tag '("!" "?" "!!map"))
+        (expect (funcall compatible
+                         (yaml-kit:make-mapping-node :tag tag)
+                         "tag:yaml.org,2002:map")
+                :to-be-truthy))
+      (expect (yaml-kit:yaml-mapping-p
+               (funcall mapping node :yaml-mapping :error memo walk))
+              :to-be-truthy)
+      (expect (funcall mapping node :alist :error
+                       (make-hash-table :test #'eq) walk)
+              :to-equal '(("key" . "value")))
+      (let ((table (funcall mapping node :hash-table :error
+                            (make-hash-table :test #'equal) walk)))
+        (expect (gethash "key" table) :to-equal "value"))))
+
+  (it "covers direct hash mapping policies and invalid keys"
+    (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
+           (first-value (yaml-kit:make-scalar-node :value "first" :style :plain))
+           (last-value (yaml-kit:make-scalar-node :value "last" :style :plain))
+           (node (yaml-kit:make-mapping-node
+                  :pairs (list (cons key first-value) (cons key last-value))))
+           (mapping (symbol-function 'yaml-kit::%construct-mapping))
+           (walk (lambda (object)
+                   (if (yaml-kit:scalar-node-p object)
+                       (yaml-kit:scalar-node-value object)
+                       object))))
+      (expect (gethash "key"
+                       (funcall mapping node :hash-table :first
+                                (make-hash-table :test #'equal) walk))
+              :to-equal "first")
+      (expect (gethash "key"
+                       (funcall mapping node :hash-table :last
+                                (make-hash-table :test #'equal) walk))
+              :to-equal "last")
+      (expect (handler-case
+                  (progn (funcall mapping node :hash-table :error
+                                  (make-hash-table :test #'equal) walk)
+                         nil)
+                (yaml-kit:yaml-compose-error () t))
+              :to-be-truthy)
+      (let ((bad-node (yaml-kit:make-mapping-node
+                       :pairs (list (cons (yaml-kit:make-yaml-mapping)
+                                          last-value)))))
+        (expect (handler-case
+                    (progn (funcall mapping bad-node :hash-table :error
+                                    (make-hash-table :test #'equal) walk)
+                           nil)
+                  (yaml-kit:yaml-compose-error () t))
+                :to-be-truthy))))
+
+  (it "covers scalar conversion error contracts directly"
+    (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar))
+          (node (yaml-kit:make-scalar-node :value ".NaN" :style :plain)))
+      (expect (floatp (funcall construct-scalar node :core)) :to-be-truthy)))
+
+  (it "keeps an explicitly non-specific NaN scalar numeric"
+    (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar))
+          (node (yaml-kit:make-scalar-node :value ".NaN" :tag "?"
+                                           :style :plain)))
+      (expect (floatp (funcall construct-scalar node :core)) :to-be-truthy)))
+
+  (it "accepts an unknown application collection tag"
+    (expect (funcall (symbol-function 'yaml-kit::%collection-tag-compatible-p)
+                     (yaml-kit:make-mapping-node :tag "!app/map")
+                     "tag:yaml.org,2002:map")
+            :to-be-truthy))
+
   (loader-collection-cases
     ("sequence accepts primary tag" :sequence "tag:yaml.org,2002:seq"
      (lambda (value) (and (vectorp value) (= (length value) 0))))
@@ -62,6 +163,14 @@
      (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0)))))
 
   (loader-error-cases
+    ("rejects a collection tag on a scalar"
+     (loader-parse-events
+      (loader-document (loader-event :scalar :tag "!!seq" :value "value")))
+     yaml-kit:yaml-compose-error)
+    ("rejects a float with trailing data"
+     (loader-parse-events
+      (loader-document (loader-event :scalar :tag "!!float" :value "1 2")))
+     yaml-kit:yaml-compose-error)
     ("rejects an unknown alias"
      (loader-compose-events
       (loader-document (loader-event :alias :anchor "missing")))

@@ -147,7 +147,22 @@
                cases)))
 
 (describe "loader"
+  (it "collects a scalar when document end is omitted"
+    (let ((documents
+            (loader-compose-all-events
+             (list (loader-event :stream-start)
+                   (loader-event :document-start)
+                   (loader-event :scalar :value "value")))))
+      (expect (length documents) :to-equal 1)
+      (expect (yaml-kit:scalar-node-value (first documents)) :to-equal "value")))
   (loader-error-cases
+    ("rejects a second root after a completed collection"
+     (loader-compose-events
+      (loader-document
+       (loader-event :scalar :value "one")
+       (loader-event :sequence-start)
+       (loader-event :sequence-end)))
+     yaml-kit:yaml-compose-error)
     ("rejects a mapping with a scalar collection tag"
      (loader-parse-events
       (loader-document

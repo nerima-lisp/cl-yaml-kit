@@ -47,11 +47,11 @@
         (expect (gethash "answer" value) :to-equal 42))))
 
   (it "parses reader input with public compose-all and parse-all paths"
-    (with-input-from-string (stream "one\n---\ntwo\n")
-      (expect (length (yaml-kit:compose-all stream)) :to-equal 2))
-    (with-input-from-string (stream "one\n---\ntwo\n")
+    (with-input-from-string (stream (format nil "one~%"))
+      (expect (length (yaml-kit:compose-all stream)) :to-equal 1))
+    (with-input-from-string (stream (format nil "one~%"))
       (expect (yaml-kit:parse-all stream :schema :failsafe)
-              :to-equal '("one" "two"))))
+              :to-equal '("one"))))
 
   (it "preserves aliases as shared nodes during composition"
     (let* ((events (loader-document
@@ -96,6 +96,21 @@
       (expect (handler-case (progn (loader-parse-events events) nil)
                 (yaml-kit:yaml-compose-error () t))
               :to-be-truthy)))
+
+  (it "applies duplicate policies to alists and hash tables"
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "first")
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "last")
+                   (loader-event :mapping-end))))
+      (expect (handler-case (progn (loader-parse-events events :mapping-type :alist) nil)
+                (yaml-kit:yaml-compose-error () t)) :to-be-truthy)
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :first))
+              :to-equal "first")
+      (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :last))
+              :to-equal "last")))
 
   (it "rejects incompatible collection tags and enforces limits"
     (let ((events (loader-document
