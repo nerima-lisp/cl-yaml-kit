@@ -46,6 +46,32 @@
         (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
           (expect (funcall predicate scanner) :to-equal expected))))))
 
+(it "exercises scanner state primitives at boundaries"
+  (declare (notinline yaml-kit::sc-char yaml-kit::sc-check yaml-kit::sc-skip
+                      yaml-kit::sc-skip-line yaml-kit::sc-hex-value))
+  (let ((scanner (yaml-kit:make-scanner (scanner-source "A"))))
+    (expect (yaml-kit::sc-char scanner) :to-equal #\A)
+    (setf (yaml-kit::scanner-pos scanner) 1)
+    (expect (yaml-kit::sc-char scanner) :to-equal #\Nul)
+    (expect (yaml-kit::sc-check scanner #\A) :to-equal nil))
+  (let ((scanner (yaml-kit:make-scanner (scanner-source "x"))))
+    (yaml-kit::sc-skip scanner)
+    (expect (yaml-kit::scanner-pos scanner) :to-equal 1)
+    (expect (yaml-kit::scanner-column scanner) :to-equal 1))
+  (dolist (text '("\r\n" "\n"))
+    (let ((scanner (yaml-kit:make-scanner (scanner-source text))))
+      (yaml-kit::sc-skip-line scanner)
+      (expect (yaml-kit::scanner-line scanner) :to-equal 1)
+      (expect (yaml-kit::scanner-column scanner) :to-equal 0)))
+  (let ((scanner (yaml-kit:make-scanner (scanner-source "0Af"))))
+    (expect (yaml-kit::sc-hex-value scanner 0) :to-equal 0)
+    (expect (yaml-kit::sc-hex-value scanner 1) :to-equal 10)
+    (expect (yaml-kit::sc-hex-value scanner 2) :to-equal 15))
+  (let ((scanner (yaml-kit:make-scanner (scanner-source "g"))))
+    (expect (handler-case (yaml-kit::sc-hex-value scanner 0)
+              (yaml-kit:yaml-parse-error () t))
+            :to-be-truthy)))
+
 (defparameter *scanner-token-cases*
   (list
    (list "plain mapping and implicit simple key"

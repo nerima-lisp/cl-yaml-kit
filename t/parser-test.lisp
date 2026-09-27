@@ -91,6 +91,21 @@
     yaml-kit:sequence-end-event yaml-kit:mapping-end-event
     yaml-kit:document-end-event yaml-kit:stream-end-event)))
 
+(it "parses a flow sequence mapping key after a node"
+  (expect (mapcar #'type-of
+                  (parse-parser-token-events
+                   '((:stream-start) (:flow-sequence-start)
+                     (:scalar :value "a" :style :plain) (:key)
+                     (:scalar :value "b" :style :plain)
+                     (:flow-sequence-end) (:stream-end))))
+          :to-equal
+          '(yaml-kit:stream-start-event yaml-kit:document-start-event
+            yaml-kit:sequence-start-event yaml-kit:scalar-event
+            yaml-kit:mapping-start-event yaml-kit:scalar-event
+            yaml-kit:scalar-event yaml-kit:mapping-end-event
+            yaml-kit:mapping-end-event yaml-kit:sequence-end-event
+            yaml-kit:document-end-event yaml-kit:stream-end-event)))
+
 (it "expands parser states and defines callable state functions"
   (let ((expansion
           (macroexpand-1
