@@ -1,9 +1,9 @@
-;;;; Deterministic SBCL benchmark harness for cl-yaml-kit.
+;;;; cl-yaml-kit benchmark corpus and cl-weave measurements.
 (require :asdf)
 
 (let* ((script (or *load-truename* *compile-file-truename*))
-       (benchmark-directory (uiop:pathname-directory-pathname script))
-       (root (uiop:pathname-parent-directory-pathname benchmark-directory))
+       (directory (uiop:pathname-directory-pathname script))
+       (root (uiop:pathname-parent-directory-pathname directory))
        (configured-root (uiop:getenv "CL_YAML_KIT_ROOT")))
   (setf root (if configured-root
                  (uiop:ensure-directory-pathname configured-root)
@@ -16,28 +16,36 @@
 (in-package #:yaml-kit/benchmark)
 
 (defconstant +mib+ (* 1024 1024))
+(defconstant +max-benchmark-items+ 100000)
+(defconstant +max-benchmark-depth+ 1000)
+(defconstant +max-benchmark-scalar-length+ 16777216)
+(defconstant +max-benchmark-config-bytes+ 67108864)
+(defconstant +max-benchmark-iterations+ 1000)
+(defconstant +max-benchmark-samples+ 100)
+(defconstant +max-benchmark-warmup+ 1000)
 (defstruct corpus-case name input value)
-(defstruct benchmark case operation input-bytes thunk validator)
 
-(defun environment-integer (name default minimum)
+;;; This is the complete corpus declaration. Builders contain generation logic;
+;;; changing coverage means changing this table, not the measurement loop.
+(defparameter *case-table*
+  '(("large-block-mapping" block-mapping-input "BENCH_BLOCK_MAPPING_ITEMS" 512 100000)
+    ("large-block-sequence" block-sequence-input "BENCH_BLOCK_SEQUENCE_ITEMS" 512 100000)
+    ("deep-nesting" deep-input "BENCH_DEEP_DEPTH" 1000 1000)
+    ("long-plain-scalar" plain-scalar-input "BENCH_LONG_SCALAR_LENGTH" 65536 16777216)
+    ("long-double-quoted-scalar" double-quoted-scalar-input "BENCH_LONG_SCALAR_LENGTH" 65536 16777216)
+    ("long-block-literal" block-literal-input "BENCH_LONG_SCALAR_LENGTH" 65536 16777216)
+    ("flow-collection-heavy" flow-collection-input "BENCH_FLOW_ITEMS" 512 100000)
+    ("anchor-alias-heavy" anchor-alias-input "BENCH_ANCHOR_ITEMS" 128 100000)
+    ("realistic-config-1mb" realistic-config-input "BENCH_CONFIG_BYTES" 1048576 67108864)))
+
+(defun environment-integer (name default minimum maximum)
   (let ((text (uiop:getenv name)))
     (if (null text)
         default
         (let ((value (parse-integer text :junk-allowed nil)))
-          (unless (>= value minimum)
-            (error "~A must be at least ~D" name minimum))
+          (unless (<= minimum value maximum)
+            (error "~A must be between ~D and ~D" name minimum maximum))
           value))))
-
-(defun mapping-value (items &key (nested-p nil))
-  (yaml-kit:make-yaml-mapping
-   (loop for index below items
-         collect
-         (cons (format nil "key-~4,'0D" index)
-               (if nested-p
-                   (yaml-kit:make-yaml-mapping
-                    (list (cons "name" (format nil "value-~4,'0D" index))
-                          (cons "values" #(1 2 3 5))))
-                   (format nil "value-~4,'0D" index))))))
 
 (defun block-mapping-input (items)
   (with-output-to-string (stream)
@@ -55,122 +63,100 @@
           do (format stream "~V@Tlevel-~D:~%" (* 2 level) level))
     (format stream "~V@Tleaf~%" (* 2 depth))))
 
-(defun deep-value (depth)
-  (loop with value = "leaf"
-        for level downfrom (1- depth) to 0
-        do (setf value (yaml-kit:make-yaml-mapping
-                        (list (cons (format nil "level-~D" level) value))))
-        finally (return value)))
-
-(defun long-scalar-input (length)
+(defun plain-scalar-input (length)
   (with-output-to-string (stream)
     (write-string "text: " stream)
-    (dotimes (index length) (declare (ignore index)) (write-char #\x stream))
+    (loop repeat length do (write-char #\x stream))
     (terpri stream)))
 
-(defun anchor-heavy-input (items)
+(defun double-quoted-scalar-input (length)
   (with-output-to-string (stream)
-    (loop for index below items
-          do (format stream "value-~4,'0D: &anchor-~4,'0D scalar-~4,'0D~%"
-                     index index index)
-             (format stream "alias-~4,'0D: *anchor-~4,'0D~%" index index))))
+    (write-string "text: \"" stream)
+    (loop repeat length do (write-char #\x stream))
+    (write-string "\"" stream)
+    (terpri stream)))
 
-(defun multi-document-input (documents)
+(defun block-literal-input (length)
   (with-output-to-string (stream)
-    (loop for index below documents
-          do (format stream "---~%document: ~D~%value: item-~4,'0D~%...~%"
-                     index index))))
+    (write-string "text: |" stream)
+    (terpri stream)
+    (loop with remaining = length
+          while (plusp remaining)
+          for line-length = (min 80 remaining)
+          do (write-string "  " stream)
+             (loop repeat line-length do (write-char #\x stream))
+             (terpri stream)
+             (decf remaining line-length))))
+
+(defun flow-collection-input (items)
+  (with-output-to-string (stream)
+    (format stream "items: [")
+    (loop for index below items
+          for first = t then nil
+          do (unless first (write-string ", " stream))
+             (format stream "{name: item-~4,'0D, values: [~D, ~D, ~D]}"
+                     index index (1+ index) (* 2 index)))
+    (write-char #\] stream)
+    (terpri stream)))
+
+(defun anchor-alias-input (items)
+  (with-output-to-string (stream)
+    (format stream "base: &base {name: shared, values: [1, 2, 3]}~%")
+    (loop for index below items
+          do (format stream "item-~4,'0D: *base~%" index))))
+
+(defun realistic-config-input (target-bytes)
+  (with-output-to-string (stream)
+    (format stream "version: 1~%service:~%  name: yaml-kit~%  environment: production~%  endpoints:~%")
+    (loop with bytes = 0
+          for index from 0
+          while (< bytes target-bytes)
+          for line = (format nil "    - name: endpoint-~D~%      url: /api/~D~%      timeout-ms: 3000~%      retries: 3~%" index index)
+          do (write-string line stream)
+             (incf bytes (length line)))
+    (format stream "features:~%  parsing: true~%  emitting: true~%  profile: stable~%")))
+
+(defun build-corpus-case (name builder env default maximum)
+  (let* ((size (environment-integer env default 1 maximum))
+         (input (funcall builder size))
+         (value (yaml-kit:parse input)))
+    (unless (plusp (length input))
+      (error "Benchmark corpus produced no input for ~A" name))
+    (make-corpus-case :name name :input input :value value)))
 
 (defun make-corpus-cases ()
-  (let* ((mapping-items (environment-integer "BENCH_BLOCK_MAPPING_ITEMS" 512 1))
-         (sequence-items (environment-integer "BENCH_BLOCK_SEQUENCE_ITEMS" 512 1))
-         (depth (environment-integer "BENCH_DEEP_DEPTH" 32 1))
-         (scalar-length (environment-integer "BENCH_LONG_SCALAR_LENGTH" 65536 1))
-         (anchor-items (environment-integer "BENCH_ANCHOR_ITEMS" 128 1))
-         (documents (environment-integer "BENCH_DOCUMENTS" 32 1)))
-    (list
-     (make-corpus-case :name "large-block-mapping"
-                       :input (block-mapping-input mapping-items)
-                       :value (mapping-value mapping-items))
-     (make-corpus-case :name "large-block-sequence"
-                       :input (block-sequence-input sequence-items)
-                       :value (loop for index below sequence-items
-                                    collect (format nil "value-~4,'0D" index)))
-     (make-corpus-case :name "deep-nesting"
-                       :input (deep-input depth) :value (deep-value depth))
-     (make-corpus-case :name "long-scalar"
-                       :input (long-scalar-input scalar-length)
-                       :value (make-string scalar-length :initial-element #\x))
-     (make-corpus-case :name "anchor-heavy"
-                       :input (anchor-heavy-input anchor-items)
-                       :value (mapping-value anchor-items))
-     (make-corpus-case :name "multi-document"
-                       :input (multi-document-input documents)
-                       :value (yaml-kit:make-yaml-mapping
-                               (list (cons "document" 0)
-                                     (cons "value" "item-0000")))))))
+  (loop for (name builder env default maximum) in *case-table*
+        collect (build-corpus-case name builder env default maximum)))
 
-(defun make-benchmarks (corpus-case)
+(defun bytes-consed ()
+  #+sbcl (sb-ext:get-bytes-consed)
+  #-sbcl 0)
+
+(defun run-operation (operation corpus-case)
   (let ((input (corpus-case-input corpus-case))
         (value (corpus-case-value corpus-case)))
-    (unless (plusp (length input))
-      (error "Benchmark corpus preflight produced no input for ~A"
-             (corpus-case-name corpus-case)))
-    (list
-     (make-benchmark
-      :case corpus-case :operation "parse" :input-bytes (length input)
-      :thunk (lambda () (yaml-kit:parse input))
-      :validator (lambda () (not (null (yaml-kit:parse input)))))
-     (make-benchmark
-      :case corpus-case :operation "emit" :input-bytes (length input)
-      :thunk (lambda () (yaml-kit:emit value))
-      :validator (lambda () (plusp (length (yaml-kit:emit value)))))
-     (make-benchmark
-      :case corpus-case :operation "map-events" :input-bytes (length input)
-      :thunk (lambda ()
-               (let ((count 0))
-                 (yaml-kit:map-events
-                  (lambda (event) (declare (ignore event)) (incf count)) input)
-                 count))
-      :validator (lambda ()
-                   (let ((count 0))
-                     (yaml-kit:map-events
-                      (lambda (event) (declare (ignore event)) (incf count)) input)
-                     (plusp count)))))))
+    (ecase operation
+      (:reader (lambda () (yaml-kit:parse-events input)))
+      (:loader (lambda () (yaml-kit:parse input)))
+      (:dumper (lambda () (yaml-kit:emit value))))))
 
-(defun seconds-since (start end)
-  (/ (- end start) (float internal-time-units-per-second 1d0)))
-
-(defun measure-sample (benchmark iterations)
+(defun measure-operation (thunk input-bytes iterations warmup samples)
   (let ((gc-start (get-internal-real-time)))
     #+sbcl (sb-ext:gc :full t)
-    (let* ((gc-seconds (seconds-since gc-start (get-internal-real-time)))
-           (consed-before #+sbcl (sb-ext:get-bytes-consed) #-sbcl 0)
-           (result (cl-weave:measure (benchmark-thunk benchmark)
-                                     :warmup 0 :samples 1
-                                     :iterations iterations))
-           (elapsed (/ (cl-weave:median-ms result) 1000d0))
-           (consed (- #+sbcl (sb-ext:get-bytes-consed) #-sbcl 0 consed-before)))
-      (list :mb-per-second (if (plusp elapsed)
-                               (/ (* iterations (benchmark-input-bytes benchmark))
-                                  +mib+ elapsed)
-                               0d0)
-            :consed-bytes consed
-            :gc-seconds gc-seconds))))
-
-(defun median (values)
-  (let* ((sorted (sort (copy-list values) #'<))
-         (count (length sorted))
-         (middle (floor count 2)))
-    (if (oddp count)
-        (nth middle sorted)
-        (/ (+ (nth (1- middle) sorted) (nth middle sorted)) 2d0))))
-
-(defun summarize (samples)
-  (flet ((values-of (key) (mapcar (lambda (sample) (getf sample key)) samples)))
-    (list :mb-per-second (median (values-of :mb-per-second))
-          :consed-bytes (median (values-of :consed-bytes))
-          :gc-seconds (median (values-of :gc-seconds)))))
+    (let ((consed-before (bytes-consed))
+          (result (cl-weave:measure thunk :warmup warmup :samples samples
+                                     :iterations iterations)))
+      (list :mb-per-second
+            (let ((milliseconds (cl-weave:median-ms result)))
+              (if (plusp milliseconds)
+                  (/ (* input-bytes 1000d0) +mib+ milliseconds)
+                  0d0))
+            :consed-bytes
+            (/ (- (bytes-consed) consed-before)
+               (* samples iterations))
+            :gc-seconds
+            (/ (- (get-internal-real-time) gc-start)
+               (float internal-time-units-per-second 1d0))))))
 
 (defun tsv (fields)
   (loop for field in fields
@@ -179,37 +165,30 @@
   (terpri))
 
 (defun main ()
-  (let ((iterations (environment-integer "BENCH_ITERATIONS" 3 1))
-        (samples (environment-integer "BENCH_SAMPLES" 5 1))
-        (warmup (environment-integer "BENCH_WARMUP" 1 0)))
-    (format *error-output*
-            "cl-yaml-kit benchmark: corpus=deterministic; iterations=~D; samples=~D; warmup=~D~%"
-            iterations samples warmup)
-    (tsv '("case" "operation" "status" "input_bytes" "iterations" "samples"
-           "median_mb_per_second" "median_consed_bytes" "median_gc_seconds"))
+  (let ((iterations (environment-integer "BENCH_ITERATIONS" 3 1 +max-benchmark-iterations+))
+        (warmup (environment-integer "BENCH_WARMUP" 1 0 +max-benchmark-warmup+))
+        (samples (environment-integer "BENCH_SAMPLES" 5 1 +max-benchmark-samples+))
+        (failures 0))
+    (format *error-output* "cl-yaml-kit benchmark: cl-weave; iterations=~D; warmup=~D; samples=~D~%"
+            iterations warmup samples)
+    (tsv '("case" "stage" "status" "input_bytes" "mib_per_second" "consed_bytes" "gc_seconds"))
     (dolist (corpus-case (make-corpus-cases))
-      (dolist (benchmark (make-benchmarks corpus-case))
+      (dolist (operation '(:reader :loader :dumper))
         (handler-case
-            (progn
-              (unless (funcall (benchmark-validator benchmark))
-                (error "preflight returned NIL"))
-              (dotimes (iteration warmup) (declare (ignore iteration))
-                (funcall (benchmark-thunk benchmark)))
-              (let ((collected (loop repeat samples collect
-                                     (measure-sample benchmark iterations))))
-                (let ((summary (summarize collected)))
-                  (tsv (list (corpus-case-name corpus-case)
-                             (benchmark-operation benchmark) "ok"
-                             (benchmark-input-bytes benchmark) iterations samples
-                             (format nil "~,6F" (getf summary :mb-per-second))
-                             (round (getf summary :consed-bytes))
-                             (format nil "~,6F" (getf summary :gc-seconds)))))))
+            (let* ((input-bytes (length (corpus-case-input corpus-case)))
+                   (thunk (run-operation operation corpus-case))
+                   (result (measure-operation thunk input-bytes iterations warmup samples)))
+              (tsv (list (corpus-case-name corpus-case) (string-downcase operation) "ok"
+                         input-bytes (format nil "~,6F" (getf result :mb-per-second))
+                         (round (getf result :consed-bytes))
+                         (format nil "~,6F" (getf result :gc-seconds)))))
           (error (condition)
+            (incf failures)
             (format *error-output* "benchmark ~A/~A unavailable: ~A~%"
-                    (corpus-case-name corpus-case)
-                    (benchmark-operation benchmark) condition)
-            (tsv (list (corpus-case-name corpus-case)
-                       (benchmark-operation benchmark) "error"
-                       (benchmark-input-bytes benchmark) "-" "-" "-" "-" "-"))))))))
+                    (corpus-case-name corpus-case) operation condition)
+            (tsv (list (corpus-case-name corpus-case) (string-downcase operation)
+                       "error" (length (corpus-case-input corpus-case)) "-" "-" "-"))))))
+    (when (plusp failures)
+      (uiop:quit 1))))
 
 (main)
