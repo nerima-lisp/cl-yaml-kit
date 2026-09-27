@@ -111,33 +111,33 @@ The following run used a Mac16,6 with 16 CPUs and SBCL 2.6.0:
 
 | case | stage | input bytes | MiB/s | consed bytes/op |
 | --- | --- | ---: | ---: | ---: |
-| large-block-mapping | reader | 10,752 | 11.355 | 3,533,696 |
-| large-block-mapping | loader | 10,752 | 9.442 | 3,633,024 |
-| large-block-mapping | dumper | 10,752 | 7.496 | 1,446,784 |
-| large-block-sequence | reader | 6,656 | 8.308 | 2,012,117 |
-| large-block-sequence | loader | 6,656 | 5.755 | 2,063,147 |
-| large-block-sequence | dumper | 6,656 | 8.107 | 772,523 |
-| deep-nesting | reader | 1,011,895 | 196.943 | 4,309,291 |
-| deep-nesting | loader | 1,011,895 | 160.489 | 5,331,669 |
-| deep-nesting | dumper | 1,011,895 | 155.900 | 22,950,101 |
-| long-plain-scalar | reader | 65,543 | 26.827 | 5,614,165 |
-| long-plain-scalar | loader | 65,543 | 41.560 | 5,623,339 |
-| long-plain-scalar | dumper | 65,543 | 16.921 | 1,549,909 |
-| long-double-quoted-scalar | reader | 65,545 | 47.899 | 1,251,285 |
-| long-double-quoted-scalar | loader | 65,545 | 32.371 | 1,207,893 |
-| long-double-quoted-scalar | dumper | 65,545 | 28.157 | 1,549,909 |
-| long-block-literal | reader | 68,004 | 63.770 | 2,477,824 |
-| long-block-literal | loader | 68,004 | 62.600 | 2,501,504 |
-| long-block-literal | dumper | 68,004 | 21.383 | 1,236,800 |
-| flow-collection-heavy | reader | 22,275 | 6.324 | 10,181,803 |
-| flow-collection-heavy | loader | 22,275 | 0.852 | 30,774,955 |
-| flow-collection-heavy | dumper | 22,275 | 1.664 | 12,983,893 |
-| anchor-alias-heavy | reader | 2,222 | 7.332 | 636,288 |
-| anchor-alias-heavy | loader | 2,222 | 5.219 | 717,611 |
-| anchor-alias-heavy | dumper | 2,222 | 5.533 | 295,765 |
-| realistic-config-1mb | reader | 1,048,765 | 8.758 | 351,318,571 |
-| realistic-config-1mb | loader | 1,048,765 | 0.842 | 914,112,363 |
-| realistic-config-1mb | dumper | 1,048,765 | 1.291 | 451,291,797 |
+| large-block-mapping | reader | 10,752 | 9.468 | 2,792,704 |
+| large-block-mapping | loader | 10,752 | 8.463 | 2,899,977 |
+| large-block-mapping | dumper | 10,752 | 4.993 | 1,710,387 |
+| large-block-sequence | reader | 6,656 | 12.636 | 1,540,949 |
+| large-block-sequence | loader | 6,656 | 11.065 | 1,579,093 |
+| large-block-sequence | dumper | 6,656 | 4.151 | 957,406 |
+| deep-nesting | reader | 1,011,895 | 179.728 | 7,740,843 |
+| deep-nesting | loader | 1,011,895 | 177.720 | 8,584,380 |
+| deep-nesting | dumper | 1,011,895 | 138.228 | 19,073,254 |
+| long-plain-scalar | reader | 65,543 | 35.793 | 4,793,839 |
+| long-plain-scalar | loader | 65,543 | 25.797 | 4,794,547 |
+| long-plain-scalar | dumper | 65,543 | 7.696 | 6,795,477 |
+| long-double-quoted-scalar | reader | 65,545 | 56.552 | 1,320,457 |
+| long-double-quoted-scalar | loader | 65,545 | 51.014 | 1,319,518 |
+| long-double-quoted-scalar | dumper | 65,545 | 7.624 | 6,801,604 |
+| long-block-literal | reader | 68,004 | 65.931 | 2,316,322 |
+| long-block-literal | loader | 68,004 | 58.887 | 2,317,662 |
+| long-block-literal | dumper | 68,004 | 7.466 | 6,703,514 |
+| flow-collection-heavy | reader | 22,275 | 6.413 | 8,381,884 |
+| flow-collection-heavy | loader | 22,275 | 1.945 | 12,417,587 |
+| flow-collection-heavy | dumper | 22,275 | 1.809 | 6,486,893 |
+| anchor-alias-heavy | reader | 2,222 | 10.812 | 514,611 |
+| anchor-alias-heavy | loader | 2,222 | 7.488 | 540,928 |
+| anchor-alias-heavy | dumper | 2,222 | 6.233 | 288,623 |
+| realistic-config-1mb | reader | 1,048,765 | 5.624 | 369,006,208 |
+| realistic-config-1mb | loader | 1,048,765 | 1.475 | 514,095,834 |
+| realistic-config-1mb | dumper | 1,048,765 | 1.803 | 211,870,099 |
 
 An sb-sprof run on the 1 MiB configuration identified scanner plain-scalar
 work (`scan-plain-scalar`), cl-regex-kit matching during scalar construction,
@@ -150,6 +150,14 @@ faster, so it is not presented as a universal speedup; the serializer and
 emitter changes are intended to reduce allocation and queue overhead on the
 corresponding hot paths. Re-running on an otherwise idle machine is expected
 to produce different elapsed-time and allocation values.
+
+The cl-regex-kit v2.1.1 to v2.2.0 loader comparison, using the same five-sample
+benchmark settings, was:
+
+| case | v2.1.1 MiB/s | v2.2.0 MiB/s | change |
+| --- | ---: | ---: | ---: |
+| flow-collection-heavy | 1.068 | 1.945 | +82.1% |
+| realistic-config-1mb | 1.341 | 1.475 | +10.0% |
 
 The loader hotspot is a specific call chain:
 `parse -> construct -> %construct-scalar -> resolve-plain-scalar-tag ->
