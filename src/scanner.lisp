@@ -165,11 +165,6 @@
   "yaml_parser_scan_to_next_token."
   (loop
     (when (and (zerop (scanner-column s)) (sc-bom-p s)) (sc-skip s))
-    (when (and (zerop (scanner-flow-level s))
-               (zerop (scanner-column s))
-               (sc-tab-p s))
-      (sc-error s "while scanning for the next token" (sc-mark s)
-                "found a tab character where an indentation space is expected"))
     ;; YAML 1.2.2 permits tabs as non-indentation whitespace.
     (loop while (or (sc-space-p s) (sc-tab-p s))
           do (sc-skip s))
