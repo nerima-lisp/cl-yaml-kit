@@ -2,7 +2,7 @@
 
 (defstruct (parser (:constructor make-parser%))
   scanner state states handler directives version depth
-  max-depth max-scalar-length)
+  max-depth max-scalar-length peek-function next-function)
 
 (defmacro define-parser-state (name (parser &rest arguments) &body body)
   `(defun ,name (,parser ,@arguments)
@@ -10,8 +10,14 @@
      ,@body))
 
 (declaim (inline parser-peek parser-next parser-push parser-pop parser-emit))
-(defun parser-peek (parser) (scanner-peek-token (parser-scanner parser)))
-(defun parser-next (parser) (scanner-next-token (parser-scanner parser)))
+(defun parser-peek (parser)
+  (if (parser-peek-function parser)
+      (funcall (parser-peek-function parser) (parser-scanner parser))
+      (scanner-peek-token (parser-scanner parser))))
+(defun parser-next (parser)
+  (if (parser-next-function parser)
+      (funcall (parser-next-function parser) (parser-scanner parser))
+      (scanner-next-token (parser-scanner parser))))
 (defun parser-push (parser state) (push state (parser-states parser)))
 (defun parser-finish (parser)
   (declare (ignore parser))

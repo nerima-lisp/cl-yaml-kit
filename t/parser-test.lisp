@@ -20,17 +20,11 @@
                   :scanner scanner
                   :state #'yaml-kit::yaml-parser-parse-stream-start
                   :handler (lambda (event) (push event events))
-                  :depth 0 :max-depth 256 :max-scalar-length 1000)))
-    (let ((old-peek (symbol-function 'yaml-kit:scanner-peek-token))
-          (old-next (symbol-function 'yaml-kit:scanner-next-token)))
-      (unwind-protect
-           (progn
-             (setf (symbol-function 'yaml-kit:scanner-peek-token) #'parser-test-peek
-                   (symbol-function 'yaml-kit:scanner-next-token) #'parser-test-next)
-             (loop for state = (yaml-kit::parser-state parser) while state do
-               (setf (yaml-kit::parser-state parser) (funcall state parser))))
-        (setf (symbol-function 'yaml-kit:scanner-peek-token) old-peek
-              (symbol-function 'yaml-kit:scanner-next-token) old-next)))
+                  :depth 0 :max-depth 256 :max-scalar-length 1000
+                  :peek-function #'parser-test-peek
+                  :next-function #'parser-test-next)))
+    (loop for state = (yaml-kit::parser-state parser) while state do
+      (setf (yaml-kit::parser-state parser) (funcall state parser)))
     (nreverse events)))
 
 (defun parser-event-signature (event)
