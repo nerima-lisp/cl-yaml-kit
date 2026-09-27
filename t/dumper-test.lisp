@@ -157,21 +157,21 @@
            (regression-events value sequence-p))
           :to-equal expected))
 
-(cl-weave:it-each
-    ((empty-stream
-       (list (yaml-kit:make-stream-start-event)
-             (yaml-kit:make-stream-end-event))
-       "")
-     (empty-document
-       (list (yaml-kit:make-stream-start-event)
-             (yaml-kit:make-document-start-event)
-             (yaml-kit:make-document-end-event)
-             (yaml-kit:make-stream-end-event))
-       ""))
-  "emits empty event input ~S"
-  (name events expected)
-  (declare (ignore name))
-  (expect (emit-events-to-string events) :to-equal expected))
+(cl-weave:it
+ "emits an empty stream event input"
+ (expect (emit-events-to-string
+          (list (yaml-kit:make-stream-start-event)
+                (yaml-kit:make-stream-end-event)))
+         :to-equal ""))
+
+(cl-weave:it
+ "emits an empty document event input"
+ (expect (emit-events-to-string
+          (list (yaml-kit:make-stream-start-event)
+                (yaml-kit:make-document-start-event)
+                (yaml-kit:make-document-end-event)
+                (yaml-kit:make-stream-end-event)))
+         :to-equal #.(format nil "---~%")))
 
 (cl-weave:it-each
     ((character #\A #.(format nil "A~%"))
@@ -195,14 +195,13 @@
          :to-equal #.(format nil "{}~%")))
 
 (cl-weave:it
- "supports function event producers and write-yaml"
+ "supports event lists and write-yaml"
  (let ((events (list (yaml-kit:make-stream-start-event)
                      (yaml-kit:make-document-start-event)
                      (yaml-kit:make-scalar-event :value "ok")
                      (yaml-kit:make-document-end-event)
                      (yaml-kit:make-stream-end-event))))
-   (expect (yaml-kit:emit-events (lambda (sink)
-                                   (dolist (event events) (funcall sink event))))
+   (expect (yaml-kit:emit-events events)
            :to-equal #.(format nil "ok~%"))
    (with-output-to-string (stream)
      (expect (yaml-kit:write-yaml 7 stream) :to-equal 7)
@@ -218,7 +217,7 @@
   (name value)
   (declare (ignore name))
   (expect (not (null (yaml-kit::%scalar-analysis value))) :to-equal t)
-  (expect (not (null (member (yaml-kit::%scalar-style value :plain nil 80)
+  (expect (not (null (member (yaml-kit::%scalar-style value :plain nil)
                              '(:plain :single-quoted :double-quoted))))
           :to-equal t))
 
