@@ -63,6 +63,11 @@
 
 (defun fetch-flow-entry (s)
   "yaml_parser_fetch_flow_entry."
+  ;; YAML 1.2.2 lists "," among the c-flow-indicator characters, so it can only
+  ;; separate entries inside a flow collection.
+  (unless (plusp (scanner-flow-level s))
+    (sc-error s "while scanning for the next token" (sc-mark s)
+              "found character that cannot start any token"))
   (when (sc-check s #\# 1)
     (sc-error s "while scanning a flow collection" (sc-mark s)
               "did not find expected separation space"))
