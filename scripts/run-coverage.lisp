@@ -154,6 +154,8 @@
     (error "YAML_TEST_SUITE must name the yaml-test-suite fixture directory."))
   (ensure-output-directories data-file report-directory summary-file cache-directory)
   (let ((asdf:*user-cache* (uiop:ensure-directory-pathname cache-directory)))
+    (asdf:clear-output-translations)
+    (asdf:initialize-output-translations)
     (proclaim '(optimize (sb-cover:store-coverage-data 3)))
     (asdf:load-asd (merge-pathnames "cl-yaml-kit.asd" root))
     (asdf:operate 'asdf:compile-op "cl-yaml-kit" :force t)
