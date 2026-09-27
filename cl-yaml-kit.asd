@@ -62,6 +62,7 @@
                (:file "scanner-fetch-test")
                (:file "loader-contract-helpers-test")
                (:file "loader-test") (:file "loader-schema-test")
+               (:file "loader-float-test")
                (:file "loader-construction-test")
                (:file "loader-construction-errors-test")
                (:file "loader-resource-test")
