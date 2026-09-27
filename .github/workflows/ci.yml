@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_run:
+    workflows: [Update flake.lock]
+    types: [completed]
 
 permissions:
   contents: read
@@ -16,16 +19,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # One job on purpose. Granularity belongs in the flake's `checks.*`
-  # attributes, which `nix flake check` evaluates in parallel with build
-  # caching. Splitting these into separate GitHub jobs would duplicate that
-  # scheduling and lose cache sharing between them.
-  #
-  # Add a second job ONLY for work the Nix sandbox cannot do: network access,
-  # a real PTY/TTY, artifact upload, or a different runner OS.
   check:
-    name: nix flake check
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' }}
+    name: nix flake check (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-latest
+          - name: macOS arm64
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       # persist-credentials: false — this job runs untrusted PR code via
@@ -38,18 +43,39 @@ jobs:
       - uses: ./.github/actions/nix-setup
         with:
           cachix-cache: ${{ vars.CACHIX_CACHE }}
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          cachix-auth-token: ${{ github.event_name == 'push' && secrets.CACHIX_AUTH_TOKEN || '' }}
 
       # Runs the SBCL test suite (checks.default), the treefmt formatting gate
       # (checks.formatting), and the mkdocs --strict build (checks.docs).
       #
-      # No --all-systems even though the flake declares two systems. This runner
-      # is x86_64-linux and cannot realise the aarch64-darwin derivations, so
-      # asking for both turns the gate red rather than stricter. See the systems
-      # comment in flake.nix for where darwin is actually checked.
+      # Each matrix runner checks its native flake system. No --all-systems is
+      # needed because that would ask each runner to realise the other system.
       - name: Check flake
         run: nix flake check --print-build-logs
 
       # Catches stray conflict markers and whitespace errors that compile fine.
       - name: Check diff hygiene
         run: git diff --check
+
+  dispatch-flake-update-ci:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    name: Dispatch CI for flake-update PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Dispatch CI for bot-authored update PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPOSITORY/pulls?state=open&per_page=100" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and .head.repo.full_name == env.REPOSITORY) | .head.ref' \
+            | while IFS= read -r ref; do
+                [ -n "$ref" ] || continue
+                gh workflow run ci.yml --ref "$ref"
+              done
