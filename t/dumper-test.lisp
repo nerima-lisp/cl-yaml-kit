@@ -323,12 +323,29 @@
  "covers blank-line and character state helpers"
  (expect (yaml-kit::%blank-line-p "" 0) :to-be-truthy)
  (expect (yaml-kit::%blank-line-p "  " 0) :to-be-truthy)
+ (expect (yaml-kit::%blank-line-p #.(format nil "x~%") 0) :to-equal nil)
+ (expect (yaml-kit::%blank-line-p #.(format nil " ~%") 0) :to-be-truthy)
  (expect (yaml-kit::%blank-line-p "x" 0) :to-be-truthy)
  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
    (yaml-kit::%emit-char context #\A)
    (expect (yaml-kit::emitter-context-column context) :to-equal 1)
    (yaml-kit::%emit-char context #\Newline)
    (expect (yaml-kit::emitter-context-line-start context) :to-equal t)))
+
+(cl-weave:it-each
+    ((document-start "---")
+     (document-end "...")
+     (flow-colon "a: b")
+     (plain-colon "a:b")
+     (hash-start "#x")
+     (hash-middle "a #x")
+     (dash "- x")
+     (dash-word "-x")
+     (space-break "a \nb"))
+  "covers scalar analysis boundaries ~S"
+  (name value)
+  (declare (ignore name))
+  (expect (yaml-kit::%scalar-analysis value) :to-be-truthy))
 
 (cl-weave:it
  "covers frame separator and explicit key branches"
@@ -362,3 +379,16 @@
                               (get-output-stream-string
                                (yaml-kit::emitter-context-stream context)))))
            :to-equal t)))
+
+(cl-weave:it
+ "handles an explicit document after an explicit end"
+ (let ((events (list (yaml-kit:make-stream-start-event)
+                     (yaml-kit:make-document-start-event :explicit-p t)
+                     (yaml-kit:make-scalar-event :value "one")
+                     (yaml-kit:make-document-end-event :explicit-p t)
+                     (yaml-kit:make-document-start-event :explicit-p t)
+                     (yaml-kit:make-mapping-start-event)
+                     (yaml-kit:make-mapping-end-event)
+                     (yaml-kit:make-document-end-event)
+                     (yaml-kit:make-stream-end-event))))
+   (expect (yaml-kit:emit-events events) :to-be-truthy)))
