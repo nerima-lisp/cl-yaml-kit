@@ -108,7 +108,9 @@
           (values passed
                   (unless passed
                     (conformance-loader-difference expected actual)))))
-    (error (condition) (values nil condition))))
+    (yaml-kit:yaml-parse-error (condition) (values nil condition))
+    (yaml-kit:yaml-compose-error (condition) (values nil condition))
+    (yaml-kit:yaml-resource-limit-error (condition) (values nil condition))))
 
 (defun conformance-loader-e2e-result (case)
   (handler-case
@@ -119,13 +121,21 @@
           (values passed
                   (unless passed
                     (conformance-loader-difference expected actual)))))
-    (error (condition) (values nil condition))))
+    (yaml-kit:yaml-parse-error (condition) (values nil condition))
+    (yaml-kit:yaml-compose-error (condition) (values nil condition))
+    (yaml-kit:yaml-resource-limit-error (condition) (values nil condition))))
 
 (defun conformance-dumper-e2e-result (case)
   (handler-case
-      (let* ((values (handler-case
+             (let* ((values (handler-case
                          (conformance-loader-value case)
-                       (error (condition)
+                       (yaml-kit:yaml-parse-error (condition)
+                         (return-from conformance-dumper-e2e-result
+                           (values :skipped condition)))
+                       (yaml-kit:yaml-compose-error (condition)
+                         (return-from conformance-dumper-e2e-result
+                           (values :skipped condition)))
+                       (yaml-kit:yaml-resource-limit-error (condition)
                          (return-from conformance-dumper-e2e-result
                            (values :skipped condition)))))
              (roundtrip-values
@@ -143,7 +153,10 @@
           (values passed
                   (unless passed
                     (conformance-loader-difference value-column actual-column)))))
-    (error (condition) (values nil condition))))
+    (yaml-kit:yaml-emit-error (condition) (values nil condition))
+    (yaml-kit:yaml-parse-error (condition) (values nil condition))
+    (yaml-kit:yaml-compose-error (condition) (values nil condition))
+    (yaml-kit:yaml-resource-limit-error (condition) (values nil condition))))
 
 (defun conformance-emitter-isolated-result (case)
   (handler-case

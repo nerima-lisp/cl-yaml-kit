@@ -6,29 +6,22 @@
   (make-array (length text) :element-type 'character :initial-contents text))
 
 (defun test-timeout-ms ()
-  (or (ignore-errors
-        (parse-integer (uiop:getenv "CL_YAML_TEST_TIMEOUT_MS")))
-      120000))
+  (let ((value (uiop:getenv "CL_YAML_TEST_TIMEOUT_MS")))
+    (if value
+        (parse-integer value :junk-allowed nil)
+        120000)))
 
 (defun run-tests ()
   (setf *conformance-last-summaries* nil)
   (let ((unit-tests-passed
-          (handler-case
-              (run-all :reporter :spec :pass-with-no-tests nil
-                       :timeout-ms (test-timeout-ms))
-            (error (condition)
-              (format t "~&cl-weave test run failed: ~A~%" condition)
-              nil)))
+          (run-all :reporter :spec :pass-with-no-tests nil
+                   :timeout-ms (test-timeout-ms)))
         (conformance-passed nil))
     (unless *conformance-last-summaries*
-      (handler-case
-          (multiple-value-bind (summaries passedp)
-              (conformance-run-report)
-            (declare (ignore summaries))
-            (setf conformance-passed passedp))
-        (error (condition)
-          (format t "~&conformance report failed: ~A~%" condition)
-          (setf conformance-passed nil))))
+      (multiple-value-bind (summaries passedp)
+          (conformance-run-report)
+        (declare (ignore summaries))
+        (setf conformance-passed passedp)))
     (when *conformance-last-summaries*
       (setf conformance-passed
             (every (lambda (summary)
