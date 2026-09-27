@@ -22,6 +22,16 @@
 (defun %yaml-blank-p (character)
   (or (char= character #\Space) (char= character #\Tab)))
 
+(defparameter +scalar-character-predicates+
+  '((:blank . %yaml-blank-p)
+    (:line-break . %yaml-line-break-p)
+    (:printable . %yaml-printable-character-p)))
+
+(defun %scalar-character-properties (character)
+  (loop for (property . predicate) in +scalar-character-predicates+
+        when (funcall predicate character)
+          collect property))
+
 (defun %scalar-style-candidates
     (line-breaks flow-indicators block-indicators leading-space leading-break
      trailing-space trailing-break break-space space-break special-characters)
@@ -40,6 +50,20 @@
 
 (defun %scalar-analysis (value)
   "Return the libyaml-style scalar restrictions for VALUE."
+  (if (zerop (length value))
+      (list :multiline nil :flow-plain nil :block-plain t
+            :single-quoted t :block nil)
+      (multiple-value-bind (block-indicators flow-indicators line-breaks
+                            special-characters leading-space leading-break
+                            trailing-space trailing-break break-space space-break)
+          (%scalar-analysis-flags value)
+        (%scalar-style-candidates line-breaks flow-indicators block-indicators
+                                  leading-space leading-break trailing-space
+                                  trailing-break break-space space-break
+                                  special-characters))))
+
+(defun %scalar-analysis-flags (value)
+  "Collect scalar restrictions from VALUE's characters."
   (declare (optimize (speed 3) (safety 1)) (type simple-string value))
   (let ((length (length value))
         (block-indicators nil) (flow-indicators nil)
@@ -48,21 +72,22 @@
         (trailing-space nil) (trailing-break nil)
         (break-space nil) (space-break nil)
         (previous-space nil) (previous-break nil))
-    (when (zerop length)
-      (return-from %scalar-analysis
-        (list :multiline nil :flow-plain nil :block-plain t
-              :single-quoted t :block nil)))
     (when (or (and (>= length 3) (string= value "---" :end1 3))
               (and (>= length 3) (string= value "..." :end1 3)))
       (setf block-indicators t flow-indicators t))
     (loop for index from 0 below length
           for character = (char value index)
+          for properties = (%scalar-character-properties character)
           for preceded-by-whitespace = (or (zerop index)
-                                           (%yaml-blank-p (char value (1- index)))
-                                           (%yaml-line-break-p (char value (1- index))))
+                                           (member :blank (%scalar-character-properties
+                                                           (char value (1- index))))
+                                           (member :line-break (%scalar-character-properties
+                                                                (char value (1- index)))))
           for followed-by-whitespace = (or (= index (1- length))
-                                           (%yaml-blank-p (char value (1+ index)))
-                                           (%yaml-line-break-p (char value (1+ index))))
+                                           (member :blank (%scalar-character-properties
+                                                           (char value (1+ index))))
+                                           (member :line-break (%scalar-character-properties
+                                                                (char value (1+ index)))))
           do
              (if (zerop index)
                  (cond
@@ -76,25 +101,24 @@
                      (when followed-by-whitespace (setf block-indicators t)))
                    (when (and (char= character #\#) preceded-by-whitespace)
                      (setf flow-indicators t block-indicators t))))
-             (unless (%yaml-printable-character-p character)
+             (unless (member :printable properties)
                (setf special-characters t))
-             (when (%yaml-line-break-p character) (setf line-breaks t))
+             (when (member :line-break properties) (setf line-breaks t))
              (cond
-               ((%yaml-blank-p character)
+               ((member :blank properties)
                 (when (zerop index) (setf leading-space t))
                 (when (= index (1- length)) (setf trailing-space t))
                 (when previous-break (setf break-space t))
                 (setf previous-space t previous-break nil))
-               ((%yaml-line-break-p character)
+               ((member :line-break properties)
                 (when (zerop index) (setf leading-break t))
                 (when (= index (1- length)) (setf trailing-break t))
                 (when previous-space (setf space-break t))
                 (setf previous-space nil previous-break t))
                (t (setf previous-space nil previous-break nil))))
-    (%scalar-style-candidates line-breaks flow-indicators block-indicators
-                              leading-space leading-break trailing-space
-                              trailing-break break-space space-break
-                              special-characters)))
+    (values block-indicators flow-indicators line-breaks special-characters
+            leading-space leading-break trailing-space trailing-break
+            break-space space-break)))
 
 (defun %plain-safe-p (value &key flow tag analysis)
   (let ((analysis (or analysis (%scalar-analysis value))))
