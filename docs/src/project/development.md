@@ -104,15 +104,18 @@ The stages compare different representations, on purpose:
   them with `equal`. A signature carries the event kind and the fields
   that matter: explicit document markers, collection flow style, anchors,
   tags, scalar style, and scalar value.
-- The loader stage compares `in.json` as a JSON data model, one JSON
-  value per document, with object key order and whitespace ignored while
-  null, false, integer, and float values stay distinct. `out.yaml` is
-  compared semantically after dumping.
+- The loader stage compares `in.json` as a JSON data model, one JSON value per
+  document, with object key order and whitespace ignored while null, false,
+  integer, and float values stay distinct.
 - The `emitter-isolated` stage feeds the parsed events to the emitter and
   requires `string=` equality with `emit.yaml`, the suite's libyaml-based
   emitter fixture. Whitespace, line breaks, quoting, indentation, and flow
   or block style are all part of that contract; a meaning-only comparison
   would let representation differences through.
+- The `dumper-e2e` stage dumps the value represented by `in.json`, parses the
+  result, and compares the resulting value with the input model. Its
+  `out.yaml` file is used to decide whether the fixture applies; it is not the
+  semantic comparison target.
 
 ## Coverage
 
