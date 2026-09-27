@@ -17,7 +17,7 @@
       ((%tag-kind tag) (%tag-kind tag))
       (t :str))))
 
-(defun %parse-number (text kind)
+(defun %parse-number (text kind &optional mark)
   (declare (optimize (speed 3) (safety 1)))
   (handler-case
       (case kind
@@ -51,10 +51,10 @@
               (multiple-value-bind (number end)
                   (read-from-string text)
                 (unless (= end (length text))
-                  (signal-yaml-compose-error :mark (node-start-mark node)
+                  (signal-yaml-compose-error :mark mark
                                              :cause "invalid scalar value"))
                 (coerce number 'double-float))))))
-    (error () (signal-yaml-compose-error :mark (node-start-mark node)
+    (error () (signal-yaml-compose-error :mark mark
                                          :cause "invalid scalar value")))))
 
 (defun %construct-scalar (node schema)
@@ -75,9 +75,9 @@
                     +yaml-false+)
                    (t (signal-yaml-compose-error :mark (node-start-mark node)
                                                  :cause "invalid boolean scalar"))))
-      (:int (%parse-number text kind))
+      (:int (%parse-number text kind (node-start-mark node)))
       (:float
-       (let ((number (%parse-number text kind)))
+       (let ((number (%parse-number text kind (node-start-mark node))))
          (if (and (or (null tag) (string= tag "?")))
              (handler-case
                  (multiple-value-bind (integer remainder) (truncate number)
@@ -180,7 +180,16 @@
   (let ((memo (make-hash-table :test #'eq)))
     (labels ((walk (object)
                (cond
-                 ((scalar-node-p object) (%construct-scalar object schema))
+                 ((scalar-node-p object)
+                  (handler-case
+                      (%construct-scalar object schema)
+                    (yaml-compose-error (condition)
+                      (error condition))
+                    (error (condition)
+                      (signal-yaml-compose-error
+                       :mark (node-start-mark object)
+                       :cause "invalid scalar value"
+                       :message (princ-to-string condition)))))
                  ((sequence-node-p object)
                   (unless (%collection-tag-compatible-p object
                                                          "tag:yaml.org,2002:seq")

@@ -14,12 +14,12 @@
      (loader-parse-events
       (loader-document (loader-event :scalar :value ".INF")))
      (lambda (value)
-       (and (floatp value) (= value sb-kernel::double-float-positive-infinity))))
+       (and (floatp value) (> value most-positive-double-float))))
     ("negative infinity is a double float"
      (loader-parse-events
       (loader-document (loader-event :scalar :value "-.INF")))
      (lambda (value)
-       (and (floatp value) (= value sb-kernel::double-float-negative-infinity)))))
+       (and (floatp value) (< value (- most-positive-double-float))))))
 
   (loader-collection-cases
     ("sequence accepts primary tag" :sequence "tag:yaml.org,2002:seq"
@@ -72,7 +72,7 @@
     ("rejects a malformed integer tag"
      (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!int" :value "nope")))
-     sb-int:simple-parse-error)
+     yaml-kit:yaml-compose-error)
     ("rejects a malformed boolean tag"
      (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!bool" :value "maybe")))
@@ -93,4 +93,4 @@
     ("rejects a malformed float tag"
      (loader-parse-events
      (loader-document (loader-event :scalar :tag "!!float" :value "nope")))
-     type-error)))
+     yaml-kit:yaml-compose-error)))

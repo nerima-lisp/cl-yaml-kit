@@ -19,15 +19,22 @@
     ("core negative infinity" :core "-.Inf" "tag:yaml.org,2002:float")
     ("json null" :json "null" "tag:yaml.org,2002:null")
     ("json boolean" :json "false" "tag:yaml.org,2002:bool")
-    ("schema fast path" :core "#" "tag:yaml.org,2002:str"))
+    ("schema fast path" :core "#" "tag:yaml.org,2002:str")
+    ("schema Unicode fast path" :core "あ" "tag:yaml.org,2002:str"))
 
   (loader-parse-cases
     ("signed octal" "-0o17" () -15)
     ("signed hexadecimal" "+0x10" () 16)
     ("decimal float" "0.278" () 0.278d0)
-    ("integral decimal float" "450.00" () 450)
-    ("positive infinity" ".INF" () sb-kernel::double-float-positive-infinity)
-    ("negative infinity" "-.INF" () sb-kernel::double-float-negative-infinity))
+    ("integral decimal float" "450.00" () 450))
+
+  (loader-predicate-cases
+    ("positive infinity"
+     (loader-parse-events (loader-document (loader-event :scalar :value ".INF")))
+     (lambda (value) (and (floatp value) (> value most-positive-double-float))))
+    ("negative infinity"
+     (loader-parse-events (loader-document (loader-event :scalar :value "-.INF")))
+     (lambda (value) (and (floatp value) (< value (- most-positive-double-float))))))
 
   (loader-value-cases
     ("empty input has no documents"
