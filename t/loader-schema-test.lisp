@@ -55,10 +55,10 @@
   (loader-predicate-cases
     ("positive infinity"
      (loader-parse-events (loader-document (loader-event :scalar :value ".INF")))
-     (lambda (value) (and (floatp value) (> value most-positive-double-float))))
+     (lambda (value) (and (floatp value) (and (yaml-kit::%float-infinity-p value) (not (minusp value))))))
     ("negative infinity"
      (loader-parse-events (loader-document (loader-event :scalar :value "-.INF")))
-     (lambda (value) (and (floatp value) (< value (- most-positive-double-float))))))
+     (lambda (value) (and (floatp value) (and (yaml-kit::%float-infinity-p value) (minusp value))))))
 
   (loader-value-cases
     ("empty input has no documents"

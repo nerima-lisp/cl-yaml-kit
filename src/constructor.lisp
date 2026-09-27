@@ -61,12 +61,13 @@
       (:int (%parse-number text kind (node-start-mark node)))
       (:float
        (let ((number (%parse-number text kind (node-start-mark node))))
-         (if (and (or (null tag) (string= tag "?")))
+         (if (or (%float-nan-p number) (%float-infinity-p number)
+                 (not (or (null tag) (string= tag "?"))))
+             number
              (handler-case
                  (multiple-value-bind (integer remainder) (truncate number)
                    (if (zerop remainder) integer number))
-               (arithmetic-error () number))
-             number)))
+               (arithmetic-error () number)))))
       (t text))))
 
 (defun %collection-tag-compatible-p (node expected)

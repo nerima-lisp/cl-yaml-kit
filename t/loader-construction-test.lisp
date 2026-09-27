@@ -14,16 +14,16 @@
      (loader-parse-events
       (loader-document (loader-event :scalar :value ".INF")))
      (lambda (value)
-       (and (floatp value) (> value most-positive-double-float))))
+       (and (floatp value) (and (yaml-kit::%float-infinity-p value) (not (minusp value))))))
     ("negative infinity is a double float"
      (loader-parse-events
       (loader-document (loader-event :scalar :value "-.INF")))
      (lambda (value)
-       (and (floatp value) (< value (- most-positive-double-float)))))
+       (and (floatp value) (and (yaml-kit::%float-infinity-p value) (minusp value)))))
     ("NaN is a double float"
      (loader-parse-events
       (loader-document (loader-event :scalar :value ".NaN")))
-     (lambda (value) (and (floatp value) (not (= value value))))))
+     (lambda (value) (and (floatp value) (yaml-kit::%float-nan-p value)))))
 
   (it "constructs a non-empty YAML mapping"
     (let ((value (loader-parse-events
