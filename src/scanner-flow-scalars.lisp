@@ -60,12 +60,13 @@
       (t (sc-error s "while parsing a quoted scalar" start
                   "found unknown escape character")))))
 
-(defun scan-flow-scalar (s single-p)
-  (let ((start (sc-mark s)) (out (make-scan-buffer))
-        (leading (make-scan-buffer)) (trailing (make-scan-buffer))
-        (spaces (make-scan-buffer)) (leading-blanks nil)
-        (quote (if single-p #\' #\")))
-    (sc-skip s)
+(defun %flow-append-spaces (out spaces)
+  (loop for i below (fill-pointer spaces) do
+    (vector-push-extend (aref spaces i) out))
+  (setf (fill-pointer spaces) 0))
+
+(defun %scan-flow-scalar-body (s single-p start out leading trailing spaces leading-blanks)
+  (let ((quote (if single-p #\' #\")))
     (loop
       (when (and (zerop (mark-column (sc-mark s)))
                  (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
@@ -76,9 +77,6 @@
       (when (sc-z-p s)
         (sc-error s "while scanning a quoted scalar" start
                   "found unexpected end of stream"))
-      ;; s-flow-line-prefix: once the scalar has folded over a line break, the
-      ;; continuation line must be indented past the block node holding it, so
-      ;; "quoted: \"a\nb\"" is not a legal document.
       (when (and leading-blanks
                  (< (scanner-column s) (1+ (scanner-indent s))))
         (sc-error s "while scanning a quoted scalar" start
@@ -109,9 +107,15 @@
                        (sc-read-line s leading)
                        (setf leading-blanks t)))))
       (if leading-blanks (%flow-fold out leading trailing)
-          (progn (loop for i below (fill-pointer spaces) do
-                   (vector-push-extend (aref spaces i) out))
-                 (setf (fill-pointer spaces) 0))))
+          (%flow-append-spaces out spaces)))
+    leading-blanks))
+
+(defun scan-flow-scalar (s single-p)
+  (let ((start (sc-mark s)) (out (make-scan-buffer))
+        (leading (make-scan-buffer)) (trailing (make-scan-buffer))
+        (spaces (make-scan-buffer)) (leading-blanks nil))
+    (sc-skip s)
+    (%scan-flow-scalar-body s single-p start out leading trailing spaces leading-blanks)
     (sc-skip s)
     (when (sc-check s #\#)
       (sc-error s "while scanning a quoted scalar" start
@@ -119,66 +123,62 @@
     (make-token :scalar start (sc-mark s) :value (scan-buffer-string out)
                 :style (if single-p :single-quoted :double-quoted))))
 
+(defun %scan-plain-scalar-body (s start out end leading trailing spaces leading-blanks indent)
+  (loop
+    (when (and (zerop (mark-column (sc-mark s)))
+               (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
+                   (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
+               (sc-blankz-p s 3)) (return))
+    (when (and (zerop (scanner-flow-level s))
+               (zerop (mark-column (sc-mark s)))
+               (member (sc-char s) '(#\- #\? #\:))
+               (sc-blankz-p s 1))
+      (return))
+    (when (sc-check s #\#) (return))
+    (loop while (not (sc-blankz-p s)) do
+      (cond
+        ((and (plusp (scanner-flow-level s))
+              (sc-check s #\:)
+              (or (sc-check s #\, 1) (sc-check s #\? 1)
+                  (sc-check s #\[ 1) (sc-check s #\] 1)
+                  (sc-check s #\{ 1) (sc-check s #\} 1)))
+         (return))
+        ((or (and (sc-check s #\:) (sc-blankz-p s 1))
+             (and (plusp (scanner-flow-level s))
+                  (or (sc-check s #\,) (sc-check s #\[) (sc-check s #\])
+                      (sc-check s #\{) (sc-check s #\}))))
+         (return)))
+      (when (or leading-blanks (plusp (fill-pointer spaces)))
+        (if leading-blanks (%flow-fold out leading trailing)
+            (%flow-append-spaces out spaces))
+        (setf leading-blanks nil))
+      (sc-read s out) (setf end (sc-mark s)))
+    (unless (or (sc-blank-p s) (sc-break-p s)) (return))
+    (loop while (or (sc-blank-p s) (sc-break-p s)) do
+      (if (sc-blank-p s)
+          (if leading-blanks
+              (progn
+                (when (and (zerop (scanner-flow-level s))
+                           (< (mark-column (sc-mark s)) indent)
+                           (sc-tab-p s))
+                  (sc-error s "while scanning a plain scalar" start
+                            "found a tab character that violates indentation"))
+                (sc-skip s))
+              (sc-read s spaces))
+          (if leading-blanks (sc-read-line s trailing)
+              (progn (setf (fill-pointer spaces) 0)
+                     (sc-read-line s leading) (setf leading-blanks t)))))
+    (when (and (zerop (scanner-flow-level s))
+               (< (mark-column (sc-mark s)) indent)) (return)))
+  (values end leading-blanks))
+
 (defun scan-plain-scalar (s)
   (let ((start (sc-mark s)) (end (sc-mark s)) (out (make-scan-buffer))
         (leading (make-scan-buffer)) (trailing (make-scan-buffer))
         (spaces (make-scan-buffer)) (leading-blanks nil)
         (indent (1+ (scanner-indent s))))
-    (loop
-      ;; libyaml has exactly one document-indicator test here, and it requires
-      ;; column zero for "---" and "..." alike.  A "..." outside column zero is
-      ;; plain scalar content; testing it without that guard would end the
-      ;; scalar without consuming a character and stall fetch-more-tokens.
-      (when (and (zerop (mark-column (sc-mark s)))
-                 (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
-                     (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
-                 (sc-blankz-p s 3)) (return))
-      ;; A block indicator at the current indentation starts a new node;
-      ;; it is not a continuation line of the preceding plain scalar.
-      (when (and (zerop (scanner-flow-level s))
-                 (zerop (mark-column (sc-mark s)))
-                 (member (sc-char s) '(#\- #\? #\:))
-                 (sc-blankz-p s 1))
-        (return))
-      (when (sc-check s #\#) (return))
-      (loop while (not (sc-blankz-p s)) do
-        ;; YAML 1.2.2 ends plain scalars at colon + blank, not at every colon.
-        (cond
-          ((and (plusp (scanner-flow-level s))
-                (sc-check s #\:)
-                (or (sc-check s #\, 1) (sc-check s #\? 1)
-                    (sc-check s #\[ 1) (sc-check s #\] 1)
-                    (sc-check s #\{ 1) (sc-check s #\} 1)))
-           (return))
-          ((or (and (sc-check s #\:) (sc-blankz-p s 1))
-               (and (plusp (scanner-flow-level s))
-                    (or (sc-check s #\,)
-                        (sc-check s #\[) (sc-check s #\])
-                        (sc-check s #\{) (sc-check s #\}))))
-           (return)))
-        (when (or leading-blanks (plusp (fill-pointer spaces)))
-          (if leading-blanks (%flow-fold out leading trailing)
-              (progn (loop for i below (fill-pointer spaces) do
-                       (vector-push-extend (aref spaces i) out))
-                     (setf (fill-pointer spaces) 0)))
-          (setf leading-blanks nil))
-        (sc-read s out) (setf end (sc-mark s)))
-      (unless (or (sc-blank-p s) (sc-break-p s)) (return))
-      (loop while (or (sc-blank-p s) (sc-break-p s)) do
-        (if (sc-blank-p s)
-            (if leading-blanks
-                (progn
-                  (when (and (zerop (scanner-flow-level s))
-                             (< (mark-column (sc-mark s)) indent)
-                             (sc-tab-p s))
-                    (sc-error s "while scanning a plain scalar" start
-                              "found a tab character that violates indentation"))
-                  (sc-skip s))
-                (sc-read s spaces))
-            (if leading-blanks (sc-read-line s trailing)
-                (progn (setf (fill-pointer spaces) 0)
-                       (sc-read-line s leading) (setf leading-blanks t)))))
-      (when (and (zerop (scanner-flow-level s))
-                 (< (mark-column (sc-mark s)) indent)) (return)))
+    ;; The body helper keeps the scalar's cursor and folding state together.
+    (multiple-value-setq (end leading-blanks)
+      (%scan-plain-scalar-body s start out end leading trailing spaces leading-blanks indent))
     (when leading-blanks (setf (scanner-simple-key-allowed s) t))
     (make-token :scalar start end :value (scan-buffer-string out) :style :plain)))
