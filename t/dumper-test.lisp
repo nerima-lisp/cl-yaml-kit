@@ -490,6 +490,8 @@
   (declare (ignore name))
   (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
          (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+    (setf (yaml-kit::emitter-frame-state-first-document state) nil
+          (yaml-kit::emitter-frame-state-previous-document-explicit-end state) t)
     (yaml-kit::%emit-document-start-event
      (yaml-kit:make-document-start-event :explicit-p explicit-p)
      state
