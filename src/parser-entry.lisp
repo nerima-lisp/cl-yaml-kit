@@ -47,7 +47,6 @@
       (error 'yaml-resource-limit-error :limit-name "input length"
              :limit max-input-length :actual (length text)))
     (let ((scanner (make-scanner text)))
-      (setf (scanner-token-recycling-enabled scanner) t)
       (let ((parser (make-parser% :scanner scanner
                                 :state 'yaml-parser-parse-stream-start
                                 :states nil :handler handler :directives nil

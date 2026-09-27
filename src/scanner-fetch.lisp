@@ -9,7 +9,7 @@
         (scanner-simple-key-allowed s) t
         (scanner-stream-start-produced s) t)
   (let ((mark (sc-mark s)))
-    (enqueue-token s (make-token :stream-start mark mark))))
+    (enqueue-token s (make-scanner-token s :stream-start mark mark))))
 
 (defun fetch-stream-end (s)
   (unless (zerop (scanner-column s))
@@ -19,7 +19,7 @@
   (remove-simple-key s)
   (setf (scanner-simple-key-allowed s) nil)
   (let ((mark (sc-mark s)))
-    (enqueue-token s (make-token :stream-end mark mark))))
+    (enqueue-token s (make-scanner-token s :stream-end mark mark))))
 
 (defun fetch-directive (s)
   (unroll-indent s -1)
@@ -33,7 +33,7 @@
   (setf (scanner-simple-key-allowed s) nil)
   (let ((start (sc-mark s)))
     (dotimes (i 3) (sc-skip s))
-    (enqueue-token s (make-token kind start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s kind start (sc-mark s)))))
 
 (defun fetch-flow-collection-start (s kind)
   (save-simple-key s)
@@ -41,7 +41,7 @@
   (setf (scanner-simple-key-allowed s) t)
   (let ((start (sc-mark s)))
     (sc-skip s)
-    (enqueue-token s (make-token kind start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s kind start (sc-mark s)))))
 
 (defun fetch-flow-collection-end (s kind)
   (when (and (eq kind :flow-sequence-end)
@@ -53,7 +53,7 @@
   (setf (scanner-simple-key-allowed s) nil)
   (let ((start (sc-mark s)))
     (sc-skip s)
-    (enqueue-token s (make-token kind start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s kind start (sc-mark s)))))
 
 (defun fetch-flow-entry (s)
   ;; YAML 1.2.2 lists "," among the c-flow-indicator characters, so it can only
@@ -75,7 +75,7 @@
   (setf (scanner-simple-key-allowed s) t)
   (let ((start (sc-mark s)))
     (sc-skip s)
-    (enqueue-token s (make-token :flow-entry start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s :flow-entry start (sc-mark s)))))
 
 (defun fetch-block-entry (s)
   (unless (plusp (scanner-flow-level s))
@@ -89,7 +89,7 @@
   (setf (scanner-simple-key-allowed s) t)
   (let ((start (sc-mark s)))
     (sc-skip s)
-    (enqueue-token s (make-token :block-entry start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s :block-entry start (sc-mark s)))))
 
 (defun fetch-key (s)
   (unless (plusp (scanner-flow-level s))
@@ -100,7 +100,7 @@
   (setf (scanner-simple-key-allowed s) (zerop (scanner-flow-level s)))
   (let ((start (sc-mark s)))
     (sc-skip s)
-    (enqueue-token s (make-token :key start (sc-mark s)))))
+    (enqueue-token s (make-scanner-token s :key start (sc-mark s)))))
 
 (defun fetch-value (s)
   (let ((simple-key (car (scanner-simple-keys s))))
@@ -114,8 +114,8 @@
                 (roll-indent s (mark-column mark)
                              (simple-key-token-number simple-key)
                              :block-mapping-start mark
-                             (list (make-token :key mark mark)))
-                (insert-token s index (make-token :key mark mark))))
+                             (list (make-scanner-token s :key mark mark)))
+                (insert-token s index (make-scanner-token s :key mark mark))))
           (setf (simple-key-possible simple-key) nil
                 (scanner-simple-key-allowed s) nil))
         (progn
@@ -129,7 +129,7 @@
                 (zerop (scanner-flow-level s)))))
     (let ((start (sc-mark s)))
       (sc-skip s)
-      (enqueue-token s (make-token :value start (sc-mark s))))))
+      (enqueue-token s (make-scanner-token s :value start (sc-mark s))))))
 
 (defun fetch-anchor (s kind)
   (save-simple-key s)

@@ -96,7 +96,7 @@
             (end-cell (list (sc-mark s))))
         (multiple-value-bind (string leading-break trailing-breaks)
             (scan-block-scalar-content s literal-p indent-cell start-mark end-cell)
-          (make-token :scalar start-mark (car end-cell)
+          (make-scanner-token s :scalar start-mark (car end-cell)
                       :value (scan-buffer-string
                               (scan-block-scalar-chomping string leading-break trailing-breaks chomping))
                       :style (if literal-p :literal :folded)))))))

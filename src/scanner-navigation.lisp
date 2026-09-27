@@ -49,15 +49,15 @@
     (push (scanner-indent s) (scanner-indents s))
     (setf (scanner-indent s) column)
     (if (= number -1)
-        (enqueue-token s (make-token kind mark mark))
+        (enqueue-token s (make-scanner-token s kind mark mark))
         (insert-tokens s (- number (scanner-tokens-parsed s))
-                       (cons (make-token kind mark mark) additional-tokens))))
+                       (cons (make-scanner-token s kind mark mark) additional-tokens))))
   t)
 
 (defun unroll-indent (s column)
   (unless (plusp (scanner-flow-level s))
     (loop while (> (scanner-indent s) column)
-          do (enqueue-token s (make-token :block-end (sc-mark s) (sc-mark s)))
+          do (enqueue-token s (make-scanner-token s :block-end (sc-mark s) (sc-mark s)))
              (setf (scanner-indent s) (pop (scanner-indents s)))))
   t)
 

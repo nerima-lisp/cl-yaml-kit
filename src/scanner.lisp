@@ -7,20 +7,19 @@
 (defun scanner-queue-nonempty-p (s)
   (< (scanner-tokens-head s) (fill-pointer (scanner-tokens s))))
 
-(defun scanner-peek-token (s)
-  (when (scanner-stream-end-produced s) (return-from scanner-peek-token nil))
+(defun %scanner-peek-token (s)
+  (when (scanner-stream-end-produced s) (return-from %scanner-peek-token nil))
   (unless (scanner-token-available s) (fetch-more-tokens s))
   (when (scanner-queue-nonempty-p s)
     (aref (scanner-tokens s) (scanner-tokens-head s))))
 
-(defun scanner-next-token (s)
-  (let ((token (scanner-peek-token s)))
+(defun %scanner-next-token (s)
+  (let ((token (%scanner-peek-token s)))
     (when token
       (incf (scanner-tokens-head s))
       (incf (scanner-tokens-parsed s))
-      (when (scanner-token-recycling-enabled s)
-        (setf (aref (scanner-tokens s) (1- (scanner-tokens-head s))) nil
-              (scanner-recyclable-token s) token))
+      (setf (aref (scanner-tokens s) (1- (scanner-tokens-head s))) nil
+            (scanner-recyclable-token s) token)
       (setf (scanner-token-available s) nil)
       (when (eq (token-kind token) :stream-end)
         (setf (scanner-stream-end-produced s) t))
@@ -42,8 +41,7 @@ input, so the bound is a multiple of the input length rather than the length."
   (+ 64 (* 8 (length (scanner-text s)))))
 
 (defun recycle-scanner-token (s)
-  (when (and (scanner-token-recycling-enabled s)
-             (scanner-recyclable-token s))
+  (when (scanner-recyclable-token s)
     (push (scanner-recyclable-token s) (scanner-token-pool s))
     (setf (scanner-recyclable-token s) nil))
   t)
@@ -65,16 +63,18 @@ input, so the bound is a multiple of the input length rather than the length."
                           (scanner-tokens-parsed s)))
               (setf need-more t) (return))))
         (unless need-more (return (setf (scanner-token-available s) t)))
-        (if (scanner-token-recycling-enabled s)
-            (let ((*token-pool* (scanner-token-pool s)))
-              (fetch-next-token s)
-              (setf (scanner-token-pool s) *token-pool*))
-            (fetch-next-token s))
+        (fetch-next-token s)
         ;; A fetch that stops advancing the position would otherwise enqueue
         ;; tokens until the heap dies, so bound the queue by the input size.
         (let ((produced (fill-pointer (scanner-tokens s))))
           (when (> produced limit)
             (scanner-resource-error s "tokens" limit produced)))))))
+
+(defun scanner-peek-token (s)
+  (%scanner-peek-token s))
+
+(defun scanner-next-token (s)
+  (%scanner-next-token s))
 
 (defun fetch-next-token (s)
   (unless (scanner-stream-start-produced s)

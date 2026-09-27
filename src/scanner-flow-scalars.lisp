@@ -125,7 +125,7 @@
     (when (sc-check s #\#)
       (sc-error s "while scanning a quoted scalar" start
                 "found unexpected comment indicator"))
-    (make-token :scalar start (sc-mark s) :value (scan-buffer-string out)
+    (make-scanner-token s :scalar start (sc-mark s) :value (scan-buffer-string out)
                 :style (if single-p :single-quoted :double-quoted))))
 
 (defun %scan-plain-scalar-body
@@ -235,7 +235,7 @@
               finally (progn (setf simple-end index) (return)))
         (when (and simple-end (> index start-pos) (sc-printable-p s (- index start-pos))) (loop repeat (- index start-pos) do (sc-skip s))
           (return-from scan-plain-scalar
-            (make-token :scalar start (sc-mark s)
+            (make-scanner-token s :scalar start (sc-mark s)
                         :value (subseq text start-pos index)
                         :style :plain)))))
     (let ((start start)
@@ -253,5 +253,5 @@
         (%scan-plain-scalar-body s start out end leading trailing spaces
                                  leading-blanks indent))
       (when leading-blanks (setf (scanner-simple-key-allowed s) t))
-      (make-token :scalar start end :value (scan-buffer-string out)
+      (make-scanner-token s :scalar start end :value (scan-buffer-string out)
                   :style :plain))))

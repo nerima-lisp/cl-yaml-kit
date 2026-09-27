@@ -15,8 +15,6 @@
   (major nil :type (or null fixnum))
   (minor nil :type (or null fixnum)))
 
-(defvar *token-pool* nil)
-
 (defun token-ends-json-like-node-p (token)
   "True when TOKEN closes a node that c-flow-json-value allows as a flow key.
 YAML 1.2.2 spells that set as a quoted scalar or a completed flow collection;
@@ -36,15 +34,6 @@ both surround the node with indicators, so a following \":\" needs no separation
   (check-type style (or null scalar-style))
   (check-type major (or null fixnum))
   (check-type minor (or null fixnum))
-  (let ((token (or (pop *token-pool*)
-                   (%make-token kind start-mark end-mark))))
-    (setf (token-kind token) kind
-          (token-start-mark token) start-mark
-          (token-end-mark token) end-mark
-          (token-value token) value
-          (token-handle token) handle
-          (token-suffix token) suffix
-          (token-style token) style
-          (token-major token) major
-          (token-minor token) minor)
-    token))
+  (%make-token kind start-mark end-mark
+               :value value :handle handle :suffix suffix :style style
+               :major major :minor minor))

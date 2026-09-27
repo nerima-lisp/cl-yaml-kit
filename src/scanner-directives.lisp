@@ -21,7 +21,7 @@
           (sc-blankz-p s 3))
      (let ((document-start (sc-mark s)))
        (dotimes (i 3) (sc-skip s))
-       (make-token :document-start document-start (sc-mark s))))
+       (make-scanner-token s :document-start document-start (sc-mark s))))
     (t (sc-error s "while scanning a directive" start
                  "found reserved directive name"))))
 
@@ -37,11 +37,11 @@
            (unless (= major 1) (sc-error s "while scanning a %YAML directive" start
                                          "found incompatible YAML major version"))
            (let ((end (sc-mark s))) (scan-directive-end s start)
-             (return (make-token :version-directive start end :major major :minor minor)))))
+             (return (make-scanner-token s :version-directive start end :major major :minor minor)))))
         ((string= name "TAG")
          (multiple-value-bind (handle prefix) (scan-tag-directive-value s start)
            (let ((end (sc-mark s))) (scan-directive-end s start)
-             (return (make-token :tag-directive start end :handle handle :value prefix)))))
+             (return (make-scanner-token s :tag-directive start end :handle handle :value prefix)))))
           (t
            ;; YAML 1.2.2 reserves unknown directives; consume their line.
            (%skip-reserved-directive-line s)
@@ -118,7 +118,7 @@
                       "while scanning an anchor"
                       "while scanning an alias")
                 start "did not find expected anchor name"))
-    (make-token kind start (sc-mark s) :value (scan-buffer-string b))))
+    (make-scanner-token s kind start (sc-mark s) :value (scan-buffer-string b))))
 
 (defun scan-tag (s)
   (let ((start (sc-mark s)) handle suffix)
@@ -137,7 +137,7 @@
                      (when (zerop (length suffix)) (rotatef handle suffix))))))
     (unless (or (sc-blankz-p s) (and (> (scanner-flow-level s) 0) (sc-check s #\,)))
       (sc-error s "while scanning a tag" start "did not find expected whitespace or line break"))
-    (make-token :tag start (sc-mark s) :handle handle :suffix suffix)))
+    (make-scanner-token s :tag start (sc-mark s) :handle handle :suffix suffix)))
 
 (defun scan-tag-handle (s directive start)
   (let ((b (make-scan-buffer)))

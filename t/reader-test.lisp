@@ -43,6 +43,15 @@
     (error (condition) condition)))
 
 (describe "reader termination"
+  (it "keeps parser event values stable after token reuse"
+    (let* ((input (format nil "root:~%  first: one~%  second: two~%  third: three~%"))
+           (events (yaml-kit:parse-events
+                    (make-array (length input) :element-type 'character
+                                :initial-contents input))))
+      (let ((values (remove-if-not #'yaml-kit:scalar-event-p events)))
+        (expect (mapcar #'yaml-kit:scalar-event-value values)
+                :to-equal '("root" "first" "one" "second" "two"
+                            "third" "three")))))
   (cl-weave:it-fuzz "ends generated inputs with a parse result or a declared error"
     ((text (cl-weave:gen-string :min-length 0 :max-length 64
                                 :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))

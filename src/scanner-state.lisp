@@ -21,7 +21,6 @@
   (scan-spaces (make-scan-buffer) :type vector)
   (token-pool nil :type list)
   (recyclable-token nil :type (or null token))
-  (token-recycling-enabled nil :type boolean)
   (tokens-head 0 :type fixnum)
   (tokens-parsed 0 :type fixnum)
   (token-available nil :type boolean)
@@ -33,6 +32,20 @@
   (json-like-node-end nil :type boolean)
   (stream-start-produced nil :type boolean)
   (stream-end-produced nil :type boolean))
+
+(defun make-scanner-token (s kind start-mark end-mark &key value handle suffix style major minor)
+  (let ((token (or (pop (scanner-token-pool s))
+                   (%make-token kind start-mark end-mark))))
+    (setf (token-kind token) kind
+          (token-start-mark token) start-mark
+          (token-end-mark token) end-mark
+          (token-value token) value
+          (token-handle token) handle
+          (token-suffix token) suffix
+          (token-style token) style
+          (token-major token) major
+          (token-minor token) minor)
+    token))
 
 (declaim (inline sc-check sc-mark sc-skip sc-skip-line sc-read
                  sc-read-line sc-hex-value))
