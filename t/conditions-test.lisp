@@ -28,6 +28,15 @@
                     (make-condition 'yaml-kit:yaml-emit-error)
                     (make-condition 'yaml-kit:yaml-resource-limit-error)))
       (expect (search ": YAML" (condition-report condition)) :to-be-truthy)))
+  (it "reports default messages and cause combinations"
+    (expect (search "YAML error"
+                    (condition-report (make-condition 'yaml-kit:yaml-kit-error)))
+            :to-be-truthy)
+    (let ((cause-only (make-condition 'yaml-kit:yaml-compose-error :cause "cause"))
+          (both (make-condition 'yaml-kit:yaml-emit-error
+                                :cause "cause" :message "message")))
+      (expect (search "; cause" (condition-report cause-only)) :to-be-truthy)
+      (expect (search "message (cause)" (condition-report both)) :to-be-truthy)))
   (define-condition-contract-test yaml-parse-error
     (make-condition 'yaml-kit:yaml-parse-error :line 4 :column 5 :offset 6
                     :context "context" :message "detail")

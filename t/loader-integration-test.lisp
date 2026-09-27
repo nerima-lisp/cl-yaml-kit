@@ -46,6 +46,13 @@
       (let ((value (yaml-kit:read-yaml stream)))
         (expect (gethash "answer" value) :to-equal 42))))
 
+  (it "parses reader input with public compose-all and parse-all paths"
+    (with-input-from-string (stream "one\n---\ntwo\n")
+      (expect (length (yaml-kit:compose-all stream)) :to-equal 2))
+    (with-input-from-string (stream "one\n---\ntwo\n")
+      (expect (yaml-kit:parse-all stream :schema :failsafe)
+              :to-equal '("one" "two"))))
+
   (it "preserves aliases as shared nodes during composition"
     (let* ((events (loader-document
                     (loader-event :mapping-start)
@@ -62,6 +69,17 @@
                   (yaml-kit:sequence-node-items
                    (cdr (second (yaml-kit:mapping-node-pairs node)))))
               :to-be-truthy)))
+
+  (it "preserves aliases as shared values during construction"
+    (let ((events (loader-document
+                   (loader-event :sequence-start)
+                   (loader-event :sequence-start :anchor "a")
+                   (loader-event :scalar :value "x")
+                   (loader-event :sequence-end)
+                   (loader-event :alias :anchor "a")
+                   (loader-event :sequence-end))))
+      (let ((value (loader-parse-events events)))
+        (expect (eq (aref value 0) (aref value 1)) :to-be-truthy))))
 
   (it "applies duplicate-key policies"
     (let ((events (loader-document

@@ -14,6 +14,15 @@
     (expect (yaml-kit:mark-column mark) :to-equal 12)
     (expect (yaml-kit:mark-offset mark) :to-equal 13)))
 
+(it "uses event constructor defaults"
+  (let ((document-start (yaml-kit:make-document-start-event))
+        (sequence-start (yaml-kit:make-sequence-start-event))
+        (scalar (yaml-kit:make-scalar-event)))
+    (expect (yaml-kit:document-start-event-explicit-p document-start) :to-equal nil)
+    (expect (yaml-kit:sequence-start-event-style sequence-start) :to-equal :block)
+    (expect (yaml-kit:scalar-event-value scalar) :to-equal "")
+    (expect (yaml-kit:scalar-event-style scalar) :to-equal :plain)))
+
 (it "expands define-event into a structure definition"
   (let ((expansion (macroexpand-1
                     '(yaml-kit:define-event probe-event-contract () "probe"))))

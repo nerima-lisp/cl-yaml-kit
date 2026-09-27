@@ -19,6 +19,9 @@
       (expect (yaml-kit:yaml-mapping-p mapping) :to-be-truthy)
       (expect (yaml-kit:yaml-mapping-entries mapping) :to-equal
               '(("a" . 1) ("a" . 2)))))
+  (it "creates an empty mapping when entries are omitted"
+    (let ((mapping (yaml-kit:make-yaml-mapping)))
+      (expect (yaml-kit:yaml-mapping-entries mapping) :to-equal nil)))
   (define-type-contract-test yaml-kit::scalar-style :plain)
   (define-type-contract-test yaml-kit::collection-style :flow)
   (define-type-contract-test yaml-kit::chomping-indicator :keep)

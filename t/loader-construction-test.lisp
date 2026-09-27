@@ -21,6 +21,32 @@
      (lambda (value)
        (and (floatp value) (< value (- most-positive-double-float))))))
 
+  (it "constructs a non-empty YAML mapping"
+    (let ((value (loader-parse-events
+                  (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "value")
+                   (loader-event :mapping-end))
+                  :mapping-type :yaml-mapping)))
+      (expect (yaml-kit:yaml-mapping-entries value) :to-equal
+              '(("key" . "value")))))
+
+  (it "constructs alists with first and last duplicate policies"
+    (let ((events (loader-document
+                   (loader-event :mapping-start)
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "first")
+                   (loader-event :scalar :value "key")
+                   (loader-event :scalar :value "last")
+                   (loader-event :mapping-end))))
+      (expect (loader-parse-events events :mapping-type :alist
+                                   :duplicate-key-policy :first)
+              :to-equal '(("key" . "first")))
+      (expect (loader-parse-events events :mapping-type :alist
+                                   :duplicate-key-policy :last)
+              :to-equal '(("key" . "last")))))
+
   (loader-collection-cases
     ("sequence accepts primary tag" :sequence "tag:yaml.org,2002:seq"
      (lambda (value) (and (vectorp value) (= (length value) 0))))

@@ -43,3 +43,11 @@
   (:tag "tag" :anchor "anchor" :style :flow
    :start-mark (yaml-kit:make-mark 3 2 9) :end-mark (yaml-kit:make-mark 3 4 11)
    :pairs '((one . two))))
+
+(it "uses node constructor defaults"
+  (let ((scalar (yaml-kit:make-scalar-node))
+        (sequence (yaml-kit:make-sequence-node))
+        (mapping (yaml-kit:make-mapping-node)))
+    (expect (yaml-kit:scalar-node-value scalar) :to-equal "")
+    (expect (yaml-kit:sequence-node-items sequence) :to-equal nil)
+    (expect (yaml-kit:mapping-node-pairs mapping) :to-equal nil)))
