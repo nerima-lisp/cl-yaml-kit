@@ -70,9 +70,14 @@
       (scan-block-scalar-breaks s indent-cell trailing-breaks start-mark end-cell)
       (loop while (and (= (mark-column (sc-mark s)) (car indent-cell))
                        (not (sc-z-p s))) do
+        ;; Only a document indicator ends a block scalar.  A "%" at column zero
+        ;; is ordinary content here: a directive can only open a document, and
+        ;; this line is inside the scalar, so treating it as a directive
+        ;; truncated scalars such as "|\n%!PS-Adobe-2.0\n".
         (when (and (zerop (mark-column (sc-mark s)))
-                   (or (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2))
-                       (sc-check s #\%)))
+                   (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
+                       (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
+                   (sc-blankz-p s 3))
           (return))
         (let ((trailing-blank (sc-blank-p s)))
           (if (and (not literal-p) (plusp (fill-pointer leading-break))
