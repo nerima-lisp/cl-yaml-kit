@@ -2,6 +2,12 @@
 (in-package #:yaml-kit)
 
 (defparameter +yaml-tag-prefix+ "tag:yaml.org,2002:")
+(defparameter +yaml-schema-names+ '(:failsafe :json :core))
+
+(defun validate-schema (schema)
+  (unless (member schema +yaml-schema-names+)
+    (signal-yaml-compose-error :cause "unknown YAML schema" :message schema))
+  schema)
 
 (defmacro define-tag-table (name &rest rows)
   `(defparameter ,name

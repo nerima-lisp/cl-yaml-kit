@@ -25,6 +25,7 @@
                (:file "parser-states") (:file "parser")
                (:file "parser-flow") (:file "parser-entry")
                (:file "composer") (:file "schema") (:file "constructor")
+               (:file "float-values")
                (:file "loader") (:file "representer") (:file "serializer")
                (:file "emitter-state") (:file "emitter-scalars")
                (:file "emitter-writers")

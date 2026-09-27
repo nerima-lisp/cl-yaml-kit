@@ -37,6 +37,19 @@
     ("decimal float" "0.278" () 0.278d0)
     ("integral decimal float" "450.00" () 450))
 
+  (loader-parse-cases
+    ("leading-dot float" ".5" () 0.5d0)
+    ("trailing-dot float" "1." () 1)
+    ("exponent float" "1e3" () 1000)
+    ("underflowing float" "1e-400" () 0))
+
+  (loader-error-cases
+    ("rejects an unknown public schema"
+     (loader-parse-events
+      (loader-document (loader-event :scalar :value "true"))
+      :schema :unknown)
+     yaml-kit:yaml-compose-error))
+
   (loader-predicate-cases
     ("positive infinity"
      (loader-parse-events (loader-document (loader-event :scalar :value ".INF")))

@@ -37,25 +37,9 @@
                    (char-equal (char text (1+ sign-position)) #\x))
               (* sign (parse-integer text :radix 16 :start (+ sign-position 2))))
              (t (parse-integer text)))))
-        (:float
-         (cond
-           ((member text '(".nan" ".NaN" ".NAN") :test #'string=)
-            (sb-kernel:make-double-float #x7ff80000 1))
-           ((member text '(".inf" ".Inf" ".INF" "+.inf" "+.Inf" "+.INF")
-                    :test #'string=)
-            sb-kernel::double-float-positive-infinity)
-           ((member text '("-.inf" "-.Inf" "-.INF") :test #'string=)
-            sb-kernel::double-float-negative-infinity)
-           (t
-            (let ((*read-default-float-format* 'double-float))
-              (multiple-value-bind (number end)
-                  (read-from-string text)
-                (unless (= end (length text))
-                  (signal-yaml-compose-error :mark mark
-                                             :cause "invalid scalar value"))
-                (coerce number 'double-float))))))
+        (:float (%parse-yaml-float text mark)))
     (error () (signal-yaml-compose-error :mark mark
-                                         :cause "invalid scalar value")))))
+                                         :cause "invalid scalar value"))))
 
 (defun %construct-scalar (node schema)
   (let* ((text (scalar-node-value node))
@@ -93,84 +77,13 @@
         (string= (%canonical-tag tag) expected)
         (and (not (%tag-info tag)) (not (%collection-tag-p tag))))))
 
-(defun %construct-sequence (node sequence-type memo walk)
-  (multiple-value-bind (cached presentp) (gethash node memo)
-    (if presentp
-        cached
-        (if (eq sequence-type :list)
-            (let ((items (sequence-node-items node)))
-              (if (null items)
-                  nil
-                  (let ((result (cons nil nil)))
-                    (setf (gethash node memo) result)
-                    (loop for rest on items
-                          for cell = result then (cdr cell)
-                          do (setf (car cell) (funcall walk (car rest)))
-                          when (cdr rest)
-                            do (setf (cdr cell) (cons nil nil))
-                          finally (setf (cdr cell) nil))
-                    result)))
-            (let* ((items (sequence-node-items node))
-                   (result (make-array (length items))))
-              (setf (gethash node memo) result)
-              (loop for item in items for i from 0
-                    do (setf (aref result i) (funcall walk item)))
-              result)))))
-
-(defun %alist-mapping (pairs duplicate-key-policy memo node walk)
-  (let ((result (make-list (length pairs))) (tail nil) (last-cell nil)
-        (seen (make-hash-table :test #'equal)))
-    (setf (gethash node memo) result tail result)
-    (dolist (pair pairs)
-      (let ((key (funcall walk (car pair))) (value (funcall walk (cdr pair))))
-        (multiple-value-bind (old presentp) (gethash key seen)
-          (when (and presentp (eq duplicate-key-policy :error))
-            (signal-yaml-compose-error :mark (node-start-mark node)
-                                       :cause "non-scalar mapping key"))
-          (unless (and presentp (eq duplicate-key-policy :first))
-            (if (and presentp (eq duplicate-key-policy :last))
-                (setf (cdr old) value)
-                (setf (car tail) (cons key value) last-cell tail tail (cdr tail))))
-          (setf (gethash key seen) (or old (car last-cell))))))
-    (when last-cell (setf (cdr last-cell) nil))
-    result))
-
-(defun %construct-mapping (node mapping-type duplicate-key-policy memo walk)
-  (or (gethash node memo)
-      (let ((pairs (mapping-node-pairs node)))
-        (case mapping-type
-          (:alist (%alist-mapping pairs duplicate-key-policy memo node walk))
-          (:yaml-mapping
-           (let* ((result (make-yaml-mapping (make-list (length pairs))))
-                  (entries (yaml-mapping-entries result)))
-             (setf (gethash node memo) result)
-             (loop for pair in pairs for cell on entries
-                   do (setf (car cell)
-                            (cons (funcall walk (car pair)) (funcall walk (cdr pair)))))
-             result))
-          (:hash-table
-           (let ((table (make-hash-table :test #'equal :size (max 1 (length pairs)))))
-             (setf (gethash node memo) table)
-             (dolist (pair pairs table)
-               (let ((key (funcall walk (car pair))) (value (funcall walk (cdr pair))))
-                 (when (or (consp key) (and (vectorp key) (not (stringp key)))
-                           (yaml-mapping-p key))
-                   (signal-yaml-compose-error :mark (node-start-mark node)
-                                              :cause "non-scalar mapping key"))
-                 (multiple-value-bind (old presentp) (gethash key table)
-                   (declare (ignore old))
-                   (when (and presentp (eq duplicate-key-policy :error))
-                     (signal-yaml-compose-error :mark (node-start-mark node)
-                                                :cause "duplicate mapping key"))
-                   (unless (and presentp (eq duplicate-key-policy :first))
-                     (setf (gethash key table) value)))))))))))
-
 (defun construct (node &key (schema :core) (mapping-type :hash-table)
                               (sequence-type :vector)
                               (duplicate-key-policy :error)
                               &allow-other-keys)
   "Construct NODE.  Non-scalar hash-table keys are rejected explicitly."
   (declare (optimize (speed 3) (safety 1)))
+  (validate-schema schema)
   (unless (member mapping-type '(:hash-table :alist :yaml-mapping))
     (signal-yaml-compose-error :cause "invalid mapping type"))
   (unless (member sequence-type '(:vector :list))
