@@ -67,8 +67,14 @@
         cl-weave.packages.${ctx.system}.cl-weave
         cl-json-kit.packages.${ctx.system}.cl-json-kit
       ];
-      packageArgs = _: { YAML_TEST_SUITE = yaml-test-suite; };
-      sourceInclude = [ ./docs ];
+      packageArgs = ctx: {
+        YAML_TEST_SUITE = yaml-test-suite;
+        nativeBuildInputs = [ ctx.pkgs.perl ];
+        preCheck = ''
+          export PATH="${ctx.pkgs.perl}/bin:$PATH"
+        '';
+      };
+      sourceInclude = [ ./docs ./scripts ];
       timeoutSeconds = 1200;
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
