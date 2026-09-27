@@ -90,7 +90,8 @@
   ("URI escape truncated UTF-8" (format nil "!%E2%82~%")))
 
 (it "maps codec URI failures to parse errors"
-  (dolist (text '("%E0%80%80" "%ED%A0%80" "%F4%90%80%80" "%E2%82"))
+  (dolist (text '("%E0%80%80" "%ED%A0%80" "%F4%90%80%80" "%E2%82"
+                  "%C3%20" "%F0%90"))
     (let* ((scanner (yaml-kit:make-scanner
                      (make-array (length text) :element-type 'character
                                  :initial-contents text)))

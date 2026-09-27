@@ -41,6 +41,9 @@
   ("quoted empty-line folding"
    #.(format nil "\"Empty line~%  ~C~%  as a line feed\"" #\Tab)
    ((#.(format nil "Empty line~%as a line feed") :double-quoted)))
+  ("quoted scalar closes after folded blanks"
+   #.(format nil "\"value~%  \"")
+   (("value " :double-quoted)))
   ("single-quoted line folding"
    #.(format nil "' 1st non-empty~%~% 2nd non-empty ~% ~C3rd non-empty '" #\Tab)
    ((#.(format nil " 1st non-empty~%2nd non-empty 3rd non-empty ") :single-quoted)))
@@ -105,3 +108,29 @@
          (out (yaml-kit::make-scan-buffer)))
     (expect (yaml-kit::%flow-escape scanner out (yaml-kit::sc-mark scanner))
             :to-be nil)))
+
+(it "folds non-break leading and trailing buffers directly"
+  (let ((out (yaml-kit::make-scan-buffer))
+        (leading (yaml-kit::make-scan-buffer))
+        (trailing (yaml-kit::make-scan-buffer)))
+    (vector-push-extend #\x leading)
+    (vector-push-extend #\y trailing)
+    (yaml-kit::%flow-fold out leading trailing)
+    (expect (yaml-kit::scan-buffer-string out) :to-equal "xy")))
+
+(it "stops a plain scalar at a block indicator directly"
+  (let* ((text "- ")
+         (scanner (yaml-kit:make-scanner
+                   (make-array (length text) :element-type 'character
+                               :initial-contents text)))
+         (start (yaml-kit::sc-mark scanner))
+         (out (yaml-kit::make-scan-buffer))
+         (end (yaml-kit::sc-mark scanner))
+         (leading (yaml-kit::make-scan-buffer))
+         (trailing (yaml-kit::make-scan-buffer))
+         (spaces (yaml-kit::make-scan-buffer)))
+    (multiple-value-bind (result blanks)
+        (yaml-kit::%scan-plain-scalar-body
+         scanner start out end leading trailing spaces nil 1)
+      (declare (ignore result blanks))
+      (expect (yaml-kit::scan-buffer-string out) :to-equal ""))))
