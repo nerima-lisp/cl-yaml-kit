@@ -92,24 +92,24 @@
     yaml-kit:document-end-event yaml-kit:stream-end-event)))
 
 (describe "parser event details"
-  (it "PARSER-FLOW-SEQUENCE-START-IMPLICIT"
-    (expect (parser-event-signature
-             (nth 2 (yaml-kit:parse-events "[a]")))
-            :to-equal '(:sequence-start t :flow nil nil)))
-  (it "PARSER-FLOW-MAPPING-START-IMPLICIT"
-    (expect (parser-event-signature
-             (nth 2 (yaml-kit:parse-events "{a: b}")))
-            :to-equal '(:mapping-start t :flow nil nil)))
-  ;; c-ns-properties makes the node's tag explicit, so implicit-p is off even
-  ;; though the collection is a flow collection.
-  (it "PARSER-FLOW-SEQUENCE-START-EXPLICIT-TAG"
-    (expect (parser-event-signature
-             (nth 2 (yaml-kit:parse-events "!!seq [a]")))
-            :to-equal '(:sequence-start nil :flow nil "tag:yaml.org,2002:seq")))
-  (it "PARSER-FLOW-MAPPING-START-EXPLICIT-TAG"
-    (expect (parser-event-signature
-             (nth 2 (yaml-kit:parse-events "!!map {a: b}")))
-            :to-equal '(:mapping-start nil :flow nil "tag:yaml.org,2002:map")))
+  (macrolet ((parser-event-cases (&body cases)
+               `(progn
+                  ,@(mapcar (lambda (case)
+                              `(it ,(first case)
+                                 (expect (parser-event-signature
+                                          (nth 2 (yaml-kit:parse-events ,(second case))))
+                                         :to-equal ',(third case))))
+                            cases))))
+    ;; c-ns-properties makes a tagged collection explicit, so implicit-p is off.
+    (parser-event-cases
+      ("PARSER-FLOW-SEQUENCE-START-IMPLICIT" "[a]"
+       (:sequence-start t :flow nil nil))
+      ("PARSER-FLOW-MAPPING-START-IMPLICIT" "{a: b}"
+       (:mapping-start t :flow nil nil))
+      ("PARSER-FLOW-SEQUENCE-START-EXPLICIT-TAG" "!!seq [a]"
+       (:sequence-start nil :flow nil "tag:yaml.org,2002:seq"))
+      ("PARSER-FLOW-MAPPING-START-EXPLICIT-TAG" "!!map {a: b}"
+       (:mapping-start nil :flow nil "tag:yaml.org,2002:map"))))
   (it "PARSER-EMPTY-ANCHOR-SCALAR-PRESERVES-PROPERTIES"
     (expect (parser-event-signature
              (nth 2 (parse-parser-token-events

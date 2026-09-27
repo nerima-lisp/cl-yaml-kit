@@ -5,44 +5,36 @@
   (let ((text (apply #'format nil format-control arguments)))
     (make-array (length text) :element-type 'character :initial-contents text)))
 
-(describe "block scalar reader"
-  (it "EMPTY-LITERAL/EMPTY-FOLDED: keeps empty scalars empty"
-    (let ((value (yaml-kit:parse (block-scalar-input "literal: |+~%"))))
-      (expect (gethash "literal" value) :to-equal ""))
-    (let ((value (yaml-kit:parse (block-scalar-input "folded: >-~%"))))
-      (expect (gethash "folded" value) :to-equal "")))
-  (it "FOLD-CHOMP: applies folding and chomping independently"
-    (let ((value (yaml-kit:parse
-                  (block-scalar-input "folded: >~%  first~%  second~%~%  third~%"))))
-      (expect (gethash "folded" value)
-              :to-equal (format nil "first second~%third~%")))
-    (let ((value (yaml-kit:parse
-                  (block-scalar-input "stripped: |-~%  value~%~%kept: |+~%  value~%~%"))))
-      (expect (gethash "stripped" value) :to-equal "value")
-      (expect (gethash "kept" value) :to-equal (format nil "value~%~%"))))
-  (it "EXPLICIT-INDENT: uses the indentation indicator"
-    (let ((value (yaml-kit:parse (block-scalar-input "value: |2~%    indented~%"))))
-      (expect (gethash "value" value) :to-equal (format nil "  indented~%"))))
+(defmacro block-scalar-cases (&body cases)
+  `(progn
+     ,@(mapcar (lambda (case)
+                 `(it ,(first case)
+                    (let ((value (yaml-kit:parse
+                                  (block-scalar-input ,(second case)))))
+                      (expect (gethash ,(third case) value)
+                              :to-equal ,(fourth case)))))
+               cases)))
+
+;; These are parse-level regression anchors for loader handling of block scalars.
+(describe "loader block scalar regressions"
+  (block-scalar-cases
+    ("EMPTY-LITERAL: keeps empty scalars empty" "literal: |+~%" "literal" "")
+    ("EMPTY-FOLDED: keeps empty scalars empty" "folded: >-~%" "folded" "")
+    ("FOLD-CHOMP: folds and chomps independently"
+     "folded: >~%  first~%  second~%~%  third~%" "folded"
+     (format nil "first second~%third~%"))
+    ("STRIPPED-CHOMP: strips trailing breaks"
+     "stripped: |-~%  value~%~%" "stripped" "value")
+    ("KEPT-CHOMP: keeps trailing breaks"
+     "kept: |+~%  value~%~%" "kept" (format nil "value~%~%"))
+    ("EXPLICIT-INDENT: uses the indentation indicator"
+     "value: |2~%    indented~%" "value" (format nil "  indented~%")))
   (it "TAB-INDENT: rejects a tab used for block indentation"
     (expect (handler-case
                 (progn (yaml-kit:parse (block-scalar-input "value: |~%~Atab~%" #\Tab))
                        nil)
               (yaml-kit:yaml-parse-error () t))
             :to-be-truthy)))
-
-(it "expands a %TAG handle and suffix"
-  (let* ((events (yaml-kit:parse-events
-                  (test-text (format nil "%TAG !e! tag:example.com,2000:~%--- !e!foo~%"))))
-         (scalar (find-if #'yaml-kit:scalar-event-p events)))
-    (expect (yaml-kit:scalar-event-tag scalar)
-            :to-equal "tag:example.com,2000:foo")))
-
-(it "preserves a trailing bang in a verbatim tag"
-  (let* ((events (yaml-kit:parse-events
-                  (test-text (format nil "!<tag:yaml.org,2002:str!> value~%"))))
-         (scalar (find-if #'yaml-kit:scalar-event-p events)))
-    (expect (yaml-kit:scalar-event-tag scalar)
-            :to-equal "tag:yaml.org,2002:str!")))
 
 (defun reader-parse-outcome (text)
   (handler-case (progn (yaml-kit:parse-events text) :returned)

@@ -55,24 +55,20 @@
 (describe "scanner fetch errors"
   ;; A value indicator leaves simple-key-allowed off, so a further block
   ;; indicator cannot start the value node it announced.
-  (it "rejects a block entry after a value indicator"
-    (expect (handler-case
-                (progn
-                  (let ((scanner (yaml-kit:make-scanner (scanner-source "a: -"))))
-                    (loop while (yaml-kit:scanner-next-token scanner)))
-                  nil)
-              (yaml-kit:yaml-parse-error () t)) :to-be-truthy))
-  (it "rejects a block key after a value indicator"
-    (expect (handler-case
-                (progn
-                  (let ((scanner (yaml-kit:make-scanner (scanner-source "a: ?"))))
-                    (loop while (yaml-kit:scanner-next-token scanner)))
-                  nil)
-              (yaml-kit:yaml-parse-error () t)) :to-be-truthy))
-  (it "rejects a block value after a value indicator"
-    (expect (handler-case
-                (progn
-                  (let ((scanner (yaml-kit:make-scanner (scanner-source "a: :"))))
-                    (loop while (yaml-kit:scanner-next-token scanner)))
-                  nil)
-              (yaml-kit:yaml-parse-error () t)) :to-be-truthy)))
+  (macrolet ((scanner-error-cases (&body cases)
+               `(progn
+                  ,@(mapcar (lambda (case)
+                              `(it ,(first case)
+                                 (expect (handler-case
+                                             (progn
+                                               (let ((scanner (yaml-kit:make-scanner
+                                                               (scanner-source ,(second case)))))
+                                                 (loop while (yaml-kit:scanner-next-token scanner)))
+                                               nil)
+                                           (yaml-kit:yaml-parse-error () t))
+                                         :to-be-truthy)))
+                            cases))))
+    (scanner-error-cases
+      ("rejects a block entry after a value indicator" "a: -")
+      ("rejects a block key after a value indicator" "a: ?")
+      ("rejects a block value after a value indicator" "a: :"))))

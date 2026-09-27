@@ -44,21 +44,21 @@
     ("http://foo.com" :plain) ("omitted value" :plain))))
 
 (describe "flow scalar error cases"
-  (it "rejects an unknown escape"
-    (let ((text "\"\\q\""))
-      (expect (handler-case
-                  (let ((scanner (yaml-kit:make-scanner
-                                  (make-array (length text) :element-type 'character
-                                              :initial-contents text))))
-                    (loop while (yaml-kit:scanner-next-token scanner)
-                          finally (return nil)))
-                (yaml-kit:yaml-parse-error () t)) :to-be-truthy)))
-  (it "rejects a surrogate escape"
-    (let ((text "\"\\uD800\""))
-      (expect (handler-case
-                  (let ((scanner (yaml-kit:make-scanner
-                                  (make-array (length text) :element-type 'character
-                                              :initial-contents text))))
-                    (loop while (yaml-kit:scanner-next-token scanner)
-                          finally (return nil)))
-                (yaml-kit:yaml-parse-error () t)) :to-be-truthy))))
+  (macrolet ((flow-error-cases (&body cases)
+               `(progn
+                  ,@(mapcar (lambda (case)
+                              `(it ,(first case)
+                                 (let ((text ,(second case)))
+                                   (expect (handler-case
+                                               (let ((scanner (yaml-kit:make-scanner
+                                                               (make-array (length text)
+                                                                           :element-type 'character
+                                                                           :initial-contents text))))
+                                                 (loop while (yaml-kit:scanner-next-token scanner)
+                                                       finally (return nil)))
+                                             (yaml-kit:yaml-parse-error () t))
+                                           :to-be-truthy))))
+                            cases))))
+    (flow-error-cases
+      ("rejects an unknown escape" "\"\\q\"")
+      ("rejects a surrogate escape" "\"\\uD800\""))))
