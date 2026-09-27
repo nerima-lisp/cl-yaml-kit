@@ -348,6 +348,16 @@
   (expect (yaml-kit::%scalar-analysis value) :to-be-truthy))
 
 (cl-weave:it
+ "covers scalar safety and block-style fallback branches"
+ (expect (yaml-kit::%plain-safe-p "-value" :tag "tag:yaml.org,2002:int")
+         :to-equal t)
+ (expect (yaml-kit::%scalar-style "a\nb" :plain nil
+                                  "tag:example.org,2026:str")
+         :to-equal :double-quoted)
+ (expect (yaml-kit::%scalar-style "a" :literal t nil)
+         :to-equal :double-quoted))
+
+(cl-weave:it
  "covers frame separator and explicit key branches"
  (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
         (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
@@ -360,6 +370,25 @@
                               (get-output-stream-string
                                (yaml-kit::emitter-context-stream context)))))
            :to-equal t)))
+
+(cl-weave:it
+ "covers explicit mapping sequence frame separators"
+ (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+        (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+   (setf (yaml-kit::emitter-frame-state-stack state)
+         (list (cons :map 2)))
+   (yaml-kit::%emit-text context "key")
+   (yaml-kit::%frame-start-value
+    state (yaml-kit:make-sequence-start-event :style :block))
+   (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
+           :to-equal "key:")))
+
+(cl-weave:it
+ "covers empty block scalar writer paths"
+ (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
+   (yaml-kit::%write-block-scalar "" context nil 2)
+   (expect (get-output-stream-string (yaml-kit::emitter-context-stream context))
+           :to-equal (format nil "|-~%"))))
 
 (cl-weave:it
  "emits stream termination and explicit-key sequence prefixes"
