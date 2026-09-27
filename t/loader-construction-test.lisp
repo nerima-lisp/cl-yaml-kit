@@ -208,6 +208,10 @@
      (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!int" :value "nope")))
      yaml-kit:yaml-compose-error)
+    ("rejects an empty integer tag"
+     (loader-parse-events
+      (loader-document (loader-event :scalar :tag "!!int" :value "")))
+     yaml-kit:yaml-compose-error)
     ("rejects a malformed boolean tag"
      (loader-parse-events
       (loader-document (loader-event :scalar :tag "!!bool" :value "maybe")))
