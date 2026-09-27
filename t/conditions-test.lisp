@@ -37,6 +37,16 @@
                                 :cause "cause" :message "message")))
       (expect (search "; cause" (condition-report cause-only)) :to-be-truthy)
       (expect (search "message (cause)" (condition-report both)) :to-be-truthy)))
+  (it "signals compose and emit errors through their macros"
+    (dolist (form '((yaml-kit::signal-yaml-compose-error :cause "compose")
+                    (yaml-kit::signal-yaml-emit-error :cause "emit")))
+      (expect (handler-case (eval form)
+                (yaml-kit:yaml-compose-error () t)
+              (yaml-kit:yaml-emit-error () t))
+              :to-be-truthy)))
+  (it "reports an emit cause without a message"
+    (let ((condition (make-condition 'yaml-kit:yaml-emit-error :cause "cause")))
+      (expect (search "; cause" (condition-report condition)) :to-be-truthy)))
   (define-condition-contract-test yaml-parse-error
     (make-condition 'yaml-kit:yaml-parse-error :line 4 :column 5 :offset 6
                     :context "context" :message "detail")

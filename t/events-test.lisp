@@ -27,7 +27,22 @@
   (let ((expansion (macroexpand-1
                     '(yaml-kit:define-event probe-event-contract () "probe"))))
     (expect (consp expansion) :to-be-truthy)
-    (expect (member (car expansion) '(progn yaml-kit::define-yaml-subtype)) :to-be-truthy)))
+    (expect (member (car expansion) '(progn yaml-kit::define-yaml-subtype)) :to-be-truthy))
+  (let* ((name (eval '(yaml-kit:define-event probe-event-contract-eval ((value nil)) "probe")))
+         (find-function
+           (lambda (format-control)
+             (let ((name (format nil format-control name)))
+               (block found
+                 (do-all-symbols (symbol)
+                   (when (and (string= (symbol-name symbol) name)
+                              (fboundp symbol))
+                     (return-from found symbol)))))))
+         (constructor (funcall find-function "MAKE-~A"))
+         (predicate (funcall find-function "~A-P"))
+         (accessor (funcall find-function "~A-VALUE"))
+         (value (funcall (symbol-function constructor) :value 42)))
+    (expect (funcall (symbol-function predicate) value) :to-be-truthy)
+    (expect (funcall (symbol-function accessor) value) :to-equal 42)))
 (defmacro define-event-contract-tests (name constructor predicate accessors arguments)
   (let ((keys (mapcar (lambda (accessor)
                         (loop for key in arguments by #'cddr
