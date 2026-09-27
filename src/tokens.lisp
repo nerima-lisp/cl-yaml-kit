@@ -3,7 +3,8 @@
 
 (defstruct (token (:constructor %make-token
                     (kind start-mark end-mark
-                     &key value handle suffix style major minor)))
+                     &key value handle suffix style major minor))
+                (:copier nil) (:predicate nil))
   (kind :stream-start :type keyword :read-only t)
   (start-mark nil :type mark :read-only t)
   (end-mark nil :type mark :read-only t)

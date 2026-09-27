@@ -1,13 +1,15 @@
 ;;;; src/scanner-state.lisp
 (in-package #:yaml-kit)
 
-(defstruct (simple-key (:constructor make-simple-key ()))
+(defstruct (simple-key (:constructor make-simple-key ())
+                       (:copier nil) (:predicate nil))
   (possible nil :type boolean)
   (required nil :type boolean)
   (token-number 0 :type fixnum)
   (mark nil :type (or null mark)))
 
-(defstruct (scanner (:constructor %make-scanner (text)))
+(defstruct (scanner (:constructor %make-scanner (text))
+                    (:copier nil) (:predicate nil))
   (text "" :type (simple-array character (*)) :read-only t)
   (pos 0 :type fixnum)
   (line 0 :type fixnum)

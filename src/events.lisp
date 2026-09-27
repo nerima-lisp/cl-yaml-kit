@@ -1,12 +1,14 @@
 ;;;; src/events.lisp
 (in-package #:yaml-kit)
 
-(defstruct (mark (:constructor make-mark (line column offset)))
+(defstruct (mark (:constructor make-mark (line column offset))
+                 (:copier nil) (:predicate nil))
   (line 0 :type (integer 0 #.most-positive-fixnum) :read-only t)
   (column 0 :type (integer 0 #.most-positive-fixnum) :read-only t)
   (offset 0 :type (integer 0 #.most-positive-fixnum) :read-only t))
 
-(defstruct (event (:constructor make-event (&key start-mark end-mark)))
+(defstruct (event (:constructor make-event (&key start-mark end-mark))
+                  (:copier nil) (:predicate nil))
   "Base class for YAML parsing and emitting events."
   (start-mark nil :type (or null mark))
   (end-mark nil :type (or null mark)))
@@ -17,6 +19,7 @@
     `(progn
        (defstruct (,name (:constructor ,constructor)
                             (:predicate ,predicate)
+                            (:copier nil)
                             (:include ,base)
                             (:conc-name ,(intern (format nil "~A-" (string-upcase name))
                                                 *package*)))

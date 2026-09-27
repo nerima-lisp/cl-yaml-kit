@@ -1,6 +1,7 @@
 (in-package #:yaml-kit)
 
-(defstruct (parser (:constructor make-parser%))
+(defstruct (parser (:constructor make-parser%)
+                   (:copier nil) (:predicate nil))
   scanner state states handler directives version depth
   max-depth max-scalar-length peek-function next-function)
 

@@ -1,7 +1,8 @@
 (in-package #:yaml-kit)
 
 (defstruct (emitter-frame-state (:constructor make-emitter-frame-state
-                                  (context indent explicit suppress)))
+                                  (context indent explicit suppress))
+                              (:copier nil))
   context indent explicit suppress stack (first-document t)
   previous-document-explicit-end last-key-style)
 

@@ -1,7 +1,8 @@
 ;;;; src/emitter-state.lisp
 (in-package #:yaml-kit)
 
-(defstruct (emitter-context (:constructor %make-emitter-context))
+(defstruct (emitter-context (:constructor %make-emitter-context)
+                            (:copier nil))
   stream (indent 2 :type fixnum) (column 0 :type fixnum)
   (line-start t))
 
