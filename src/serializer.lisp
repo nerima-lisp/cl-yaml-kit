@@ -42,8 +42,9 @@
 (defun serialize (root handler &key (explicit-document-start nil))
   "Deliver serialized events to HANDLER in CPS order."
   (let ((active (make-hash-table :test #'eq))
-        (emitted (make-hash-table :test #'eq)))
-    (labels ((mark () (make-mark 0 0 0))
+        (emitted (make-hash-table :test #'eq))
+        (mark (make-mark 0 0 0)))
+    (labels ((mark () mark)
              (send (event) (funcall handler event))
              (alias (node)
                (send (make-alias-event :start-mark (mark) :end-mark (mark)
