@@ -142,12 +142,23 @@ The following run used a Mac16,6 with 16 CPUs and SBCL 2.6.0:
 An sb-sprof run on the 1 MiB configuration identified scanner plain-scalar
 work (`scan-plain-scalar`), cl-regex-kit matching during scalar construction,
 and serializer traversal plus string-output allocation as the dominant paths.
-No source optimization was applied: the profile did not isolate a safe local
-change with a measured before/after gain, and the strongest candidates cross
-the scanner, dependency, and emitter interfaces. The benchmark migration and
-new corpus improve measurement coverage, but this change does not claim a
-runtime improvement. Re-running on an otherwise idle machine is expected to
-produce different elapsed-time and allocation values.
+The local changes made from that profile are bounded: plain-scalar boundary
+checks avoid a temporary list, serializer traversal reuses its immutable mark,
+and the emitter keeps a two-event FIFO without repeated `nconc` and `length`
+scans. The reader before/after benchmark was noisy rather than uniformly
+faster, so it is not presented as a universal speedup; the serializer and
+emitter changes are intended to reduce allocation and queue overhead on the
+corresponding hot paths. Re-running on an otherwise idle machine is expected
+to produce different elapsed-time and allocation values.
+
+The loader hotspot is a specific call chain:
+`parse -> construct -> %construct-scalar -> resolve-plain-scalar-tag ->
+cl-regex-kit:full-match-p`. `full-match-p` correctly enforces a full-string
+match, but the profile shows the Pike VM and match-result bookkeeping even
+when only a boolean answer is needed. This is a suitable upstream
+cl-regex-kit improvement, such as a boolean full-range matcher that skips
+capture/result construction; replacing it locally with `is-match-p` would
+change the full-match semantics and is therefore not safe.
 
 The five stages compare different representations, on purpose:
 
