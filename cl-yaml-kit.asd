@@ -10,7 +10,8 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-regex-kit" "cl-codec-kit") ; Regex resolves schema values; codec-kit decodes YAML byte streams.
+  :depends-on ("cl-regex-kit"  ; Schema regexes resolve scalar values (schema.lisp)
+                "cl-codec-kit") ; Decodes octet input per its declared encoding (parser.lisp)
   :pathname "src"
   :serial t
   :components ((:file "package") (:file "data") (:file "events")
@@ -37,7 +38,9 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-yaml-kit" "cl-weave" "cl-json-kit")
+  :depends-on ("cl-yaml-kit"  ; The system under test.
+                "cl-weave"    ; Test framework, generators, per-test timeout.
+                "cl-json-kit") ; Reads the suite's in.json, telling null from false.
   :pathname "t"
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
