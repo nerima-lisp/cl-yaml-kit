@@ -552,6 +552,42 @@
            :to-equal t)))
 
 (cl-weave:it
+ "covers independent frame predicate states"
+ (flet ((state (stack)
+          (yaml-kit::make-emitter-frame-state
+           (yaml-kit::make-emitter-context (make-string-output-stream) 2)
+           2 nil nil)))
+   (let ((state (state (cons :map-after-explicit-key 1))))
+     (setf (yaml-kit::emitter-frame-state-stack state)
+           (list (cons :map-after-explicit-key 1)))
+     (yaml-kit::%emit-sequence-start-frame
+      state (yaml-kit:make-sequence-start-event :style :flow) nil))
+   (let ((state (state (cons :map-after-explicit-key 1))))
+     (setf (yaml-kit::emitter-frame-state-stack state)
+           (list (cons :map-after-explicit-key 1)))
+     (yaml-kit::%emit-text
+      (yaml-kit::emitter-frame-state-context state) "x")
+     (yaml-kit::%emit-sequence-start-frame
+      state (yaml-kit:make-sequence-start-event :style :flow) nil))
+   (dolist (tagged '(nil t))
+     (dolist (written '(nil t))
+       (let* ((context (yaml-kit::make-emitter-context
+                        (make-string-output-stream) 2))
+              (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+         (setf (yaml-kit::emitter-frame-state-stack state)
+               (list (cons :map 1)))
+         (when written (yaml-kit::%emit-text context "x"))
+         (yaml-kit::%emit-mapping-start-frame
+          state (yaml-kit:make-mapping-start-event
+                 :style :block :tag (and tagged "tag:x")) nil))))
+   (let* ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2))
+          (state (yaml-kit::make-emitter-frame-state context 2 nil nil)))
+     (setf (yaml-kit::emitter-frame-state-stack state) (list (cons :map 0)))
+     (yaml-kit::%emit-mapping-start-frame
+      state (yaml-kit:make-mapping-start-event :style :block) nil))
+   (expect t :to-equal t)))
+
+(cl-weave:it
  "covers plain safety and block scalar fallback"
  (expect (yaml-kit::%plain-safe-p "-" :tag "tag:yaml.org,2002:int")
          :to-equal nil)
