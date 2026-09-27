@@ -2,9 +2,13 @@
 (in-package #:yaml-kit)
 
 (defparameter +yaml-indicator-characters+ "-?:,[]{}#&*!|>'\"%@`")
+(defparameter +implicit-scalar-tags+
+  '("tag:yaml.org,2002:int" "tag:yaml.org,2002:float"
+    "tag:yaml.org,2002:bool" "tag:yaml.org,2002:null"
+    "tag:yaml.org,2002:str"))
 
 (declaim (inline %yaml-line-break-p %yaml-printable-character-p
-                %yaml-plain-character-p %yaml-blank-p))
+                %yaml-blank-p))
 
 (defun %yaml-line-break-p (character)
   (case (char-code character)
@@ -17,10 +21,6 @@
         (<= #x20 code #x7e) (= code #x85)
         (<= #xa0 code #xd7ff) (<= #xe000 code #xfffd)
         (<= #x10000 code #x10ffff))))
-
-(defun %yaml-plain-character-p (character)
-  (and (%yaml-printable-character-p character)
-       (not (= (char-code character) #x0d))))
 
 (defun %yaml-blank-p (character)
   (or (char= character #\Space) (char= character #\Tab)))
@@ -53,7 +53,7 @@
           do
              (if (zerop index)
                  (cond
-                   ((find character "#,[]{}&*!|>'\"%@`")
+                   ((find character +yaml-indicator-characters+)
                     (setf flow-indicators t block-indicators t))
                    ((find character "-?:")
                     (setf flow-indicators t block-indicators t))
@@ -108,16 +108,12 @@
                   (string= (resolve-plain-scalar-tag value :core)
                            "tag:yaml.org,2002:str"))
              (and tag
-                  (member tag '("tag:yaml.org,2002:int"
-                                "tag:yaml.org,2002:float"
-                                "tag:yaml.org,2002:bool"
-                                "tag:yaml.org,2002:null") :test #'string=))
+                  (member tag +implicit-scalar-tags+ :test #'string=))
              (or (null tag)
                  (string= (resolve-plain-scalar-tag value :core)
                           "tag:yaml.org,2002:str"))))))
 
-(defun %scalar-style (value requested flow width &optional tag)
-  (declare (ignore width))
+(defun %scalar-style (value requested flow &optional tag)
   (let* ((analysis (%scalar-analysis value))
          (style (if (eq requested :plain) :plain requested)))
     (when (and (eq style :plain)
@@ -140,7 +136,7 @@
 (defun %hex-digit (value) (schar "0123456789ABCDEF" value))
 
 (defun %write-hex-escape (context prefix code digits)
-  (%emit-scalar-text context prefix)
+  (%emit-text context prefix)
   (loop for shift downfrom (* 4 (1- digits)) to 0 by 4
         do (%emit-char context (%hex-digit (logand #xf (ash code (- shift)))))))
 
@@ -149,16 +145,16 @@
   (loop for character across value
         for code fixnum = (char-code character)
         do (case character
-             (#\Null (%emit-scalar-text context "\\0")) (#\Bell (%emit-scalar-text context "\\a"))
-             (#\Backspace (%emit-scalar-text context "\\b")) (#\Tab (%emit-scalar-text context "\\t"))
-             (#\Newline (%emit-scalar-text context "\\n")) (#\Vt (%emit-scalar-text context "\\v"))
-             (#\Page (%emit-scalar-text context "\\f")) (#\Return (%emit-scalar-text context "\\r"))
-             (#\Escape (%emit-scalar-text context "\\e")) (#\" (%emit-scalar-text context "\\\""))
-             (#\\ (%emit-scalar-text context "\\\\"))
-             (t (cond ((= code #x85) (%emit-scalar-text context "\\N"))
-                      ((= code #xa0) (%emit-scalar-text context "\\_"))
-                      ((= code #x2028) (%emit-scalar-text context "\\L"))
-                      ((= code #x2029) (%emit-scalar-text context "\\P"))
+             (#\Null (%emit-text context "\\0")) (#\Bell (%emit-text context "\\a"))
+             (#\Backspace (%emit-text context "\\b")) (#\Tab (%emit-text context "\\t"))
+             (#\Newline (%emit-text context "\\n")) (#\Vt (%emit-text context "\\v"))
+             (#\Page (%emit-text context "\\f")) (#\Return (%emit-text context "\\r"))
+             (#\Escape (%emit-text context "\\e")) (#\" (%emit-text context "\\\""))
+             (#\\ (%emit-text context "\\\\"))
+             (t (cond ((= code #x85) (%emit-text context "\\N"))
+                      ((= code #xa0) (%emit-text context "\\_"))
+                      ((= code #x2028) (%emit-text context "\\L"))
+                      ((= code #x2029) (%emit-text context "\\P"))
                       ((or (< code #x20) (= code #x7f) (= code #xfeff))
                        (%write-hex-escape context (if (= code #xfeff) "\\u" "\\x")
                                            code (if (= code #xfeff) 4 2)))
@@ -172,12 +168,12 @@
         do (if end
                (progn
                  (when (> end start)
-                   (%emit-scalar-text context (subseq value start end)))
+                   (%emit-text context (subseq value start end)))
                  (%emit-char context #\Newline)
                  (%emit-char context #\Newline))
                (progn
                  (when (< start (length value))
-                   (%emit-scalar-text context (subseq value start)))
+                   (%emit-text context (subseq value start)))
                  (return)))))
 
 (defun %write-single-quoted (value context &optional (indent 0))
@@ -191,12 +187,12 @@
             (setf breaks t))
           (progn
             (when breaks
-              (%emit-scalar-text context (make-string indent :initial-element #\Space))
+              (%emit-text context (make-string indent :initial-element #\Space))
               (setf breaks nil))
             (%emit-char context character)
             (when (char= character #\') (%emit-char context #\')))))
     (when breaks
-      (%emit-scalar-text context (make-string indent :initial-element #\Space))))
+      (%emit-text context (make-string indent :initial-element #\Space))))
   (%emit-char context #\'))
 
 (defun %write-block-scalar (value context folded indent &optional (preserve-blank-indentation t))
@@ -217,7 +213,7 @@
                  (or (%yaml-blank-p (char first-content 0))
                      (char= (char first-content 0) #\#)))
         (%emit-char context #\2)))
-    (%emit-scalar-text context chomp)
+    (%emit-text context chomp)
     (%emit-char context #\Newline)
     (loop for start = 0 then (1+ end)
           for end = (position #\Newline value :start start)
@@ -233,13 +229,13 @@
                                     (= next-start next-end)
                                     (not (loop for index from next-start below next-end
                                                always (%yaml-blank-p (char value index))))))))
-               (%emit-scalar-text context (make-string indent :initial-element #\Space)))
+               (%emit-text context (make-string indent :initial-element #\Space)))
              (when end
-               (%emit-scalar-text context (subseq value start end))
+               (%emit-text context (subseq value start end))
                (%emit-char context #\Newline))
              (unless end
                (when (< start (length value))
-                 (%emit-scalar-text context (subseq value start)))
+                 (%emit-text context (subseq value start)))
                (when (or (zerop (length value))
                          (not (%yaml-line-break-p (char value (1- (length value))))))
                  (%emit-char context #\Newline))

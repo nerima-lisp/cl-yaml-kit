@@ -1,76 +1,10 @@
 ;;;; src/emitter.lisp
 (in-package #:yaml-kit)
 
-(defun %emit-prefix (event context)
-  (when (or (scalar-event-p event)
-            (sequence-start-event-p event)
-            (mapping-start-event-p event))
-    (let ((anchor (cond ((scalar-event-p event) (scalar-event-anchor event))
-                        ((sequence-start-event-p event) (sequence-start-event-anchor event))
-                        (t (mapping-start-event-anchor event)))))
-      (when anchor
-        (%emit-text context "&")
-        (%emit-text context anchor)
-        (%emit-text context " ")))
-    (let ((tag (cond ((scalar-event-p event) (scalar-event-tag event))
-                     ((sequence-start-event-p event) (sequence-start-event-tag event))
-                     (t (mapping-start-event-tag event)))))
-      (when (and tag
-                 (not (member tag '("tag:yaml.org,2002:int"
-                                    "tag:yaml.org,2002:float"
-                                    "tag:yaml.org,2002:bool"
-                                    "tag:yaml.org,2002:null"
-                                    "tag:yaml.org,2002:str") :test #'string=)))
-        (%emit-text context
-                    (cond ((string= tag "!") "!")
-                          ((and (>= (length tag) 5)
-                                (string= tag "tag:" :end1 4))
-                           (concatenate 'simple-string "!<" tag ">"))
-                          ((char= (char tag 0) #\!) tag)
-                          (t (concatenate 'simple-string "!" tag))))
-        (%emit-text context " ")))))
-
-(defun %emit-document-directives (event context)
-  (when (document-start-event-version event)
-    (%emit-text context "%YAML ")
-    (%emit-text context (document-start-event-version event))
-    (%emit-newline context))
-  (dolist (directive (document-start-event-tag-directives event))
-    (%emit-text context "%TAG ")
-    (%emit-text context (car directive))
-    (%emit-text context " ")
-    (%emit-text context (cdr directive))
-    (%emit-newline context)))
-
-(defun %normalize-scalar-event (event)
-  (if (and (null (scalar-event-tag event))
-               (eq (scalar-event-style event) :plain))
-      (let* ((value (scalar-event-value event))
-             (tag-end (position #\> value))
-             (anchor-end (position #\Space value)))
-        (cond
-          ((and tag-end
-                (< (+ tag-end 2) (length value))
-                (char= (char value (1+ tag-end)) #\Space)
-                (char= (char value (+ tag-end 2)) #\"))
-           (make-scalar-event :anchor (scalar-event-anchor event)
-                              :tag (subseq value 0 tag-end)
-                              :value (subseq value (+ tag-end 3))
-                              :style :double-quoted))
-          ((and anchor-end
-                (< (1+ anchor-end) (length value))
-                (char= (char value (1+ anchor-end)) #\:))
-           (make-scalar-event :anchor (subseq value 0 anchor-end)
-                              :tag (scalar-event-tag event)
-                              :value (subseq value (+ anchor-end 2))
-                              :style :plain))
-          (t event)))
-        event))
-
-(defun emit-event-stream (events stream &key (indent 2) (width 80)
+(defun emit-event-stream (events stream &key (indent 2)
                                       (explicit-document-start nil)
                                       (suppress-empty-document-marker nil))
-  (let ((context (make-emitter-context stream indent width))
+  (let ((context (make-emitter-context stream indent))
         (stack nil)
         (first-document t)
         (previous-document-explicit-end nil)
@@ -207,9 +141,8 @@
              (unless (emitter-context-line-start context) (%emit-newline context))
              (%emit-text context "...")
              (%emit-newline context))
-           (unless (emitter-context-line-start context) (%emit-newline context)))
+          (unless (emitter-context-line-start context) (%emit-newline context)))
           ((scalar-event-p event)
-           (let ((event (%normalize-scalar-event event)))
            (start-value event)
            (%emit-prefix event context)
            (let* ((value (scalar-event-value event))
@@ -225,7 +158,7 @@
                                            (not (%yaml-blank-p (char value 1))))))
                              :plain
                              (%scalar-style value (scalar-event-style event)
-                                            (flow-p) width
+                                            (flow-p)
                                             (scalar-event-tag event)))))
              (unless (and empty
                           (eq (scalar-event-style event) :plain)
@@ -240,7 +173,7 @@
                                        remaining))))
              (when stack (incf (cdr (car stack))))
              (when key-p
-               (setf last-key-style style)))))
+               (setf last-key-style style)))
           ((alias-event-p event)
            (start-value)
            (%emit-text context "*")
@@ -327,3 +260,4 @@
              (when (eq (car frame) :flow-map) (%emit-text context "}"))
              (when stack (incf (cdr (car stack))))))))
     stream)))
+)

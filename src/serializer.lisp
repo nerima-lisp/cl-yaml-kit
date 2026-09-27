@@ -5,7 +5,7 @@
   (cond ((sequence-node-p node) (sequence-node-items node))
         ((mapping-node-p node)
          (loop for pair in (mapping-node-pairs node)
-               append (list (car pair) (cdr pair))))
+               nconc (list (car pair) (cdr pair))))
         (t nil)))
 
 (defun %assign-anchors (root)
@@ -47,12 +47,6 @@
                (send (make-alias-event :start-mark (mark) :end-mark (mark)
                                        :anchor (node-anchor node))))
              (walk (node)
-               (unless (or (scalar-node-p node)
-                           (sequence-node-p node)
-                           (mapping-node-p node))
-                 (error 'yaml-emit-error
-                        :context "unsupported representation node"
-                        :message (princ-to-string (type-of node))))
                (when (gethash node emitted) (return-from walk (alias node)))
                (when (gethash node active) (return-from walk (alias node)))
                (when (or (sequence-node-p node) (mapping-node-p node))

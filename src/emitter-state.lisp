@@ -2,12 +2,11 @@
 (in-package #:yaml-kit)
 
 (defstruct (emitter-context (:constructor %make-emitter-context))
-  stream (indent 2 :type fixnum) (width 80 :type fixnum)
-  (level 0 :type fixnum) (column 0 :type fixnum)
-  (flow nil) (need-comma nil) (line-start t))
+  stream (indent 2 :type fixnum) (column 0 :type fixnum)
+  (line-start t))
 
-(defun make-emitter-context (stream indent width)
-  (%make-emitter-context :stream stream :indent indent :width width))
+(defun make-emitter-context (stream indent)
+  (%make-emitter-context :stream stream :indent indent))
 
 (defun %emit-text (context text)
   (write-string text (emitter-context-stream context))
@@ -29,9 +28,6 @@
       (setf (emitter-context-column context)
             (1+ (emitter-context-column context))
             (emitter-context-line-start context) nil)))
-
-(defun %emit-scalar-text (context text)
-  (%emit-text context text))
 
 (defun %emit-newline (context)
   (%emit-text context (string #\Newline)))

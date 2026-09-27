@@ -27,13 +27,11 @@ mapping defaults are input length 104857600, depth 256, and scalar length
 
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
-| `emit value &key indent width default-flow-style explicit-document-start canonical` | YAML string | `yaml-emit-error` |
-| `write-yaml value stream &key indent width default-flow-style explicit-document-start canonical` | `value` | `yaml-emit-error` |
-| `emit-events events &key indent width explicit-document-start` | YAML string | `yaml-emit-error` |
+| `emit value &key indent default-flow-style explicit-document-start` | YAML string | `yaml-emit-error` |
+| `write-yaml value stream &key indent default-flow-style explicit-document-start` | `value` | `yaml-emit-error` |
+| `emit-events events &key indent explicit-document-start` | YAML string | `yaml-emit-error` |
 
-Defaults are indent 2, width 80, `:block`, and false for explicit document
-start. `canonical` is accepted by `emit` and `write-yaml` but is reserved and
-ignored by the current implementation.
+Defaults are indent 2, `:block`, and false for explicit document start.
 
 ## Sentinel and mapping values
 

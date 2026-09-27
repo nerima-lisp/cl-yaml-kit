@@ -20,35 +20,33 @@
                           (t (let ((*read-default-float-format* 'double-float))
                                (string-downcase (princ-to-string value)))))))
 
-(defun %represent-list (value)
-  (or (gethash value *representer-cache*)
-      (let ((node (make-sequence-node :items nil)))
-        (setf (gethash value *representer-cache*) node
-              (sequence-node-items node) (mapcar #'%represent-dispatch value))
-        node)))
+(defmacro define-representer-builder (name constructor accessor &body forms)
+  `(defun ,name (value)
+     (or (gethash value *representer-cache*)
+         (let ((node (,constructor)))
+           (setf (gethash value *representer-cache*) node
+                 (,accessor node) (progn ,@forms))
+           node))))
 
-(defun %represent-vector (value)
-  (or (gethash value *representer-cache*)
-      (let ((node (make-sequence-node :items nil)))
-        (setf (gethash value *representer-cache*) node
-              (sequence-node-items node)
-              (loop for item across value collect (%represent-dispatch item)))
-        node)))
+(define-representer-builder %represent-list
+  make-sequence-node
+  sequence-node-items
+  (mapcar #'%represent-dispatch value))
 
-(defun %represent-mapping (value)
-  (or (gethash value *representer-cache*)
-      (let ((node (make-mapping-node :pairs nil)))
-        (setf (gethash value *representer-cache*) node
-              (mapping-node-pairs node)
-              (loop for (key . item) in (yaml-mapping-entries value)
-                    collect (cons (%represent-dispatch key)
-                                  (%represent-dispatch item))))
-        node)))
+(define-representer-builder %represent-vector
+  make-sequence-node
+  sequence-node-items
+  (loop for item across value collect (%represent-dispatch item)))
+
+(define-representer-builder %represent-mapping
+  make-mapping-node
+  mapping-node-pairs
+  (loop for (key . item) in (yaml-mapping-entries value)
+        collect (cons (%represent-dispatch key) (%represent-dispatch item))))
 
 (defun %represent-hash-table (value)
   (or (gethash value *representer-cache*)
-      (let ((node (make-mapping-node :pairs nil))
-            (pairs nil))
+      (let ((node (make-mapping-node :pairs nil)) (pairs nil))
         (setf (gethash value *representer-cache*) node)
         (maphash (lambda (key item)
                    (push (cons (%represent-dispatch key)

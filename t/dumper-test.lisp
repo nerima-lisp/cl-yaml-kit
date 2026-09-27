@@ -99,14 +99,7 @@
     (value expected)
     (expect (dump-to-string-with-newline value) :to-equal expected)))
 
-(defmacro test-dumper-boundaries (cases)
-  `(cl-weave:it-each ,cases
-     "emits scalar boundary ~S as ~S"
-     (value expected)
-     (expect (dump-to-string-with-newline value)
-             :to-equal (format nil "~A~%" expected))))
-
-(test-dumper-boundaries
+(cl-weave:it-each
  (("true" "'true'")
   ("1.5" "'1.5'")
   ("0x1F" "'0x1F'")
@@ -119,7 +112,11 @@
   ("trail " "'trail '")
   (#.(format nil "a~%b") "\"a\\nb\"")
   (#.(format nil " folded~%") "\" folded\\n\"")
-  (#.(string (code-char 1)) "\"\\x01\"")))
+     (#.(string (code-char 1)) "\"\\x01\""))
+  "emits scalar boundary ~S as ~S"
+  (value expected)
+  (expect (dump-to-string-with-newline value)
+          :to-equal (format nil "~A~%" expected)))
 
 (cl-weave:it-each
     ((empty-string "")

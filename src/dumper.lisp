@@ -1,7 +1,7 @@
 ;;;; src/dumper.lisp
 (in-package #:yaml-kit)
 
-(defun emit-events (events &key (indent 2) (width 80)
+(defun emit-events (events &key (indent 2)
                                   (explicit-document-start nil))
   "Return YAML text for an event list or event-producing function."
   (with-output-to-string (stream)
@@ -10,14 +10,13 @@
                        (funcall events (lambda (event) (push event result)))
                        (nreverse result))
                      events)))
-      (emit-event-stream items stream :indent indent :width width
+      (emit-event-stream items stream :indent indent
                          :explicit-document-start explicit-document-start))))
 
-(defun emit (value &key (indent 2) (width 80) (default-flow-style :block)
-                        (explicit-document-start nil) canonical)
+(defun emit (value &key (indent 2) (default-flow-style :block)
+                        (explicit-document-start nil))
   "Return YAML text representing VALUE. NIL is an empty sequence; +YAML-NULL+ is null.
-CANONICAL is reserved for canonical marker selection."
-  (declare (ignore canonical))
+"
   (let ((root (represent value)))
     (let ((seen (make-hash-table :test #'eq)))
       (labels ((apply-style (node)
@@ -38,17 +37,16 @@ CANONICAL is reserved for canonical marker selection."
         (let ((events nil))
           (serialize root (lambda (event) (push event events))
                      :explicit-document-start explicit-document-start)
-          (emit-event-stream (nreverse events) stream :indent indent :width width
+          (emit-event-stream (nreverse events) stream :indent indent
                              :explicit-document-start explicit-document-start
                              :suppress-empty-document-marker t))))))
 
-(defun write-yaml (value stream &key (indent 2) (width 80)
+(defun write-yaml (value stream &key (indent 2)
                                     (default-flow-style :block)
-                                    (explicit-document-start nil) canonical)
+                                    (explicit-document-start nil))
   "Write YAML representing VALUE to STREAM and return VALUE."
-  (write-string (emit value :indent indent :width width
+  (write-string (emit value :indent indent
                       :default-flow-style default-flow-style
-                      :explicit-document-start explicit-document-start
-                      :canonical canonical)
+                      :explicit-document-start explicit-document-start)
                 stream)
   value)

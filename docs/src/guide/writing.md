@@ -16,11 +16,10 @@ Use `write-yaml` when the result should be written directly to a stream:
 (yaml-kit:write-yaml value stream)
 ```
 
-Both functions accept `:indent`, `:width`, `:default-flow-style`,
-`:explicit-document-start`, and `:canonical`. `indent` controls collection
-indentation, `width` is the preferred scalar width, and `default-flow-style`
-may be `:block` or `:flow`. Set `explicit-document-start` to true to emit
-`---`; `canonical` is reserved for canonical output selection.
+Both functions accept `:indent`, `:default-flow-style`, and
+`:explicit-document-start`. `indent` controls collection indentation and
+`default-flow-style` may be `:block` or `:flow`. Set
+`explicit-document-start` to true to emit `---`.
 
 Strings that could resolve as YAML numbers, booleans, or null are quoted so
 that their string type is preserved. Plain style is used only when the
