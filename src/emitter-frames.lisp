@@ -161,8 +161,8 @@
                                               (document-end-event-explicit-p candidate)))
                                        remaining))))
              (when stack (incf (cdr (car stack))))
-             (when key-p
-               (setf last-key-style style)))
+           (when key-p
+               (setf last-key-style style))))
           ((alias-event-p event)
            (start-value)
            (%emit-text context "*")
@@ -247,6 +247,6 @@
           ((mapping-end-event-p event)
            (let ((frame (pop stack)))
              (when (eq (car frame) :flow-map) (%emit-text context "}"))
-             (when stack (incf (cdr (car stack))))))))
-    stream)))
-)
+             (when stack (incf (cdr (car stack)))))))
+      ))
+    stream))
