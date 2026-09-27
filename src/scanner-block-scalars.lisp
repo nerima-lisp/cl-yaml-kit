@@ -19,8 +19,14 @@
         (when (and (< column (car indent))
                    (sc-tab-p s))
           (sc-error s "while scanning a block scalar" start-mark
-                    "found a tab character where an indentation space is expected")))
-      (unless (sc-break-p s) (return))
+                    "found a tab character where an indentation space is expected"))
+        (unless (sc-break-p s)
+          ;; The content indentation is the one the first non-empty line uses,
+          ;; so a leading empty line indented further does not belong to it.
+          (when (and (zerop (car indent)) (> max-indent column))
+            (sc-error s "while scanning a block scalar" start-mark
+                      "found a leading empty line indented more than the content"))
+          (return)))
       (sc-read-line s breaks)
       (setf (car end-mark) (sc-mark s)))
     (when (zerop (car indent))

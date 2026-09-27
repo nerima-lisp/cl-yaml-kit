@@ -50,6 +50,7 @@
                (:file "conditions-test") (:file "reader-test")
                (:file "scanner-test") (:file "scanner-directives-test")
                (:file "parser-test")
+               (:file "scanner-block-scalars-test")
                (:file "scanner-flow-scalars-test")
                (:file "scanner-fetch-test")
                (:file "loader-test") (:file "dumper-test")
