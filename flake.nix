@@ -89,5 +89,19 @@
           killAfterSeconds = 30;
         };
       };
+      overrideOutputs = ctx: {
+        apps.test = {
+          type = "app";
+          program = "${
+            ctx.pkgs.writeShellApplication {
+              name = "cl-yaml-kit-test-with-fixtures";
+              text = ''
+                export YAML_TEST_SUITE=${yaml-test-suite}
+                exec ${ctx.generated.apps.test.program} "$@"
+              '';
+            }
+          }/bin/cl-yaml-kit-test-with-fixtures";
+        };
+      };
     };
 }

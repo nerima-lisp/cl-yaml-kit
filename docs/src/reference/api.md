@@ -103,9 +103,6 @@ return a boolean. `node-tag`, `node-anchor`, `node-style`, `node-start-mark`,
 `mapping-node-pairs` accept the corresponding node and return its field.
 
 `scalar-node`, `sequence-node`, and `mapping-node` are the structure types.
-`define-event` is the macro used to define event structures; it accepts
-`(name slots &optional documentation)` and returns the name.
-
 ## Events
 
 The constructors all accept the base keywords `:start-mark :end-mark`.
