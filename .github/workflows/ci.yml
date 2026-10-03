@@ -21,16 +21,8 @@ concurrency:
 jobs:
   check:
     if: ${{ github.event_name != 'workflow_run' }}
-    name: nix flake check (${{ matrix.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: linux
-            runner: ubuntu-latest
-          - name: macOS arm64
-            runner: macos-14
-    runs-on: ${{ matrix.runner }}
+    name: nix flake check (ubuntu x86_64)
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       # persist-credentials: false — this job runs untrusted PR code via
@@ -50,8 +42,7 @@ jobs:
       # mkdocs --strict build (checks.docs). The coverage check has its own
       # 2400-second timeout in flake.nix and the job has a 30-minute ceiling.
       #
-      # Each matrix runner checks its native flake system. No --all-systems is
-      # needed because that would ask each runner to realise the other system.
+      # CI intentionally verifies the single supported system: x86_64-linux.
       - name: Check flake
         run: nix flake check --print-build-logs
 

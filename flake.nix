@@ -43,20 +43,11 @@
       yaml-test-suite,
       treefmt-nix,
     }:
-    cl-nix-forge.lib.aarch64-darwin.mkPackageFlake {
+    cl-nix-forge.lib.x86_64-linux.mkPackageFlake {
       inherit self nixpkgs;
       pname = "cl-yaml-kit";
-      # The organisation standard narrowed this to x86_64-linux alone, on the
-      # grounds that a platform CI does not exercise is not one to promise. The
-      # maintainer develops on aarch64-darwin with no Linux builder configured,
-      # so dropping darwin would leave the gate unrunnable, not narrower. The
-      # cost is that CI, which runs ubuntu-latest alone, checks only the Linux
-      # system and darwin is gated by `nix flake check` on the maintainer's
-      # machine. Closing that needs either a Linux builder or a darwin runner.
-      systems = [
-        "x86_64-linux"
-        "aarch64-darwin"
-      ];
+      # CI and release verification run only on ubuntu x86_64.
+      systems = [ "x86_64-linux" ];
       asd = ./cl-yaml-kit.asd;
       root = ./.;
       lispDependencies = ctx: [
