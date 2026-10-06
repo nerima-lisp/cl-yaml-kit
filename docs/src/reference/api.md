@@ -74,6 +74,24 @@ source file.
 
 The defaults for these options are in the table above.
 
+## Format-preserving editing
+
+| Symbol and lambda list | Returns | Signals |
+| --- | --- | --- |
+| `edit-source source path value &key document operation` | Edited source in the input type | `yaml-parse-error`, `yaml-format-edit-path-error`, `yaml-format-edit-anchor-error`, `yaml-format-edit-structure-error` |
+| `yaml-format-edit-path-error-path`, `yaml-format-edit-path-error-document`, `yaml-format-edit-path-error-operation` | `(condition)` | Path error details |
+| `yaml-format-edit-structure-error-path` | `(condition)` | Structure error path |
+| `yaml-format-edit-anchor-error-path`, `yaml-format-edit-anchor-error-anchor` | `(condition)` | Anchor error details |
+
+`path` is a proper list of string keys and zero-based integer sequence indexes.
+`document` is zero-based. `operation` is `:set` by default; use `:delete` to
+remove a mapping entry or sequence item. The editor copies the original source
+and changes only the selected node or insertion point. It preserves comments,
+key order, quoting outside the selected value, indentation, line endings, and
+the input octet encoding including a byte-order mark. Additions to flow
+collections and edits involving anchors or aliases signal a dedicated
+condition. The document root cannot be deleted.
+
 ## Sentinel and mapping values
 
 | Symbol | Lambda list or value | Returns |

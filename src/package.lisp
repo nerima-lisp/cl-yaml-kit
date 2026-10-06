@@ -42,6 +42,8 @@
    #:scalar-event-anchor #:scalar-event-tag #:scalar-event-value
    #:scalar-event-plain-implicit-p #:scalar-event-quoted-implicit-p
    #:scalar-event-style #:alias-event-anchor
+   ;; Format-preserving editing
+   #:edit-source
    ;; Conditions
    #:yaml-kit-error #:yaml-parse-error #:yaml-parse-error-line
    #:yaml-parse-error-column #:yaml-parse-error-offset #:yaml-parse-error-context
@@ -49,4 +51,9 @@
    #:yaml-compose-error-cause
    #:yaml-emit-error #:yaml-emit-error-mark #:yaml-emit-error-context
    #:yaml-emit-error-cause
-   #:yaml-resource-limit-error))
+   #:yaml-resource-limit-error
+   #:yaml-format-edit-path-error #:yaml-format-edit-path-error-path
+   #:yaml-format-edit-path-error-document #:yaml-format-edit-path-error-operation
+   #:yaml-format-edit-structure-error #:yaml-format-edit-structure-error-path
+   #:yaml-format-edit-anchor-error #:yaml-format-edit-anchor-error-path
+   #:yaml-format-edit-anchor-error-anchor))
