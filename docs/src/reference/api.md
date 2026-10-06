@@ -85,12 +85,32 @@ The defaults for these options are in the table above.
 
 `path` is a proper list of string keys and zero-based integer sequence indexes.
 `document` is zero-based. `operation` is `:set` by default; use `:delete` to
-remove a mapping entry or sequence item. The editor copies the original source
-and changes only the selected node or insertion point. It preserves comments,
-key order, quoting outside the selected value, indentation, line endings, and
-the input octet encoding including a byte-order mark. Additions to flow
-collections and edits involving anchors or aliases signal a dedicated
-condition. The document root cannot be deleted.
+remove a mapping entry or sequence item. The editor validates the edited source
+by parsing it again before returning it.
+
+The supported `:set` form replaces an untagged, non-empty, single-line scalar.
+The replacement value must also be scalar. Scalar replacement in a flow
+collection quotes strings containing flow indicators when necessary. `:set`
+does not replace mappings, sequences, empty values, block scalars, or multiline
+scalars; those cases signal `yaml-format-edit-structure-error`.
+
+The supported additions are mapping entries and sequence items in block
+collections. Mapping additions require a string key. Sequence additions are
+append-only: the path index must be the next index. Additions to flow
+collections, additions to mappings or sequences beginning after `- ` on the
+same line, and non-tail sequence additions signal
+`yaml-format-edit-structure-error`. The editor also rejects deletion from flow
+collections, deletion of a collection's only child, and deletion of inline
+sequence mappings or sequences.
+
+For safety, edits through tagged nodes, anchors, aliases, duplicate mapping
+keys, or merge-key mappings are rejected. The document root cannot be deleted.
+Integer path components under mappings are rejected with
+`yaml-format-edit-path-error`. Unsupported source encodings and edited text
+that does not parse signal a `yaml-kit-error` subtype. Within the supported
+subset, comments, key order, source text outside the edit, line endings, final
+newline state, and the input octet encoding including a byte-order mark are
+preserved.
 
 ## Sentinel and mapping values
 
