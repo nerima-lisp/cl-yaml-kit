@@ -17,8 +17,9 @@
   key
   value)
 
-(defun %format-edit-error (type path document operation message)
-  (error type :path path :document document :operation operation :message message))
+(defun %format-edit-path-error (path document operation message)
+  (error 'yaml-format-edit-path-error
+         :path path :document document :operation operation :message message))
 
 (defun %format-edit-structure-error (path message)
   (error 'yaml-format-edit-structure-error :path path :message message))
@@ -119,16 +120,13 @@
         while (consp tail)
         finally (return (null tail))))
 
-(defun %format-edit-key-text (key)
-  (if (stringp key) key (princ-to-string key)))
-
 (defun %format-edit-map-pair (node key)
   (unless (stringp key)
     (return-from %format-edit-map-pair nil))
   (find-if (lambda (pair)
              (let ((key-node (format-edit-pair-key pair)))
                (and (eq (format-edit-node-kind key-node) :scalar)
-                    (string= (%format-edit-key-text key)
+                    (string= key
                              (format-edit-node-value key-node)))))
            (format-edit-node-pairs node)))
 
@@ -151,27 +149,16 @@
                  (string= (format-edit-node-value key) "<<"))))
         (format-edit-node-pairs node)))
 
-(defun %format-edit-inline-sequence-mapping-p (node text)
-  (when (eq (format-edit-node-kind node) :mapping)
+(defun %format-edit-inline-sequence-node-p (node text)
+  (when (member (format-edit-node-kind node) '(:mapping :sequence))
     (let* ((start (format-edit-node-start node))
            (line-start (%format-edit-line-start text start))
            (prefix (subseq text line-start start))
            (dash (position #\- prefix :from-end t)))
       (and dash
            (every (lambda (character)
-                   (member character '(#\Space #\Tab)))
-                  (subseq prefix (1+ dash)))))))
-
-(defun %format-edit-inline-sequence-p (node text)
-  (when (eq (format-edit-node-kind node) :sequence)
-    (let* ((start (format-edit-node-start node))
-           (line-start (%format-edit-line-start text start))
-           (prefix (subseq text line-start start))
-           (dash (position #\- prefix :from-end t)))
-      (and dash
-           (every (lambda (character)
-                   (member character '(#\Space #\Tab)))
-                  (subseq prefix (1+ dash)))))))
+                    (member character '(#\Space #\Tab)))
+                   (subseq prefix (1+ dash)))))))
 
 (defun %format-edit-only-child-p (node)
   (case (format-edit-node-kind node)
@@ -210,7 +197,7 @@
      (values :utf-16le 0))
     (t (values :utf-8 0))))
 
-(defun %format-edit-source-text (source)
+(defun %format-edit-source-text (source path document operation)
   (cond
     ((stringp source)
      (values (%simple-character-string source) nil))
@@ -234,7 +221,7 @@
                 :context "invalid source encoding"
                 :message (princ-to-string condition)))))
     (t
-     (%format-edit-error 'yaml-format-edit-path-error nil 0 :set
+     (%format-edit-path-error path document operation
                          "source must be a string or octet vector"))))
 
 (defun %format-edit-line-start (text position)
@@ -290,6 +277,36 @@
              (write-char character stream))
     (write-char #\' stream)))
 
+(defun %format-edit-double-quoted-fragment (value)
+  (with-output-to-string (stream)
+    (write-char #\" stream)
+    (loop for character across value
+          for code = (char-code character)
+          do (case code
+               (#x00 (write-string "\\0" stream))
+               (#x07 (write-string "\\a" stream))
+               (#x08 (write-string "\\b" stream))
+               (#x09 (write-string "\\t" stream))
+               (#x0a (write-string "\\n" stream))
+               (#x0b (write-string "\\v" stream))
+               (#x0c (write-string "\\f" stream))
+               (#x0d (write-string "\\r" stream))
+               (#x1b (write-string "\\e" stream))
+               (#x22 (write-string "\\\"" stream))
+               (#x5c (write-string "\\\\" stream))
+               (#x85 (write-string "\\N" stream))
+               (#x2028 (write-string "\\L" stream))
+               (#x2029 (write-string "\\P" stream))
+               (otherwise
+                (if (%yaml-printable-character-p character)
+                    (write-char character stream)
+                    (if (<= code #xff)
+                        (format stream "\\x~2,'0X" code)
+                        (if (<= code #xffff)
+                            (format stream "\\u~4,'0X" code)
+                            (format stream "\\U~8,'0X" code)))))))
+    (write-char #\" stream)))
+
 (defun %format-edit-flow-dangerous-string-p (value)
   (or (zerop (length value))
       (some (lambda (character)
@@ -310,11 +327,17 @@
             (and (arrayp value) (not (stringp value)))
             (hash-table-p value))
     (%format-edit-structure-error nil "only scalar values can be set"))
-  (if (and flow-p (stringp value)
-           (%format-edit-flow-dangerous-string-p value))
-      (%format-edit-single-quoted-fragment value)
-      (string-trim '(#\Return #\Newline #\Space #\Tab)
-                   (emit value :default-flow-style :flow))))
+  (let ((fragment (string-trim '(#\Return #\Newline #\Space #\Tab)
+                               (emit value :default-flow-style :flow))))
+    (if (and (stringp value)
+             (find-if (lambda (character)
+                        (member character '(#\Return #\Newline)))
+                      fragment))
+        (%format-edit-double-quoted-fragment value)
+        (if (and flow-p (stringp value)
+                 (%format-edit-flow-dangerous-string-p value))
+            (%format-edit-single-quoted-fragment value)
+            fragment))))
 
 (defun %format-edit-scalar-span-single-line-p (text node)
   (let ((start (format-edit-node-start node))
@@ -328,9 +351,6 @@
   (unless (eq (format-edit-node-kind node) :scalar)
     (%format-edit-structure-error path
                                   "setting collection values is not supported"))
-  (when (format-edit-node-tag node)
-    (%format-edit-structure-error path
-                                  "setting tagged nodes is not supported"))
   (unless (member (format-edit-node-style node)
                   '(:plain :single-quoted :double-quoted))
     (%format-edit-structure-error path
@@ -344,6 +364,9 @@
       (eq (format-edit-node-kind node) :alias)))
 
 (defun %format-edit-check-safe-node (node path)
+  (when (format-edit-node-tag node)
+    (%format-edit-structure-error path
+                                  "edits involving tagged nodes are not supported"))
   (when (%format-edit-node-anchored-p node)
     (%format-edit-anchor-error path (format-edit-node-anchor node)
                                "anchor or alias is involved")))
@@ -360,7 +383,7 @@
       (case (format-edit-node-kind node)
         (:mapping
          (unless (stringp part)
-           (%format-edit-error 'yaml-format-edit-path-error path document operation
+           (%format-edit-path-error path document operation
                                "mapping path components must be strings"))
          (when (%format-edit-map-duplicate-key-p node)
            (%format-edit-structure-error path "duplicate mapping keys are not supported"))
@@ -413,22 +436,16 @@
 (defun %format-edit-preserve-final-newline (original edited)
   (if (and (plusp (length original))
            (member (char original (1- (length original))) '(#\Return #\Newline))
-           (or (zerop (length edited))
-               (not (member (char edited (1- (length edited)))
-                            '(#\Return #\Newline))))
-           (plusp (length edited)))
+           (plusp (length edited))
+           (not (member (char edited (1- (length edited)))
+                        '(#\Return #\Newline))))
       (concatenate 'simple-string edited (%format-edit-newline original))
       edited))
 
 (defun %format-edit-validate-text (text path)
   (handler-case
-      (progn
-        (parse-all text)
-        text)
+      (values text (parse-all text))
     (yaml-kit-error (condition)
-      (%format-edit-structure-error
-       path (format nil "edit produced invalid YAML: ~A" condition)))
-    (error (condition)
       (%format-edit-structure-error
        path (format nil "edit produced invalid YAML: ~A" condition)))))
 
@@ -446,8 +463,7 @@
 (defun %format-edit-set-missing (text parent component value path document)
   (when (eq (format-edit-node-style parent) :flow)
     (%format-edit-structure-error path "adding to a flow collection is not supported"))
-  (when (or (%format-edit-inline-sequence-mapping-p parent text)
-            (%format-edit-inline-sequence-p parent text))
+  (when (%format-edit-inline-sequence-node-p parent text)
     (%format-edit-structure-error path
                                   "adding to sequence-inline nodes is not supported"))
   (let ((fragment (%format-edit-fragment value))
@@ -457,7 +473,7 @@
     (case (format-edit-node-kind parent)
       (:mapping
        (unless (stringp component)
-         (%format-edit-error 'yaml-format-edit-path-error path document :set
+         (%format-edit-path-error path document :set
                              "mapping key must be scalar"))
        (values position
                (concatenate 'simple-string
@@ -468,10 +484,12 @@
                             indent (%format-edit-fragment component) ": " fragment
                             (if (< position (length text)) newline ""))))
       (:sequence
-       (unless (and (integerp component)
-                    (= component (length (format-edit-node-children parent))))
-         (%format-edit-error 'yaml-format-edit-path-error path document :set
+       (unless (and (integerp component) (<= 0 component))
+         (%format-edit-path-error path document :set
                              "sequence edits only append at the next index"))
+       (unless (= component (length (format-edit-node-children parent)))
+         (%format-edit-structure-error path
+                                       "sequence additions must append at the next index"))
        (values position
                (concatenate 'simple-string
                             (if (and (plusp position)
@@ -481,50 +499,272 @@
                             indent "- " fragment
                             (if (< position (length text)) newline ""))))
       (otherwise
-       (%format-edit-error 'yaml-format-edit-path-error path document :set
+       (%format-edit-path-error path document :set
                            "path parent is not a collection")))))
+
+(defun %format-edit-semantic-child (container component)
+  (cond
+    ((hash-table-p container)
+     (gethash component container))
+    ((yaml-mapping-p container)
+     (let ((entry (assoc component (yaml-mapping-entries container) :test #'equal)))
+       (if entry (values (cdr entry) t) (values nil nil))))
+    ((vectorp container)
+     (if (and (integerp component) (<= 0 component)
+              (< component (length container)))
+         (values (aref container component) t)
+         (values nil nil)))
+    ((listp container)
+     (if (and (integerp component) (<= 0 component)
+              (< component (length container)))
+         (values (nth component container) t)
+         (values nil nil)))
+    (t (values nil nil))))
+
+(defun %format-edit-semantic-copy (value)
+  (cond
+    ((hash-table-p value)
+     (let ((copy (make-hash-table :test (hash-table-test value))))
+       (maphash (lambda (key item)
+                  (setf (gethash key copy)
+                        (%format-edit-semantic-copy item)))
+                value)
+       copy))
+    ((yaml-mapping-p value)
+     (make-yaml-mapping
+      (mapcar (lambda (entry)
+                (cons (car entry) (%format-edit-semantic-copy (cdr entry))))
+              (yaml-mapping-entries value))))
+    ((stringp value) value)
+    ((vectorp value)
+     (map 'vector #'%format-edit-semantic-copy value))
+    ((consp value)
+     (mapcar #'%format-edit-semantic-copy value))
+    (t value)))
+
+(defun %format-edit-semantic-replace-child (container component child path)
+  (cond
+    ((hash-table-p container)
+     (let ((copy (%format-edit-semantic-copy container)))
+       (setf (gethash component copy) child)
+       copy))
+    ((yaml-mapping-p container)
+     (let ((entries
+             (mapcar (lambda (entry)
+                       (if (equal (car entry) component)
+                           (cons (car entry) child)
+                           entry))
+                     (yaml-mapping-entries container))))
+       (make-yaml-mapping entries)))
+    ((vectorp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (< component (length container)))
+       (%format-edit-structure-error path "semantic edit index is out of range"))
+     (let ((copy (copy-seq container)))
+       (setf (aref copy component) child)
+       copy))
+    ((listp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (< component (length container)))
+       (%format-edit-structure-error path "semantic edit index is out of range"))
+     (let ((copy (copy-list container)))
+       (setf (nth component copy) child)
+       copy))
+    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+
+(defun %format-edit-semantic-set-at (value path replacement error-path)
+  (if (null path)
+      replacement
+      (multiple-value-bind (child presentp)
+          (%format-edit-semantic-child value (car path))
+        (unless presentp
+          (%format-edit-structure-error error-path
+                                        "edited path is absent from the original value"))
+        (%format-edit-semantic-replace-child
+         value (car path)
+         (%format-edit-semantic-set-at child (cdr path) replacement error-path)
+         error-path))))
+
+(defun %format-edit-semantic-add-child (container component child path)
+  (cond
+    ((hash-table-p container)
+     (when (nth-value 1 (gethash component container))
+       (%format-edit-structure-error path "added path already exists"))
+     (let ((copy (%format-edit-semantic-copy container)))
+       (setf (gethash component copy) child)
+       copy))
+    ((yaml-mapping-p container)
+     (when (assoc component (yaml-mapping-entries container) :test #'equal)
+       (%format-edit-structure-error path "added path already exists"))
+     (make-yaml-mapping
+      (append (yaml-mapping-entries container)
+              (list (cons component child)))))
+    ((vectorp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (= component (length container)))
+       (%format-edit-structure-error path "semantic sequence edit is not append-only"))
+     (concatenate 'vector container (vector child)))
+    ((listp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (= component (length container)))
+       (%format-edit-structure-error path "semantic sequence edit is not append-only"))
+     (append container (list child)))
+    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+
+(defun %format-edit-semantic-add-at (value path replacement error-path)
+  (when (null path)
+    (%format-edit-structure-error error-path "cannot add at an empty path"))
+  (if (null (cdr path))
+      (%format-edit-semantic-add-child value (car path) replacement error-path)
+      (multiple-value-bind (child presentp)
+          (%format-edit-semantic-child value (car path))
+        (unless presentp
+          (%format-edit-structure-error error-path
+                                        "an intermediate path component is absent"))
+        (%format-edit-semantic-replace-child
+         value (car path)
+         (%format-edit-semantic-add-at child (cdr path) replacement error-path)
+         error-path))))
+
+(defun %format-edit-semantic-delete-child (container component path)
+  (cond
+    ((hash-table-p container)
+     (unless (nth-value 1 (gethash component container))
+       (%format-edit-structure-error path "deleted path is absent"))
+     (let ((copy (%format-edit-semantic-copy container)))
+       (remhash component copy)
+       copy))
+    ((yaml-mapping-p container)
+     (unless (assoc component (yaml-mapping-entries container) :test #'equal)
+       (%format-edit-structure-error path "deleted path is absent"))
+     (make-yaml-mapping
+      (remove component (yaml-mapping-entries container)
+              :key #'car :test #'equal)))
+    ((vectorp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (< component (length container)))
+       (%format-edit-structure-error path "semantic edit index is out of range"))
+     (concatenate 'vector (subseq container 0 component)
+                  (subseq container (1+ component))))
+    ((listp container)
+     (unless (and (integerp component) (<= 0 component)
+                  (< component (length container)))
+       (%format-edit-structure-error path "semantic edit index is out of range"))
+     (append (subseq container 0 component) (nthcdr (1+ component) container)))
+    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+
+(defun %format-edit-semantic-delete-at (value path error-path)
+  (when (null path)
+    (%format-edit-structure-error error-path "cannot delete at an empty path"))
+  (if (null (cdr path))
+      (%format-edit-semantic-delete-child value (car path) error-path)
+      (multiple-value-bind (child presentp)
+          (%format-edit-semantic-child value (car path))
+        (unless presentp
+          (%format-edit-structure-error error-path "deleted path is absent"))
+        (%format-edit-semantic-replace-child
+         value (car path)
+         (%format-edit-semantic-delete-at child (cdr path) error-path)
+         error-path))))
+
+(defun %format-edit-semantic-equal-p (left right)
+  (cond
+    ((and (hash-table-p left) (hash-table-p right))
+     (and (= (hash-table-count left) (hash-table-count right))
+          (block mismatch
+            (maphash (lambda (key value)
+                       (multiple-value-bind (other presentp) (gethash key right)
+                         (unless (and presentp
+                                      (%format-edit-semantic-equal-p value other))
+                           (return-from mismatch nil))))
+                     left)
+            t)))
+    ((and (yaml-mapping-p left) (yaml-mapping-p right))
+     (let ((left-entries (yaml-mapping-entries left))
+           (right-entries (yaml-mapping-entries right)))
+       (and (= (length left-entries) (length right-entries))
+            (every (lambda (entry)
+                    (let ((other (assoc (car entry) right-entries :test #'equal)))
+                      (and other
+                           (%format-edit-semantic-equal-p
+                            (cdr entry) (cdr other)))))
+                   left-entries))))
+    ((and (vectorp left) (vectorp right))
+     (and (= (length left) (length right))
+          (loop for index below (length left)
+                always (%format-edit-semantic-equal-p
+                        (aref left index) (aref right index)))))
+    ((and (consp left) (consp right))
+     (and (= (length left) (length right))
+          (every #'%format-edit-semantic-equal-p left right)))
+    (t (equalp left right))))
+
+(defun %format-edit-semantic-expected (original path value operation document)
+  (let ((expected (mapcar #'%format-edit-semantic-copy original)))
+    (unless (and (integerp document) (<= 0 document) (< document (length expected)))
+      (%format-edit-structure-error path "semantic edit document is absent"))
+    (setf (nth document expected)
+          (case operation
+            (:set (%format-edit-semantic-set-at
+                   (nth document expected) path value path))
+            (:delete (%format-edit-semantic-delete-at
+                      (nth document expected) path path))
+            (:add
+             (%format-edit-semantic-add-at
+              (nth document expected) path value path))
+            (otherwise
+             (%format-edit-structure-error path "unknown semantic edit operation"))))
+    expected))
+
+(defun %format-edit-validate-semantics
+    (original edited path value operation document)
+  (let ((expected (%format-edit-semantic-expected
+                   original path value operation document)))
+    (unless (%format-edit-semantic-equal-p expected edited)
+      (%format-edit-structure-error
+       path "edited YAML changed a value outside the requested edit"))))
 
 (defun edit-source (source path value &key (document 0) (operation :set))
   (unless (%format-edit-proper-list-p path)
-    (%format-edit-error 'yaml-format-edit-path-error path document operation
+    (%format-edit-path-error path document operation
                         "path must be a proper list"))
   (unless (and (integerp document) (<= 0 document))
-    (%format-edit-error 'yaml-format-edit-path-error path document operation
+    (%format-edit-path-error path document operation
                         "document must be a non-negative integer"))
   (unless (member operation '(:set :delete))
-    (%format-edit-error 'yaml-format-edit-path-error path document operation
+    (%format-edit-path-error path document operation
                         "operation must be :set or :delete"))
   (when (null path)
-    (%format-edit-error 'yaml-format-edit-path-error path document operation
+    (%format-edit-path-error path document operation
                         "path must not be empty"))
-  (multiple-value-bind (text encoder) (%format-edit-source-text source)
-    (labels ((finish (edited)
-               (%format-edit-encode
-                encoder (%format-edit-validate-text edited path))))
+  (multiple-value-bind (text encoder)
+      (%format-edit-source-text source path document operation)
+    (let ((original-values nil))
+      (labels ((finish (edited semantic-operation)
+               (multiple-value-bind (validated edited-values)
+                   (%format-edit-validate-text edited path)
+                 (%format-edit-validate-semantics
+                  original-values edited-values path value
+                  semantic-operation document)
+                 (%format-edit-encode encoder validated))))
       (let* ((events (parse-events text))
              (roots (%format-edit-node-from-events events))
              (root (nth document roots)))
         (unless root
-          (%format-edit-error 'yaml-format-edit-path-error path document operation
+          (%format-edit-path-error path document operation
                               "document does not exist"))
         (multiple-value-bind (node parent component)
             (%format-edit-find root path document operation)
+          (setf original-values (parse-all text))
           (cond
             (node
              (%format-edit-check-safe-node node path)
-             (when (format-edit-node-tag node)
-               (%format-edit-structure-error path
-                                             "edits involving tagged nodes are not supported"))
              (if (eq operation :delete)
                  (progn
-                   (unless parent
-                     (%format-edit-error 'yaml-format-edit-path-error path document operation
-                                         "cannot delete the document root"))
                    (when (%format-edit-only-child-p parent)
                      (%format-edit-structure-error path
                                                    "deleting the only collection child is not supported"))
-                   (when (or (%format-edit-inline-sequence-mapping-p parent text)
-                             (%format-edit-inline-sequence-p parent text))
+                   (when (%format-edit-inline-sequence-node-p parent text)
                      (%format-edit-structure-error
                       path "deleting entries from inline sequence nodes is not supported"))
                    (let ((entry (if (eq (format-edit-node-kind parent) :mapping)
@@ -532,12 +772,10 @@
                                                (eq (format-edit-pair-value pair) node))
                                              (format-edit-node-pairs parent))
                                     node)))
-                     (unless entry
-                       (%format-edit-structure-error
-                        path "mapping entry is not in its parent"))
                      (multiple-value-bind (start end)
                          (%format-edit-delete-entry text parent entry path)
-                       (finish (%format-edit-apply-replacement text start end "")))))
+                       (finish (%format-edit-apply-replacement text start end "")
+                               :delete))))
                  (progn
                    (%format-edit-check-set-node text node path)
                    (let ((replacement
@@ -548,13 +786,15 @@
                      (finish
                       (%format-edit-apply-replacement
                        text (format-edit-node-start node)
-                       (format-edit-node-end node) replacement))))))
+                       (format-edit-node-end node) replacement)
+                      :set)))))
             ((eq operation :delete)
-             (%format-edit-error 'yaml-format-edit-path-error path document operation
+             (%format-edit-path-error path document operation
                                  "path does not exist"))
             (t
              (%format-edit-check-safe-node parent path)
              (multiple-value-bind (position insertion)
                  (%format-edit-set-missing text parent component value path document)
                (let ((edited (%format-edit-apply-replacement text position position insertion)))
-                 (finish (%format-edit-preserve-final-newline text edited)))))))))))
+                 (finish (%format-edit-preserve-final-newline text edited)
+                         :add)))))))))))

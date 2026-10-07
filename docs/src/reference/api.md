@@ -85,8 +85,11 @@ The defaults for these options are in the table above.
 
 `path` is a proper list of string keys and zero-based integer sequence indexes.
 `document` is zero-based. `operation` is `:set` by default; use `:delete` to
-remove a mapping entry or sequence item. The editor validates the edited source
-by parsing it again before returning it.
+remove a mapping entry or sequence item. The editor parses both the original and
+edited source with `parse-all`, then verifies that the requested semantic change
+is the only value change before returning it. A syntactically valid edit that
+changes an alias-resolved value or any other unrelated value signals
+`yaml-format-edit-structure-error`.
 
 The supported `:set` form replaces an untagged, non-empty, single-line scalar.
 The replacement value must also be scalar. Scalar replacement in a flow
@@ -103,6 +106,11 @@ same line, and non-tail sequence additions signal
 collections, deletion of a collection's only child, and deletion of inline
 sequence mappings or sequences.
 
+Inserted scalar fragments are emitted in flow style. If an emitter fragment
+would span multiple lines, the editor uses a double-quoted fragment with YAML
+escapes. This applies to inserted keys and values whose content contains a
+document marker, comment indicator, sequence indicator, or line break.
+
 For safety, edits through tagged nodes, anchors, aliases, duplicate mapping
 keys, or merge-key mappings are rejected. The document root cannot be deleted.
 Integer path components under mappings are rejected with
@@ -110,7 +118,8 @@ Integer path components under mappings are rejected with
 that does not parse signal a `yaml-kit-error` subtype. Within the supported
 subset, comments, key order, source text outside the edit, line endings, final
 newline state, and the input octet encoding including a byte-order mark are
-preserved.
+preserved. Replacing a quoted scalar does not promise to retain its original
+quote style; the replacement uses the emitter's selected safe style.
 
 ## Sentinel and mapping values
 

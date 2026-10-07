@@ -42,6 +42,12 @@
          (setf value (nth component value)))
         (t (return-from format-edit-present-at nil))))))
 
+(defun format-edit-condition-type (thunk)
+  (handler-case
+      (progn (funcall thunk) nil)
+    (yaml-kit:yaml-kit-error (condition)
+      (type-of condition))))
+
 (defun format-edit-expect (source path value expected-source
                            &key (document 0) (operation :set) unchanged
                              (unchanged-document document) (check-deleted t))
@@ -90,7 +96,51 @@
      (format-edit-lines (string #\Newline) t "a: 1" "b: 2")
      '("c") 3
      (format-edit-lines (string #\Newline) t "a: 1" "b: 2" "c: 3")
-     :unchanged (list '("a") 1 '("b") 2)))
+       :unchanged (list '("a") 1 '("b") 2)))
+  (it "quotes multiline and YAML-boundary strings for inserted values and keys"
+    (dolist (value (list (format nil "line1~%line2") "---" "..." "# comment"
+                          "- x" "true" "123" "" "null"))
+      (let ((edited (yaml-kit:edit-source (format nil "root: 1~%")
+                                         (list "key") value)))
+        (expect (format-edit-value-at edited 0 '("key")) :to-equal value)
+        (expect (format-edit-value-at edited 0 '("root")) :to-equal 1)))
+    (dolist (key (list (format nil "line1~%line2") "---" "..." "# comment"
+                        "- x" "true" "123" "" "null"))
+      (let ((edited (yaml-kit:edit-source (format nil "root: 1~%")
+                                         (list key) 2)))
+        (expect (format-edit-value-at edited 0 (list key)) :to-equal 2)
+        (expect (format-edit-value-at edited 0 '("root")) :to-equal 1))))
+  (it "validates additions in non-final documents and nested mappings"
+    (let* ((source (format-edit-lines (string #\Newline) t
+                                      "---" "a: 1" "..." "---" "b: 2" "..."))
+           (edited (yaml-kit:edit-source source '("c") 3 :document 0)))
+      (expect (format-edit-value-at edited 0 '("c")) :to-equal 3)
+      (expect (format-edit-value-at edited 0 '("a")) :to-equal 1)
+      (expect (format-edit-value-at edited 1 '("b")) :to-equal 2))
+    (let* ((source (format-edit-lines (string #\Newline) t
+                                      "a:" "  b: 1" "c: 2"))
+           (edited (yaml-kit:edit-source source '("a" "d") 3)))
+      (expect (format-edit-value-at edited 0 '("a" "d")) :to-equal 3)
+      (expect (format-edit-value-at edited 0 '("a" "b")) :to-equal 1)
+      (expect (format-edit-value-at edited 0 '("c")) :to-equal 2)))
+  (it "keeps trailing comment blocks, empty-value deletion, and the first newline style"
+    (let* ((source (format-edit-lines (string #\Newline) t "a: 1" "# tail" "# keep"))
+           (edited (yaml-kit:edit-source source '("b") 2)))
+      (expect (format-edit-value-at edited 0 '("a")) :to-equal 1)
+      (expect (format-edit-value-at edited 0 '("b")) :to-equal 2)
+      (expect (search "# tail" edited) :to-be-truthy)
+      (expect (search "# keep" edited) :to-be-truthy))
+    (let ((source (format-edit-lines (string #\Newline) t "a: 1" "b:" "c: 3")))
+      (let ((edited (yaml-kit:edit-source source '("b") nil :operation :delete)))
+        (expect (format-edit-present-at edited 0 '("b")) :to-be-falsy)
+        (expect (format-edit-value-at edited 0 '("a")) :to-equal 1)
+        (expect (format-edit-value-at edited 0 '("c")) :to-equal 3)))
+    (let* ((crlf (format nil "~C~C" #\Return #\Newline))
+           (source (concatenate 'string "a: 1" crlf "b: 2" (string #\Newline)))
+           (edited (yaml-kit:edit-source source '("c") 3)))
+      (expect edited :to-equal (concatenate 'string "a: 1" crlf
+                                            "b: 2" (string #\Newline)
+                                            "c: 3" crlf))))
   (it "appends a sequence item in block style and keeps the final newline"
     (format-edit-expect
      (format-edit-lines (string #\Newline) t "items:" "  - one" "  - two # keep")
@@ -205,10 +255,12 @@
                    (list (format-edit-lines (string #\Newline) t "a: 1")
                          '(0) 2)))
       (destructuring-bind (source path value) case
-        (expect (handler-case
-                    (progn (yaml-kit:edit-source source path value) nil)
-                  (yaml-kit:yaml-kit-error () t))
-                :to-be-truthy))))
+        (let ((expected (if (equal path '(0))
+                            'yaml-kit:yaml-format-edit-path-error
+                            'yaml-kit:yaml-format-edit-structure-error)))
+          (expect (format-edit-condition-type
+                   (lambda () (yaml-kit:edit-source source path value)))
+                  :to-equal expected)))))
   (it "rejects only-child deletion, flow deletion, and non-tail sequence addition"
     (dolist (case (list
                    (list (format-edit-lines (string #\Newline) t "a: 1")
@@ -218,10 +270,10 @@
                    (list (format-edit-lines (string #\Newline) t "items:" "  - a" "  - b")
                          '("items" 3) "x" :set)))
       (destructuring-bind (source path value operation) case
-        (expect (handler-case
-                    (progn (yaml-kit:edit-source source path value :operation operation) nil)
-                  (yaml-kit:yaml-kit-error () t))
-                :to-be-truthy))))
+        (expect (format-edit-condition-type
+                 (lambda ()
+                   (yaml-kit:edit-source source path value :operation operation)))
+                :to-equal 'yaml-kit:yaml-format-edit-structure-error))))
   (it "rejects anchors and aliases but allows an unrelated anchored sibling"
     (let ((source (format-edit-lines (string #\Newline) t
                                      "base: &base 1" "other: 2")))
@@ -241,6 +293,13 @@
                          nil)
                 (yaml-kit:yaml-format-edit-anchor-error () t))
               :to-be-truthy)))
+  (it "rejects a deletion that changes an unrelated alias value"
+    (let ((source (format-edit-lines (string #\Newline) t
+                                     "a: &x 1" "b:" "  c: &x 2" "d: *x")))
+      (expect (format-edit-condition-type
+               (lambda () (yaml-kit:edit-source source '("b") nil
+                                                :operation :delete)))
+              :to-equal 'yaml-kit:yaml-format-edit-structure-error)))
   (it "preserves final newline for CRLF and no-final-newline additions"
     (let ((crlf (format nil "~C~C" #\Return #\Newline)))
       (format-edit-expect (format-edit-lines crlf t "a: 1" "b: 2")
@@ -250,9 +309,22 @@
                           '("c") 3
                           (format-edit-lines crlf nil "a: 1" "b: 2" "c: 3"))))
   (it "converts invalid octets to a YAML kit condition and accepts base strings"
+    (let ((octets (coerce #(255 0 1) '(vector (unsigned-byte 8)))))
+      (expect (format-edit-condition-type
+               (lambda () (yaml-kit:edit-source octets '("a") 1
+                                                :document 4 :operation :delete)))
+              :to-equal 'yaml-kit:yaml-parse-error))
+    (expect (format-edit-condition-type
+             (lambda () (yaml-kit:edit-source 42 '("a") 1
+                                              :document 4 :operation :delete)))
+            :to-equal 'yaml-kit:yaml-format-edit-path-error)
     (expect (handler-case
-                (progn (yaml-kit:edit-source #(255 0 1) '("a") 1) nil)
-              (yaml-kit:yaml-kit-error () t))
+                (yaml-kit:edit-source 42 '("a") 1
+                                      :document 4 :operation :delete)
+              (yaml-kit:yaml-format-edit-path-error (condition)
+                (and (= (yaml-kit:yaml-format-edit-path-error-document condition) 4)
+                     (eq (yaml-kit:yaml-format-edit-path-error-operation condition)
+                         :delete))))
             :to-be-truthy)
     (format-edit-expect (format nil "a: old~%b: 2~%") '("a") "new"
                          (format nil "a: new~%b: 2~%")
