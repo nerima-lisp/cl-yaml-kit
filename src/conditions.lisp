@@ -83,3 +83,33 @@
                      (yaml-resource-limit-error-actual condition))
              (when (yaml-kit-error-message condition)
                (format stream "; ~A" (yaml-kit-error-message condition))))))
+
+(define-condition yaml-format-edit-path-error (yaml-kit-error)
+  ((path :initarg :path :initform nil :reader yaml-format-edit-path-error-path)
+   (document :initarg :document :initform 0
+             :reader yaml-format-edit-path-error-document)
+   (operation :initarg :operation :initform nil
+              :reader yaml-format-edit-path-error-operation))
+  (:report (lambda (condition stream)
+             (format stream "YAML format edit path error for ~S~@[ in document ~D~]~@[ (~S)~]~@[; ~A~]"
+                     (yaml-format-edit-path-error-path condition)
+                     (yaml-format-edit-path-error-document condition)
+                     (yaml-format-edit-path-error-operation condition)
+                     (yaml-kit-error-message condition)))))
+
+(define-condition yaml-format-edit-structure-error (yaml-kit-error)
+  ((path :initarg :path :initform nil :reader yaml-format-edit-structure-error-path))
+  (:report (lambda (condition stream)
+             (format stream "YAML format edit structure error for ~S~@[; ~A~]"
+                     (yaml-format-edit-structure-error-path condition)
+                     (yaml-kit-error-message condition)))))
+
+(define-condition yaml-format-edit-anchor-error (yaml-kit-error)
+  ((path :initarg :path :initform nil :reader yaml-format-edit-anchor-error-path)
+   (anchor :initarg :anchor :initform nil
+           :reader yaml-format-edit-anchor-error-anchor))
+  (:report (lambda (condition stream)
+             (format stream "YAML format edit anchor error for ~S~@[ (anchor ~S)~]~@[; ~A~]"
+                     (yaml-format-edit-anchor-error-path condition)
+                     (yaml-format-edit-anchor-error-anchor condition)
+                     (yaml-kit-error-message condition)))))

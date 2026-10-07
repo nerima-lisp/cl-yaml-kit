@@ -73,4 +73,22 @@
     (yaml-kit::yaml-resource-limit-error-limit-name
      yaml-kit::yaml-resource-limit-error-limit yaml-kit::yaml-resource-limit-error-actual
      yaml-kit::yaml-resource-limit-error-mark yaml-kit::yaml-resource-limit-error-context)
-    ("line 13" "column 14" "offset 15" "resource")))
+    ("line 13" "column 14" "offset 15" "resource"))
+  (define-condition-contract-test yaml-format-edit-path-error
+    (make-condition 'yaml-kit:yaml-format-edit-path-error
+                    :path '("a") :document 1 :operation :delete :message "detail")
+    (yaml-kit:yaml-format-edit-path-error-path
+     yaml-kit:yaml-format-edit-path-error-document
+     yaml-kit:yaml-format-edit-path-error-operation)
+    ("YAML format edit path error" "a" "document 1" "detail"))
+  (define-condition-contract-test yaml-format-edit-structure-error
+    (make-condition 'yaml-kit:yaml-format-edit-structure-error
+                    :path '("a" 0) :message "detail")
+    (yaml-kit:yaml-format-edit-structure-error-path)
+    ("YAML format edit structure error" "a" "0" "detail"))
+  (define-condition-contract-test yaml-format-edit-anchor-error
+    (make-condition 'yaml-kit:yaml-format-edit-anchor-error
+                    :path '("a") :anchor "base" :message "detail")
+    (yaml-kit:yaml-format-edit-anchor-error-path
+     yaml-kit:yaml-format-edit-anchor-error-anchor)
+    ("YAML format edit anchor error" "a" "base" "detail")))

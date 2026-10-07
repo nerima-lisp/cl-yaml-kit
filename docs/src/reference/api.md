@@ -74,6 +74,53 @@ source file.
 
 The defaults for these options are in the table above.
 
+## Format-preserving editing
+
+| Symbol and lambda list | Returns | Signals |
+| --- | --- | --- |
+| `edit-source source path value &key document operation` | Edited source in the input type | `yaml-parse-error`, `yaml-format-edit-path-error`, `yaml-format-edit-anchor-error`, `yaml-format-edit-structure-error` |
+| `yaml-format-edit-path-error-path`, `yaml-format-edit-path-error-document`, `yaml-format-edit-path-error-operation` | `(condition)` | Path error details |
+| `yaml-format-edit-structure-error-path` | `(condition)` | Structure error path |
+| `yaml-format-edit-anchor-error-path`, `yaml-format-edit-anchor-error-anchor` | `(condition)` | Anchor error details |
+
+`path` is a proper list of string keys and zero-based integer sequence indexes.
+`document` is zero-based. `operation` is `:set` by default; use `:delete` to
+remove a mapping entry or sequence item. The editor parses both the original and
+edited source with `parse-all`, then verifies that the requested semantic change
+is the only value change before returning it. A syntactically valid edit that
+changes an alias-resolved value or any other unrelated value signals
+`yaml-format-edit-structure-error`.
+
+The supported `:set` form replaces an untagged, non-empty, single-line scalar.
+The replacement value must also be scalar. Scalar replacement in a flow
+collection quotes strings containing flow indicators when necessary. `:set`
+does not replace mappings, sequences, empty values, block scalars, or multiline
+scalars; those cases signal `yaml-format-edit-structure-error`.
+
+The supported additions are mapping entries and sequence items in block
+collections. Mapping additions require a string key. Sequence additions are
+append-only: the path index must be the next index. Additions to flow
+collections, additions to mappings or sequences beginning after `- ` on the
+same line, and non-tail sequence additions signal
+`yaml-format-edit-structure-error`. The editor also rejects deletion from flow
+collections, deletion of a collection's only child, and deletion of inline
+sequence mappings or sequences.
+
+Inserted scalar fragments are emitted in flow style. If an emitter fragment
+would span multiple lines, the editor uses a double-quoted fragment with YAML
+escapes. This applies to inserted keys and values whose content contains a
+document marker, comment indicator, sequence indicator, or line break.
+
+For safety, edits through tagged nodes, anchors, aliases, duplicate mapping
+keys, or merge-key mappings are rejected. The document root cannot be deleted.
+Integer path components under mappings are rejected with
+`yaml-format-edit-path-error`. Unsupported source encodings and edited text
+that does not parse signal a `yaml-kit-error` subtype. Within the supported
+subset, comments, key order, source text outside the edit, line endings, final
+newline state, and the input octet encoding including a byte-order mark are
+preserved. Replacing a quoted scalar does not promise to retain its original
+quote style; the replacement uses the emitter's selected safe style.
+
 ## Sentinel and mapping values
 
 | Symbol | Lambda list or value | Returns |
