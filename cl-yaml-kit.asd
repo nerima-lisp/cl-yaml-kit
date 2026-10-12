@@ -2,14 +2,14 @@
 (in-package #:asdf-user)
 
 (unless (member :sbcl *features*)
-  (error "cl-yaml-kit v0.1.0 supports SBCL only"))
+  (error "cl-yaml-kit v0.2.0 supports SBCL only"))
 
 (asdf:defsystem "cl-yaml-kit"
   :description "YAML 1.2.2 reader and writer for Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "0.1.0"
+  :version "0.2.0"
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
@@ -36,7 +36,8 @@
                (:file "emitter-writers")
                (:file "emitter-directives")
                (:file "emitter-frames") (:file "emitter-events")
-               (:file "emitter") (:file "dumper"))
+               (:file "emitter") (:file "dumper")
+               (:file "format-preserving-edit"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
 (asdf:defsystem "cl-yaml-kit/test"
@@ -44,7 +45,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "0.1.0"
+  :version "0.2.0"
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
@@ -76,6 +77,7 @@
                (:file "dumper-flow-block-test")
                (:file "dumper-directive-test")
                (:file "dumper-property-test")
+               (:file "format-preserving-edit-test")
                (:file "conformance/events") (:file "conformance/values")
                (:file "conformance-test") (:file "conformance/stages")
                (:file "conformance/report") (:file "conformance/cases"))
