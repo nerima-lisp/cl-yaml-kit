@@ -45,41 +45,41 @@
   (declare (ignore value))
   tag)
 
-;; Each row is (tag regexp conversion-function specification-section first-chars).
+;; Each row is (tag regexp conversion-function first-chars).
 ;; The regular expressions deliberately omit anchors: FULL-MATCH-P already
 ;; expresses whole-string matching.
 (defvar *schema-spec-tables*
   '((:failsafe
-     ("tag:yaml.org,2002:str" nil %schema-return-tag "10.1.2" nil))
+     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))
     (:json
-     ("tag:yaml.org,2002:null" "null" %schema-return-tag "10.2.2" "n")
-     ("tag:yaml.org,2002:bool" "true|false" %schema-return-tag "10.2.2" "tf")
-     ("tag:yaml.org,2002:int" "-?(0|[1-9][0-9]*)" %schema-return-tag "10.2.2" "-0123456789")
+     ("tag:yaml.org,2002:null" "null" %schema-return-tag "n")
+     ("tag:yaml.org,2002:bool" "true|false" %schema-return-tag "tf")
+     ("tag:yaml.org,2002:int" "-?(0|[1-9][0-9]*)" %schema-return-tag "-0123456789")
      ("tag:yaml.org,2002:float"
       "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][-+]?[0-9]+)?"
-      %schema-return-tag "10.2.2" "-0123456789")
-     ("tag:yaml.org,2002:str" nil %schema-return-tag "10.2.2" nil))
+      %schema-return-tag "-0123456789")
+     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))
     (:core
-     ("tag:yaml.org,2002:null" "~|null|Null|NULL" %schema-return-tag "10.3.2" "~nN")
-     ("tag:yaml.org,2002:null" "" %schema-return-tag "10.3.2" "")
+     ("tag:yaml.org,2002:null" "~|null|Null|NULL" %schema-return-tag "~nN")
+     ("tag:yaml.org,2002:null" "" %schema-return-tag "")
      ("tag:yaml.org,2002:bool"
-      "true|True|TRUE|false|False|FALSE" %schema-return-tag "10.3.2" "tTfF")
-     ("tag:yaml.org,2002:int" "[-+]?[0-9]+" %schema-return-tag "10.3.2" "-+0123456789")
-     ("tag:yaml.org,2002:int" "[-+]?0o[0-7]+" %schema-return-tag "10.3.2" "-+0")
-     ("tag:yaml.org,2002:int" "[-+]?0x[0-9a-fA-F]+" %schema-return-tag "10.3.2" "-+0")
+      "true|True|TRUE|false|False|FALSE" %schema-return-tag "tTfF")
+     ("tag:yaml.org,2002:int" "[-+]?[0-9]+" %schema-return-tag "-+0123456789")
+     ("tag:yaml.org,2002:int" "[-+]?0o[0-7]+" %schema-return-tag "-+0")
+     ("tag:yaml.org,2002:int" "[-+]?0x[0-9a-fA-F]+" %schema-return-tag "-+0")
      ("tag:yaml.org,2002:float"
       "[-+]?((\\.[0-9]+)|([0-9]+(\\.[0-9]*)?))([eE][-+]?[0-9]+)?"
-      %schema-return-tag "10.3.2" "-+.0123456789")
+      %schema-return-tag "-+.0123456789")
      ("tag:yaml.org,2002:float" "[-+]?\\.(inf|Inf|INF)"
-      %schema-return-tag "10.3.2" "-+.")
+      %schema-return-tag "-+.")
      ("tag:yaml.org,2002:float" "\\.(nan|NaN|NAN)"
-      %schema-return-tag "10.3.2" ".")
-     ("tag:yaml.org,2002:str" nil %schema-return-tag "10.3.2" nil))))
+      %schema-return-tag ".")
+     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))))
 
 (defun %schema-first-characters (rows)
   (let ((bits (make-array 128 :element-type 'bit :initial-element 0)))
     (dolist (row rows (the simple-bit-vector bits))
-      (let ((characters (fifth row)))
+      (let ((characters (fourth row)))
         (when characters
           (loop for character across characters
                 do (setf (sbit bits (char-code character)) 1)))))))
@@ -98,8 +98,7 @@
                           (and (second row)
                                (cl-regex-kit:compile-regex (second row)))
                           (third row)
-                          (fourth row)
-                          (and (fifth row)
+                          (and (fourth row)
                                (%schema-first-characters (list row)))))
                   rows)))
     (cons (%schema-first-characters rows) compiled)))
@@ -125,7 +124,7 @@
       (return-from %schema-resolve "tag:yaml.org,2002:str"))
     (dolist (row (cdr table) "tag:yaml.org,2002:str")
       (let ((regexp (second row))
-            (row-bits (fifth row)))
+            (row-bits (fourth row)))
         (when (and regexp
                    (%schema-row-matches-p row-bits value)
                    (cl-regex-kit:full-match-p regexp value))
