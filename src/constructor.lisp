@@ -79,8 +79,7 @@
 
 (defun construct (node &key (schema :core) (mapping-type :hash-table)
                               (sequence-type :vector)
-                              (duplicate-key-policy :error)
-                              &allow-other-keys)
+                              (duplicate-key-policy :error))
   "Construct NODE.  Non-scalar hash-table keys are rejected explicitly."
   (declare (optimize (speed 3) (safety 1)))
   (validate-schema schema)
