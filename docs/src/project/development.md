@@ -1,17 +1,19 @@
 # Development
 
-The supported workflow is Nix: `flake.nix` is one `cl-nix-forge`
-`mkPackageFlake` call, so the packages, checks, apps, dev shell, and
-formatter below are its standard outputs plus one custom benchmark app.
+The Nix workflow below is available on `x86_64-linux`. `flake.nix` uses one
+`cl-nix-forge` `mkPackageFlake` call, so its packages, checks, apps, dev shell,
+and formatter are the standard outputs plus custom benchmark and mutation apps.
+On macOS, use the manual setup and commands in [Without Nix](#without-nix).
 Run every command from the repository root.
 
 ## Nix
 
 ```sh
-nix flake check          # test suite, formatting gate, docs build
+nix flake check          # test suite, formatting, docs build, coverage gate
 nix develop              # shell with the dependencies on the source registry
 nix run .#test           # the test suite
 nix run .#benchmark      # the deterministic benchmark
+nix run .#mutation       # mutation testing over the selected functions
 nix build .#docs         # the documentation site
 nix fmt                  # format the Nix files
 ```
@@ -30,7 +32,7 @@ shell, which is why the test framework is on the registry. The test app also
 sets `YAML_TEST_SUITE` to the flake input. Iterate with:
 
 ```sh
-sbcl --script run-tests.lisp
+timeout -k 30s 1200s sbcl --script run-tests.lisp
 ```
 
 The development shell does not set `YAML_TEST_SUITE`. The conformance stages
@@ -50,10 +52,14 @@ configuration; the formatting check fails when they are not.
 
 ## Without Nix
 
-Nix is the supported path. This procedure is the fallback for a checkout
-where `nix develop` is unavailable. `run-tests.lisp` registers the
-repository itself, so only two things need setting up: the dependencies on
-the source registry, and the conformance fixture.
+Use this procedure on macOS or where `nix develop` is unavailable. The flake
+currently provides Nix outputs only on `x86_64-linux`. Install SBCL and Git
+first. `run-tests.lisp` registers the repository itself, so you then need to
+set up two project inputs: dependencies on the source registry and the
+conformance fixture. Install GNU coreutils before following the bounded
+command examples (`brew install coreutils` on macOS); its timeout command is
+`gtimeout` there. Replace `timeout` with `gtimeout` in the command examples on
+macOS.
 
 The runtime dependencies are `cl-regex-kit` and `cl-codec-kit`; the test
 system adds `cl-weave` and `cl-json-kit` (see `cl-yaml-kit.asd`). Check
@@ -64,7 +70,7 @@ registry tree:
 mkdir -p ~/lisp-deps
 git clone --branch v2.2.0 https://github.com/nerima-lisp/cl-regex-kit ~/lisp-deps/cl-regex-kit
 git clone --branch v0.6.0 https://github.com/nerima-lisp/cl-codec-kit ~/lisp-deps/cl-codec-kit
-git clone --branch v1.3.0 https://github.com/nerima-lisp/cl-weave ~/lisp-deps/cl-weave
+git clone --branch v1.4.0 https://github.com/nerima-lisp/cl-weave ~/lisp-deps/cl-weave
 git clone --branch v1.2.0 https://github.com/nerima-lisp/cl-json-kit ~/lisp-deps/cl-json-kit
 git clone --branch data-2022-01-17 https://github.com/yaml/yaml-test-suite ~/yaml-test-suite
 
@@ -81,7 +87,7 @@ works the same.
 Then run the suite from the repository root:
 
 ```sh
-sbcl --script run-tests.lisp
+timeout -k 30s 1200s sbcl --script run-tests.lisp
 ```
 
 ## The test suite
@@ -193,39 +199,45 @@ The five stages compare different representations, on purpose:
 
 ## Mutation testing
 
-Run the expanded mutation measurement with the same dependency and fixture
-variables as the test suite:
+`nix run .#mutation` runs `scripts/run-mutation.lisp` with a 3600-second
+outer timeout. It sends TERM at the limit and KILL 30 seconds later. Without
+Nix, use the same source registry as the test suite:
 
 ```sh
-export CL_SOURCE_REGISTRY='(:source-registry (:tree "/tmp/cl-yaml-kit-env/deps/") :inherit-configuration)'
+export CL_SOURCE_REGISTRY="$HOME/lisp-deps//"
 export YAML_TEST_SUITE=/path/to/yaml-test-suite
-export CL_YAML_DEPS=/path/to/cl-weave
+mkdir -p "$HOME/.cache/cl-yaml-kit-mutation"
+export ASDF_OUTPUT_TRANSLATIONS="(:output-translations (t \"$HOME/.cache/cl-yaml-kit-mutation/\") :inherit-configuration)"
 CL_YAML_MUTATION_AREA=reader \
-  sbcl --dynamic-space-size 4096 --non-interactive \
-  --load scripts/run-mutation.lisp
+  timeout -k 30s 3600s sbcl --dynamic-space-size 4096 --script scripts/run-mutation.lisp
 ```
 
 `CL_YAML_MUTATION_AREA` may be `reader`, `loader`, or `dumper`; omit it to
 measure all three areas. Every target must select at least one test. The
-The script passes a fixed 5000 ms timeout to cl-weave for the complete
-per-mutant callback, including evaluating the mutated definition and running
-its selected tests. A timeout is reported as `errored` by cl-weave and
-therefore fails the mutation gate; it is not silently counted as killed. The
-script exits non-zero when any non-equivalent mutant is `survived` or
-`errored`.
+script starts a fresh SBCL child for each mutant with cl-weave's
+`run-isolated`. Each child loads `cl-yaml-kit/test`, evaluates the mutated
+definition, and runs the selected tests under a fixed 5000 ms process timeout.
+A timed-out child is reported as `timeout` with its operator and mutation path;
+a child error is `errored`. Both statuses fail the mutation gate. A surviving
+mutant counts as equivalent only when its function and mutation path match an
+entry in the script's equivalence table. Within the selected area, an entry is
+stale when its function/path is absent or its mutant is killed. A timeout or
+child error leaves equivalence unresolved.
 
-The verified result table is:
+The script exits non-zero when any mutant is `survived`, `errored`, or `timeout`,
+or when an entry is stale.
 
-| area | functions | mutants | killed | survived | errored | equivalent exclusions |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| reader | 12 | 50 | 50 | 0 | 0 | 0 |
-| loader | 7 | 43 | 41 | 0 | 0 | 2 |
-| dumper | 7 | 66 | 66 | 0 | 0 | 0 |
+The Nix app exports the pinned `YAML_TEST_SUITE` fixture and sets
+`ASDF_OUTPUT_TRANSLATIONS` to a writable cache shared by its children. The
+manual command does the same above because each isolated child gets a fresh
+`HOME`.
 
-The two loader exclusions are documented in `scripts/run-mutation.lisp` with
-their mutation paths and behavioral reasons: the anchor slot is initialized
-at document start before use, and the stream-event branch return value is
-ignored by the event source. They are not counted as survived mutants.
+Each target reports its selected test count and mutation results. The final line
+reports totals, the fixed per-mutant timeout, and elapsed seconds for that run.
+
+Equivalent exclusions are listed in `scripts/run-mutation.lisp` with their
+mutation paths and behavioral reasons. The script fails if an exclusion no
+longer matches a surviving mutant.
 
 ## Coverage
 
@@ -236,10 +248,9 @@ per-file expression and branch statistics with cl-weave's
 the same totals. It needs `YAML_TEST_SUITE` like the plain run:
 
 ```sh
-export CL_SOURCE_REGISTRY='(:source-registry (:tree "/tmp/cl-yaml-kit-env/deps/") :inherit-configuration)'
+export CL_SOURCE_REGISTRY="$HOME/lisp-deps//"
 export YAML_TEST_SUITE=/path/to/yaml-test-suite
-perl -e 'alarm 1200; exec @ARGV' \
-  sbcl --dynamic-space-size 4096 --non-interactive \
+timeout -k 30s 1200s sbcl --dynamic-space-size 4096 --non-interactive \
   --load scripts/run-coverage.lisp
 ```
 
