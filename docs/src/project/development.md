@@ -260,16 +260,19 @@ an HTML report restricted to `src/`. `COVERAGE_OUTPUT`,
 
 `scripts/coverage-gate.lisp` (the `cl-yaml-kit/coverage-gate` system, tested
 with the suite) turns the statistics into the gate, so `checks.coverage` in
-`flake.nix`, and therefore the CI `nix flake check`, enforce it. The policy
-is 100% expression and branch coverage. An uncovered expression is excused
-only inside a top-level form whose head `scripts/coverage-exclusions.sexp`
-names and which SB-COVER reports unexecuted as a whole, such as an
-`in-package` or `defparameter` form evaluated at compile or load time.
-Branches are never excused. The gate prints every excused form and every
-remaining uncovered form with its position, and fails on an exclusion rule
-that excused nothing.
+`flake.nix`, and therefore the CI `nix flake check`, enforce it. The gate
+uses an exact per-file ratchet: every measured source file's expression and
+branch shortfalls must match its recorded allowance. A regression in any file
+fails, and an improvement requires lowering that file's allowance.
 
-Until the policy is met, `scripts/coverage-allowance.sexp` records the total
-expression and branch shortfall the gate tolerates. The gate fails when the
-measured shortfall exceeds it, and reports when the allowance can be lowered.
-Lower the allowance in the change that closes a gap.
+The production exclusion list is empty. The nine candidate compile/load-time
+forms did not appear as complete uncovered expressions in SB-COVER, so none
+has a reproducible basis for exemption. Add a rule only when a fixture proves
+SB-COVER reports that complete top-level form as unexecuted. The gate never
+exempts branches or nested expressions, prints any excused and remaining
+uncovered forms with their positions, and fails on an unused exclusion rule.
+
+`scripts/coverage-allowance.sexp` records exact expression and branch
+shortfalls for every measured source file. The gate requires the measured file
+set and each file's counts to match the allowance exactly. When a change
+closes a coverage gap, lower that file's allowance in the same change.
