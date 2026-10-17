@@ -58,12 +58,8 @@
         cl-weave.packages.${ctx.system}.cl-weave
         cl-json-kit.packages.${ctx.system}.cl-json-kit
       ];
-      packageArgs = ctx: {
+      packageArgs = _: {
         YAML_TEST_SUITE = yaml-test-suite;
-        nativeBuildInputs = [ ctx.pkgs.perl ];
-        preCheck = ''
-          export PATH="${ctx.pkgs.perl}/bin:$PATH"
-        '';
       };
       sourceInclude = [
         ./docs
@@ -75,8 +71,8 @@
       extraOutputs = ctx: {
         checks.coverage = ctx.cl.mkCoverageReport {
           drv = ctx.package;
-          # run-coverage.lisp invokes scripts/check-coverage.pl after the
-          # report is written, keeping the data and the 100% policy separate.
+          # run-coverage.lisp applies scripts/coverage-gate.lisp to cl-weave's
+          # per-file statistics and exits non-zero when the gate fails.
           entryPoint = "scripts/run-coverage.lisp";
           timeoutSeconds = 1200;
           killAfterSeconds = 30;

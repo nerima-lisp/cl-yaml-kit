@@ -43,10 +43,10 @@ reported as `error` rows and do not suppress the remaining measurements.
 
 Coverage is collected by `scripts/run-coverage.lisp`, which forces compilation
 with SB-COVER instrumentation before invoking the suite entry point that the
-plain test run also reaches. Validate the result with
-`scripts/check-coverage.pl --input TSV --min-line PERCENT --min-branch
-PERCENT`, which reports per-file line and branch coverage plus the uncovered
-lines. Coverage thresholds are quality gates; benchmark timings are not. A
+plain test run also reaches. `scripts/coverage-gate.lisp` then reports
+per-file expression and branch coverage with every uncovered form and fails
+when the total shortfall exceeds `scripts/coverage-allowance.sexp`. Coverage
+thresholds are quality gates; benchmark timings are not. A
 partial implementation remains measurable when its public entry points and
 corpus preflight are available, so failures in one operation should not be
 hidden by changing the corpus or the measurement unit.

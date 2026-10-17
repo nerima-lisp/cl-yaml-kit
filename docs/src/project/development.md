@@ -229,50 +229,36 @@ ignored by the event source. They are not counted as survived mutants.
 
 ## Coverage
 
-`scripts/run-coverage.lisp` compiles the systems with SB-COVER instrumentation
-in a dedicated ASDF cache, then uses cl-weave's coverage API to run the whole
-suite and save expression and branch statistics. Unit tests and conformance
-stages count toward the same totals. It needs `YAML_TEST_SUITE` like the plain
-run and exits non-zero unless the suite passed:
+`scripts/run-coverage.lisp` compiles `cl-yaml-kit` with SB-COVER
+instrumentation in a dedicated ASDF cache, runs the whole suite, and reads
+per-file expression and branch statistics with cl-weave's
+`coverage-file-statistics`. Unit tests and conformance stages count toward
+the same totals. It needs `YAML_TEST_SUITE` like the plain run:
 
 ```sh
 export CL_SOURCE_REGISTRY='(:source-registry (:tree "/tmp/cl-yaml-kit-env/deps/") :inherit-configuration)'
 export YAML_TEST_SUITE=/path/to/yaml-test-suite
-perl -e '$SIG{ALRM}=sub{kill 9,$$}; alarm 2400; exec @ARGV' \
+perl -e 'alarm 1200; exec @ARGV' \
   sbcl --dynamic-space-size 4096 --non-interactive \
   --load scripts/run-coverage.lisp
 ```
 
-The artifacts default under `scripts/cl-yaml-kit-coverage/`: the cl-weave
-coverage data file, an HTML report restricted to `src/`, and the tab-separated
-per-file summary read by the gate. `COVERAGE_OUTPUT`,
-`COVERAGE_REPORT_DIRECTORY`, `COVERAGE_SUMMARY`, and `COVERAGE_ASDF_CACHE` move
-the artifacts or the dedicated compilation cache. `COVERAGE_SOURCE_DIRECTORY`
-(default `src/`) selects the files measured and reported.
+The artifacts default under `coverage/`: the cl-weave coverage data file and
+an HTML report restricted to `src/`. `COVERAGE_OUTPUT`,
+`COVERAGE_REPORT_DIRECTORY`, and `COVERAGE_ASDF_CACHE` move them.
 
-`scripts/check-coverage.pl` turns the summary into the gate. The coverage
-runner invokes it after writing the summary, so `checks.coverage` in
-`flake.nix`, and therefore the CI `nix flake check`, enforce the same gate.
-The gate requires 100% expression and branch coverage after applying the
-single data file `scripts/coverage-exclusions.sexp`. That file names only
-form categories; the checker reads the source forms and derives their current
-spans, so ordinary line movement does not require editing the exclusions.
-Each category has a reason and a small reproduction under
-`scripts/coverage-reproductions/`. These are SB-COVER limitations such as
-compile-time package/declaration forms, `defstruct` metadata, and definition
-headers. Executable function bodies are not excluded.
+`scripts/coverage-gate.lisp` (the `cl-yaml-kit/coverage-gate` system, tested
+with the suite) turns the statistics into the gate, so `checks.coverage` in
+`flake.nix`, and therefore the CI `nix flake check`, enforce it. The policy
+is 100% expression and branch coverage. An uncovered expression is excused
+only inside a top-level form whose head `scripts/coverage-exclusions.sexp`
+names and which SB-COVER reports unexecuted as a whole, such as an
+`in-package` or `defparameter` form evaluated at compile or load time.
+Branches are never excused. The gate prints every excused form and every
+remaining uncovered form with its position, and fails on an exclusion rule
+that excused nothing.
 
-The checker prints a Markdown table and exits 0 when every file meets both
-thresholds, 1 when a non-excluded residual remains, and 2 when no report
-could be produced. The interface is `--input TSV`, `--min-line PERCENT`,
-`--min-branch PERCENT`, `--source-root DIRECTORY`, and `--exclusions FILE`;
-the first three settings also have the existing environment fallbacks. Both
-thresholds default to 100. A file whose total for a kind is zero prints
-`n/a` and is exempt from that kind.
-
-```sh
-perl scripts/check-coverage.pl \
-  --input scripts/cl-yaml-kit-coverage/per-file.tsv \
-  --source-root src \
-  --exclusions scripts/coverage-exclusions.sexp
-```
+Until the policy is met, `scripts/coverage-allowance.sexp` records the total
+expression and branch shortfall the gate tolerates. The gate fails when the
+measured shortfall exceeds it, and reports when the allowance can be lowered.
+Lower the allowance in the change that closes a gap.

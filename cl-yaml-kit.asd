@@ -44,6 +44,19 @@
                 (:file "format-preserving-edit"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
+(asdf:defsystem "cl-yaml-kit/coverage-gate"
+  :description "Coverage policy gate for cl-yaml-kit's sb-cover statistics"
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
+  :depends-on ()
+  :pathname "scripts"
+  :components ((:file "coverage-gate")))
+
 (asdf:defsystem "cl-yaml-kit/test"
   :description "Tests for cl-yaml-kit"
   :author "takeokunn <bararararatty@gmail.com>"
@@ -53,9 +66,10 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-yaml-kit"  ; The system under test.
-                "cl-weave"    ; Test framework, generators, per-test timeout.
-                "cl-json-kit") ; Reads the suite's in.json, telling null from false.
+  :depends-on ("cl-yaml-kit"                ; The system under test.
+               "cl-yaml-kit/coverage-gate"  ; Its verdict logic is tested with the suite.
+               "cl-weave"                   ; Test framework, generators, per-test timeout.
+               "cl-json-kit")               ; Test-only: reads in.json, telling null from false.
   :pathname "t"
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
@@ -82,6 +96,7 @@
                (:file "dumper-directive-test")
                (:file "dumper-property-test")
                (:file "format-preserving-edit-test")
+               (:file "coverage-gate-test")
                (:file "conformance/events") (:file "conformance/values")
                (:file "conformance-test") (:file "conformance/stages")
                (:file "conformance/report") (:file "conformance/cases"))

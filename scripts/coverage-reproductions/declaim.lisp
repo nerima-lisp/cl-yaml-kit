@@ -1,1 +1,0 @@
-(declaim (inline example))
