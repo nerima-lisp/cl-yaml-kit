@@ -50,6 +50,12 @@
       systems = [ "x86_64-linux" ];
       asd = ./cl-yaml-kit.asd;
       root = ./.;
+      meta = {
+        description = "YAML 1.2.2 reader and writer for Common Lisp";
+        homepage = "https://github.com/nerima-lisp/cl-yaml-kit";
+        license = nixpkgs.lib.licenses.mit;
+        platforms = nixpkgs.lib.platforms.unix;
+      };
       lispDependencies = ctx: [
         cl-regex-kit.packages.${ctx.system}.cl-regex-kit
         cl-codec-kit.packages.${ctx.system}.cl-codec-kit

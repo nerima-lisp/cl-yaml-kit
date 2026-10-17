@@ -2,7 +2,7 @@
 (in-package #:asdf-user)
 
 (unless (member :sbcl *features*)
-  (error "cl-yaml-kit v0.2.0 supports SBCL only"))
+  (error "cl-yaml-kit supports SBCL only"))
 
 (asdf:defsystem "cl-yaml-kit"
   :description "YAML 1.2.2 reader and writer for Common Lisp"
