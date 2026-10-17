@@ -54,11 +54,6 @@
       (expect (gate-report verdicts) :to-contain "excused in-package gated.lisp:1")
       (expect (gate-report verdicts) :to-contain "coverage gate: PASS")))
 
-  (it "never excuses a branch shortfall"
-    (let ((verdicts (list (gate-verdict (gate-statistics 9 9 *in-package-miss*)))))
-      (expect (getf (first verdicts) :branch-shortfall) :to-equal 1)
-      (expect (gate-status verdicts) :to-equal 1)))
-
   (it "excuses forms nested in an excluded form that never ran as a whole"
     (let ((verdict (gate-verdict (gate-statistics 8 10 *defun-miss* *default-miss*))))
       (expect (getf verdict :expression-shortfall) :to-equal 0)
@@ -68,6 +63,17 @@
     (let ((verdict (gate-verdict (gate-statistics 9 10 *default-miss*))))
       (expect (getf verdict :expression-shortfall) :to-equal 1)
       (expect (getf verdict :unexcused) :to-equal (list *default-miss*))))
+  (it "never excuses a branch shortfall inside an excluded form"
+    (let ((branch-miss (gate-location 30 35)))
+      (setf (getf branch-miss :kind) :branch)
+      (let ((verdicts
+              (list (gate-verdict
+                     (gate-statistics 9 9 *defun-miss* branch-miss)))))
+        (expect (getf (first verdicts) :expression-shortfall) :to-equal 0)
+        (expect (getf (first verdicts) :branch-shortfall) :to-equal 1)
+        (expect (getf (first verdicts) :unexcused) :to-equal (list branch-miss))
+        (expect (gate-status verdicts :rules (list (second *gate-rules*)))
+                :to-equal 1))))
 
   (it "tolerates a shortfall within the allowance and fails beyond it"
     (let ((verdicts (list (gate-verdict (gate-statistics 8 10 *in-package-miss*
