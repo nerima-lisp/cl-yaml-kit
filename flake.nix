@@ -83,6 +83,37 @@
           timeoutSeconds = 1200;
           killAfterSeconds = 30;
         };
+        apps.mutation =
+          let
+            mutationApp = ctx.cl.mkTestApp {
+              pname = "cl-yaml-kit-mutation";
+              runner = "scripts/run-mutation.lisp";
+              description = "Run mutation testing over the selected cl-yaml-kit functions";
+              src = ctx.lispDerivationArgs.src;
+              lisp = ctx.lispDerivationArgs.lisp;
+              lispDependencies =
+                ctx.lispDerivationArgs.lispDependencies ++ ctx.lispDerivationArgs.lispCheckDependencies;
+              timeoutSeconds = 3600;
+              killAfterSeconds = 30;
+            };
+          in
+          {
+            type = "app";
+            program = "${
+              ctx.pkgs.writeShellApplication {
+                name = "cl-yaml-kit-mutation-with-cache";
+                runtimeInputs = [ ctx.pkgs.coreutils ];
+                text = ''
+                  export YAML_TEST_SUITE=${yaml-test-suite}
+                  cache_dir="$HOME/.cache/cl-yaml-kit-mutation"
+                  mkdir -p "$cache_dir"
+                  export ASDF_OUTPUT_TRANSLATIONS="(:output-translations (t \"$cache_dir/\") :inherit-configuration)"
+                  exec ${mutationApp.program} "$@"
+                '';
+              }
+            }/bin/cl-yaml-kit-mutation-with-cache";
+            meta = mutationApp.meta;
+          };
         apps.benchmark = ctx.cl.mkTestApp {
           pname = "cl-yaml-kit-benchmark";
           runner = "benchmark/run.lisp";
