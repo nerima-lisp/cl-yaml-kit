@@ -39,15 +39,18 @@ jobs:
 
       # Runs the SBCL test suite (checks.default), the treefmt formatting gate
       # (checks.formatting), the coverage gate (checks.coverage), and the
-      # mkdocs --strict build (checks.docs). The coverage check has its own
-      # 2400-second timeout in flake.nix and the job has a 30-minute ceiling.
+      # mkdocs --strict build (checks.docs). The test and coverage checks each
+      # have a 1200-second limit in flake.nix; this step stops at 22 minutes,
+      # inside the job's 25-minute ceiling.
       #
       # CI intentionally verifies the single supported system: x86_64-linux.
       - name: Check flake
+        timeout-minutes: 22
         run: nix flake check --print-build-logs
 
       # Catches stray conflict markers and whitespace errors that compile fine.
       - name: Check diff hygiene
+        timeout-minutes: 2
         run: git diff --check
 
   dispatch-flake-update-ci:
@@ -61,6 +64,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Dispatch CI for bot-authored update PRs
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}

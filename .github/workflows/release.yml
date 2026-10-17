@@ -29,6 +29,7 @@ jobs:
       # silently, which is how cl-boundary-kit reached :version 1.0.0 while its
       # newest tag was still v0.6.0.
       - name: Verify tag matches .asd version
+        timeout-minutes: 2
         env:
           PACKAGE: cl-yaml-kit
         run: |
@@ -48,6 +49,7 @@ jobs:
 
       # Never publish a release that does not pass its own test suite.
       - name: Verify the tagged tree
+        timeout-minutes: 25
         run: nix flake check --print-build-logs
 
       # Creates the release as an empty draft. This workflow does not produce a
@@ -75,6 +77,7 @@ jobs:
       # resolved yourself:
       #   gh api repos/softprops/action-gh-release/git/ref/tags/v2 --jq .object.sha
       - name: Create draft release
+        timeout-minutes: 3
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: true

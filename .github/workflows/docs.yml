@@ -39,6 +39,7 @@ jobs:
       # missing from the nav fails here. `cp -rL` dereferences the store
       # symlink, and the chmod makes the copy writable for the upload action.
       - name: Build documentation
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           nix build .#docs --print-build-logs
