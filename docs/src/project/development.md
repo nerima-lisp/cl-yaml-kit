@@ -95,8 +95,11 @@ The fixture is a requirement, not an option. With `YAML_TEST_SUITE` unset,
 the conformance stage signals an error instead of skipping its cases, and
 `scripts/run-coverage.lisp` refuses to start.
 
-Each test has a per-test timeout of 120 seconds by default;
-`CL_YAML_TEST_TIMEOUT_MS` overrides it.
+The unit run takes its options from cl-weave's `CL_WEAVE_*` environment
+variables, such as `CL_WEAVE_REPORTER`, `CL_WEAVE_TEST_FILTER`, and
+`CL_WEAVE_TEST_TIMEOUT_MS`. Each test has a per-test timeout of 120 seconds
+unless `CL_WEAVE_TEST_TIMEOUT_MS` sets one, and a run that selects no tests
+fails.
 
 ## Performance
 

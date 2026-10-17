@@ -1,21 +1,20 @@
 ;;;; t/helpers.lisp
 (in-package #:cl-yaml-kit/test)
 
-(defun test-text (text)
-  "The scanner takes a simple character array, so hand it one."
-  (make-array (length text) :element-type 'character :initial-contents text))
+(defparameter *default-test-timeout-ms* 120000)
 
-(defun test-timeout-ms ()
-  (let ((value (uiop:getenv "CL_YAML_TEST_TIMEOUT_MS")))
-    (if value
-        (parse-integer value :junk-allowed nil)
-        120000)))
+(defun unit-run-options ()
+  "cl-weave's CL_WEAVE_* settings, with a per-test timeout and an empty run failing."
+  (let ((options (cl-weave/cli:run-all-options-from-environment)))
+    (setf (getf options :pass-with-no-tests) nil)
+    (unless (getf options :timeout-ms)
+      (setf (getf options :timeout-ms) *default-test-timeout-ms*))
+    options))
 
 (defun run-tests ()
   (setf *conformance-last-summaries* nil)
   (let ((unit-tests-passed
-          (run-all :reporter :spec :pass-with-no-tests nil
-                   :timeout-ms (test-timeout-ms)))
+          (apply #'run-all (unit-run-options)))
         (conformance-passed nil))
     (unless *conformance-last-summaries*
       (multiple-value-bind (summaries passedp)
