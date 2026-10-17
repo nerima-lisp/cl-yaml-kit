@@ -12,18 +12,15 @@
     (eval '(yaml-kit::define-schema-resolver yaml-kit::%probe-kind :failsafe))
     (expect (funcall (symbol-function 'yaml-kit::%probe-kind) "value")
             :to-equal "tag:yaml.org,2002:str"))
-  (it "compiles every schema table and resolves a core scalar"
-    (let ((compiled-tables
-            (mapcar (lambda (schema)
-                      (cons (first schema)
-                            (yaml-kit::%compile-schema-table (rest schema))))
-                    yaml-kit::*schema-spec-tables*)))
-      (dolist (schema yaml-kit::*schema-spec-tables*)
-        (expect (length (rest (cdr (assoc (first schema) compiled-tables))))
-                :to-equal (length (rest schema))))
-      (expect (yaml-kit::%schema-resolve
-               "true" (cdr (assoc :core compiled-tables)))
-              :to-equal "tag:yaml.org,2002:bool")))
+  (it "uses the compiled schema tables and resolves a core scalar"
+    (dolist (schema yaml-kit::*schema-spec-tables*)
+      (expect (length
+               (rest (cdr (assoc (first schema)
+                                 yaml-kit::*compiled-schema-tables*))))
+              :to-equal (length (rest schema))))
+    (expect (yaml-kit::%schema-resolve
+             "true" (cdr (assoc :core yaml-kit::*compiled-schema-tables*)))
+            :to-equal "tag:yaml.org,2002:bool"))
 
   (loader-scalar-cases
     ("core null" :core "" "tag:yaml.org,2002:null")

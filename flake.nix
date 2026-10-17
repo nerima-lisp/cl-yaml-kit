@@ -72,6 +72,7 @@
         ./scripts
       ];
       timeoutSeconds = 1200;
+      killAfterSeconds = 30;
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
       extraOutputs = ctx: {

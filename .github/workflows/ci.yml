@@ -29,10 +29,12 @@ jobs:
       # `nix flake check`, and never needs the token, so don't leave it in
       # .git/config for that code to read.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 5
         with:
           persist-credentials: false
 
       - uses: ./.github/actions/nix-setup
+        timeout-minutes: 10
         with:
           cachix-cache: ${{ vars.CACHIX_CACHE }}
           cachix-auth-token: ${{ github.event_name == 'push' && secrets.CACHIX_AUTH_TOKEN || '' }}
@@ -40,8 +42,9 @@ jobs:
       # Runs the SBCL test suite (checks.default), the treefmt formatting gate
       # (checks.formatting), the coverage gate (checks.coverage), and the
       # mkdocs --strict build (checks.docs). The test and coverage checks each
-      # have a 1200-second limit in flake.nix; this step stops at 22 minutes,
-      # inside the job's 25-minute ceiling.
+      # have a 1200-second timeout in flake.nix. The 22-minute step limit caps the
+      # complete `nix flake check`; the 25-minute job limit also includes checkout
+      # and Nix setup.
       #
       # CI intentionally verifies the single supported system: x86_64-linux.
       - name: Check flake

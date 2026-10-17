@@ -13,7 +13,7 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-regex-kit"  ; v2.2.0; schema regexes resolve scalar values (schema.lisp)
+  :depends-on ("cl-regex-kit"  ; Schema regexes resolve scalar values (schema.lisp)
                 "cl-codec-kit") ; Detects and decodes YAML octet input (parser-entry.lisp)
   :pathname "src"
   :serial t
@@ -68,7 +68,7 @@
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
   :depends-on ("cl-yaml-kit"                ; The system under test.
                "cl-yaml-kit/coverage-gate"  ; Its verdict logic is tested with the suite.
-               "cl-weave"                   ; Test framework, generators, per-test timeout.
+               "cl-weave"                   ; Test-only: framework, generators, and test timeouts.
                "cl-json-kit")               ; Test-only: reads in.json, telling null from false.
   :pathname "t"
   :serial t
