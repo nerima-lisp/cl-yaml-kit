@@ -37,7 +37,11 @@
                (:file "emitter-directives")
                (:file "emitter-frames") (:file "emitter-events")
                (:file "emitter") (:file "dumper")
-               (:file "format-preserving-edit"))
+               (:file "format-preserving-edit-source")
+                (:file "format-preserving-edit-tree")
+                (:file "format-preserving-edit-render")
+                (:file "format-preserving-edit-semantics")
+                (:file "format-preserving-edit"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
 (asdf:defsystem "cl-yaml-kit/test"
