@@ -1,24 +1,19 @@
 (in-package #:yaml-kit)
 
 (defun %float-positive-infinity ()
-  #+sbcl sb-kernel::double-float-positive-infinity
-  #-sbcl (error "cl-yaml-kit requires SBCL"))
+  sb-kernel::double-float-positive-infinity)
 
 (defun %float-negative-infinity ()
-  #+sbcl sb-kernel::double-float-negative-infinity
-  #-sbcl (error "cl-yaml-kit requires SBCL"))
+  sb-kernel::double-float-negative-infinity)
 
 (defun %float-nan ()
-  #+sbcl (sb-kernel:make-double-float #x7ff80000 1)
-  #-sbcl (error "cl-yaml-kit requires SBCL"))
+  (sb-kernel:make-double-float #x7ff80000 1))
 
 (defun %float-infinity-p (value)
-  #+sbcl (sb-ext:float-infinity-p value)
-  #-sbcl nil)
+  (sb-ext:float-infinity-p value))
 
 (defun %float-nan-p (value)
-  #+sbcl (sb-ext:float-nan-p value)
-  #-sbcl nil)
+  (sb-ext:float-nan-p value))
 
 (defun %scan-yaml-float-exponent (text index length mark)
   (incf index)

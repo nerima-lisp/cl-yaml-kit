@@ -133,8 +133,7 @@
         collect (build-corpus-case name builder env default maximum)))
 
 (defun bytes-consed ()
-  #+sbcl (sb-ext:get-bytes-consed)
-  #-sbcl 0)
+  (sb-ext:get-bytes-consed))
 
 (defun run-operation (operation corpus-case)
   (let ((input (corpus-case-input corpus-case))
@@ -146,7 +145,7 @@
 
 (defun measure-operation (thunk input-bytes iterations warmup samples)
   (let ((gc-start (get-internal-real-time)))
-    #+sbcl (sb-ext:gc :full t)
+    (sb-ext:gc :full t)
     (let ((consed-before (bytes-consed))
           (result (cl-weave:measure thunk :warmup warmup :samples samples
                                      :iterations iterations)))

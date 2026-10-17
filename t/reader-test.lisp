@@ -181,7 +181,6 @@
                 (yaml-kit:yaml-resource-limit-error () t))
               :to-be-truthy)))
 
-#+sbcl
 (progn
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (defclass infinite-character-stream (sb-gray:fundamental-character-input-stream) ()))
