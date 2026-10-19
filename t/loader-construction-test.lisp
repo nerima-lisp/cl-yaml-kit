@@ -145,6 +145,34 @@
                            nil)
                   (yaml-kit:yaml-compose-error () t))
                 :to-be-truthy))))
+  (it "reports duplicate mapping keys consistently for alists and hash tables"
+    (let* ((events (lambda ()
+                     (loader-document
+                      (loader-event :mapping-start)
+                      (loader-event :scalar :value "key")
+                      (loader-event :scalar :value "first")
+                      (loader-event :scalar :value "key")
+                      (loader-event :scalar :value "last")
+                      (loader-event :mapping-end))))
+           (alist-cause
+             (handler-case
+                 (progn
+                   (loader-parse-events (funcall events) :mapping-type :alist
+                                        :duplicate-key-policy :error)
+                   nil)
+               (yaml-kit:yaml-compose-error (condition)
+                 (yaml-kit:yaml-compose-error-cause condition))))
+           (hash-table-cause
+             (handler-case
+                 (progn
+                   (loader-parse-events (funcall events) :mapping-type :hash-table
+                                        :duplicate-key-policy :error)
+                   nil)
+               (yaml-kit:yaml-compose-error (condition)
+                 (yaml-kit:yaml-compose-error-cause condition)))))
+      (expect (list alist-cause hash-table-cause)
+              :to-equal
+              '("duplicate mapping key" "duplicate mapping key"))))
 
   (it "covers scalar conversion error contracts directly"
     (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar))

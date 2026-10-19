@@ -30,7 +30,7 @@
         (multiple-value-bind (old presentp) (gethash key seen)
           (when (and presentp (eq duplicate-key-policy :error))
             (signal-yaml-compose-error :mark (node-start-mark node)
-                                       :cause "non-scalar mapping key"))
+                                       :cause "duplicate mapping key"))
           (unless (and presentp (eq duplicate-key-policy :first))
             (if (and presentp (eq duplicate-key-policy :last))
                 (setf (cdr old) value)
