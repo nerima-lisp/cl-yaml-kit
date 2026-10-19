@@ -1,11 +1,16 @@
-(require :asdf)
+(unless (find-package "ASDF") (require :asdf))
+(let* ((script-directory
+          (uiop:pathname-directory-pathname *load-truename*))
+       (root (uiop:pathname-parent-directory-pathname
+              (uiop:pathname-parent-directory-pathname script-directory))))
+  (progn
+    (uiop:chdir root)
+    (load (merge-pathnames "scripts/coverage-gate.lisp" root))))
 
 (let* ((script-directory (uiop:pathname-directory-pathname *load-truename*))
        (root (uiop:pathname-parent-directory-pathname
               (uiop:pathname-parent-directory-pathname script-directory)))
        (source-directory (merge-pathnames "src/" root)))
-  (uiop:chdir root)
-  (load (merge-pathnames "scripts/coverage-gate.lisp" root))
   (let* ((rules (cl-yaml-kit/coverage-gate:read-exclusion-rules
                  (merge-pathnames "scripts/coverage-exclusions.sexp" root)))
          (allowance (cl-yaml-kit/coverage-gate:read-allowance

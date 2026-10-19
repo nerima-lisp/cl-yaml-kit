@@ -1,5 +1,6 @@
 ;;;; t/coverage-gate-test.lisp
 (in-package #:cl-yaml-kit/test)
+(eval-when (:compile-toplevel :load-toplevel :execute) (require :sb-posix))
 
 (defparameter *gate-source*
   (format nil "(in-package #:cl-user)~%(defun gated (x &key (y 1))~%  (if x y 0))~%"))
@@ -33,21 +34,39 @@
   (with-output-to-string (stream)
     (cl-yaml-kit/coverage-gate:write-gate-report verdicts rules allowance stream)))
 
-(defun run-coverage-reproduction-process (filename)
+(defun run-coverage-reproduction-process
+    (label &key (timeout 180) form systems)
   (let* ((root (asdf:system-source-directory "cl-yaml-kit"))
-         (script (merge-pathnames
-                  (format nil "scripts/coverage-reproductions/~A" filename)
-                  root)))
-    (multiple-value-bind (output error-output exit-code)
-        (uiop:run-program
-         (list "sbcl" "--noinform" "--disable-debugger"
-              "--eval" "(require :asdf)"
-              "--eval" "(asdf:load-system \"cl-yaml-kit\")"
-              "--load" (namestring (merge-pathnames "scripts/coverage-gate.lisp" root))
-              "--script" (namestring script))
-         :directory root :output :string :error-output :string
-         :ignore-error-status t :timeout 180)
-      (values (concatenate 'string output error-output) exit-code))))
+         (child-form
+           `(progn
+              (uiop:chdir ,root)
+              ,(or form
+                   `(let* ((cl-user::root ,root)
+                           (cl-user::script (merge-pathnames
+                                             (format nil
+                                                     "scripts/coverage-reproductions/~A"
+                                                     ,label)
+                                             cl-user::root)))
+                      (load cl-user::script)))))
+         (result
+           (cl-weave:run-isolated
+            child-form
+            :systems (adjoin "sb-posix" systems :test (function string=))
+            :package "CL-USER"
+            :timeout timeout))
+         (output (cl-weave:isolated-result-stdout result))
+         (error-output (cl-weave:isolated-result-stderr result))
+         (status (cl-weave:isolated-result-status result))
+         (exit-code (cl-weave:isolated-result-exit-code result)))
+    (case status
+      (:timeout
+       (error "Subprocess ~A timed out after ~A seconds.~%stdout:~%~A~%stderr:~%~A"
+              label timeout output error-output))
+      ((:pass :fail) nil)
+      (otherwise
+       (error "Subprocess ~A returned unexpected status ~S.~%stdout:~%~A~%stderr:~%~A"
+              label status output error-output)))
+    (values (concatenate 'string output error-output) exit-code status)))
 
 (describe "coverage gate"
   (it "reads top-level form heads and spans"
@@ -179,20 +198,78 @@
     (expect (gate-status nil :allowance nil) :to-equal 1))
 
   (it "rejects fake 50%/10% coverage through the production gate process"
-    (multiple-value-bind (output exit-code)
-        (run-coverage-reproduction-process "fake-gate.lisp")
+    (multiple-value-bind (output exit-code status)
+        (run-coverage-reproduction-process "fake-gate.lisp" :systems (list "cl-yaml-kit"))
+      (expect status :to-equal :fail)
       (expect exit-code :to-equal 1)
       (expect output :to-contain "fake coverage: expression 50%, branch 10%")
       (expect output :to-contain "shortfall changed for src/char-classes.lisp")
       (expect output :to-contain "coverage gate: FAIL")))
 
   (it "keeps nested runtime expressions uncovered when a synthetic whole-form marker is excluded"
-    (multiple-value-bind (output exit-code)
-        (run-coverage-reproduction-process "run.lisp")
+    (multiple-value-bind (output exit-code status)
+        (run-coverage-reproduction-process "run.lisp" :systems (list "sb-cover" "cl-weave"))
+      (expect status :to-equal :pass)
       (expect exit-code :to-equal 0)
       (expect output :to-contain
               "synthetic whole-form exclusion leaves nested runtime expressions uncovered: PASS")
       (expect output :to-contain "coverage exclusion regression: PASS")))
+
+  (it "terminates an inline child after timeout"
+    (let* ((pid-file
+             (loop for candidate = (merge-pathnames
+                                    (format nil "cl-yaml-kit-timeout-~D.pid"
+                                            (random 1000000000))
+                                    (uiop:temporary-directory))
+                   unless (probe-file candidate)
+                     return candidate))
+           (child-form
+             `(progn
+                (sb-alien:define-alien-routine ("getpid" cl-user::current-pid)
+                    sb-alien:int)
+                (with-open-file (cl-user::stream ,(namestring pid-file)
+                                 :direction :output :if-exists :supersede)
+                  (write-line (write-to-string (cl-user::current-pid))
+                              cl-user::stream)
+                  (finish-output cl-user::stream))
+                (write-line "coverage-timeout-stdout" *standard-output*)
+                (finish-output *standard-output*)
+                (write-line "coverage-timeout-stderr" *error-output*)
+                (finish-output *error-output*)
+                (sleep 30))))
+      (unwind-protect
+           (let ((outcome
+                   (handler-case
+                       (list :returned
+                             (multiple-value-list
+                              (run-coverage-reproduction-process
+                               "inline timeout form" :timeout 5.0
+                               :form child-form :systems nil)))
+                     (error (condition)
+                       (list :condition condition)))))
+             (case (first outcome)
+               (:condition
+                (let ((message (princ-to-string (second outcome))))
+                  (expect message :to-contain "timed out after")
+                  (expect message :to-contain "coverage-timeout-stdout")
+                  (expect message :to-contain "coverage-timeout-stderr")))
+               (:returned
+                (destructuring-bind (output exit-code status) (second outcome)
+                  (error "Expected default timeout handling to signal an error, but returned status ~S and exit code ~S.~%Captured stdout/stderr:~%~A"
+                         status exit-code output))))
+             (let ((pid
+                     (with-open-file (stream pid-file)
+                       (parse-integer (read-line stream)))))
+               (expect
+                (handler-case
+                    (progn (sb-posix:kill pid 0) t)
+                  (sb-posix:syscall-error (condition)
+                    (if (= (sb-posix:syscall-errno condition) sb-posix:esrch)
+                        nil
+                        (error condition))))
+                :to-equal nil)))
+        (when (probe-file pid-file)
+          (delete-file pid-file)))))
 
   (it "loads the repository exclusions and per-file allowance"
     (flet ((data (name)

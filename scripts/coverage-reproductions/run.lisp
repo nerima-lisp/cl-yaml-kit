@@ -1,17 +1,18 @@
-(require :asdf)
+(unless (find-package "ASDF") (require :asdf))
 
-(require :sb-cover)
+(unless (find-package "SB-COVER") (require :sb-cover))
+(let* ((script-directory
+          (uiop:pathname-directory-pathname *load-truename*))
+       (root (uiop:pathname-parent-directory-pathname
+              (uiop:pathname-parent-directory-pathname script-directory))))
+  (load (merge-pathnames "scripts/coverage-gate.lisp" root)))
 
 (let* ((script-directory (uiop:pathname-directory-pathname *load-truename*))
        (root (uiop:pathname-parent-directory-pathname
               (uiop:pathname-parent-directory-pathname script-directory)))
        (fixture-directory (merge-pathnames "scripts/coverage-reproductions/" root))
        (fixture-name "nested-runtime-expressions.lisp"))
-  (uiop:chdir root)
-  (asdf:load-asd (merge-pathnames "cl-yaml-kit.asd" root))
-  (asdf:load-system "cl-weave")
-  (asdf:load-system "cl-yaml-kit")
-  (load (merge-pathnames "scripts/coverage-gate.lisp" root))
+  (unless (find-package "CL-WEAVE") (asdf:load-system "cl-weave"))
   (let* ((fixture (merge-pathnames fixture-name fixture-directory))
          (fasl (merge-pathnames
                 (format nil "coverage-repro-nested-~D.fasl" (random 1000000000))
