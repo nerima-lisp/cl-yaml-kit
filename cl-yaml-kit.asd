@@ -13,19 +13,20 @@
   :homepage "https://github.com/nerima-lisp/cl-yaml-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-yaml-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
-  :depends-on ("cl-regex-kit"  ; Schema regexes resolve scalar values (schema.lisp)
+  :depends-on ("cl-regex-kit" ; Schema regexes resolve scalar values (schema.lisp)
+                "cl-parser-kit" ; Provides shared spans and diagnostics.
                 "cl-codec-kit") ; Detects and decodes YAML octet input (parser-entry.lisp)
   :pathname "src"
   :serial t
-  :components ((:file "package") (:file "data") (:file "events")
-               (:file "nodes") (:file "conditions")
-               (:file "char-classes")
-               (:file "tokens")
+  :components ((:file "package") (:file "data") (:file "tag-data")
+               (:file "character-data") (:file "escape-data")
+               (:file "resource-data")
+               (:file "events") (:file "nodes") (:file "conditions")
+               (:file "char-classes") (:file "tokens")
                (:file "scanner-state") (:file "scanner-directives")
                (:file "scanner-directive-uri")
                (:file "scanner-block-scalars") (:file "scanner-flow-scalars")
-               (:file "scanner-fetch")
-               (:file "scanner")
+               (:file "scanner-fetch") (:file "scanner")
                (:file "scanner-navigation")
                (:file "parser-states") (:file "parser") (:file "parser-nodes")
                (:file "parser-flow") (:file "parser-entry")
@@ -33,15 +34,14 @@
                (:file "constructor") (:file "constructor-collections")
                (:file "loader") (:file "representer") (:file "serializer")
                (:file "emitter-state") (:file "emitter-scalars")
-               (:file "emitter-writers")
-               (:file "emitter-directives")
+               (:file "emitter-writers") (:file "emitter-directives")
                (:file "emitter-frames") (:file "emitter-events")
                (:file "emitter") (:file "dumper")
                (:file "format-preserving-edit-source")
-                (:file "format-preserving-edit-tree")
-                (:file "format-preserving-edit-render")
-                (:file "format-preserving-edit-semantics")
-                (:file "format-preserving-edit"))
+               (:file "format-preserving-edit-tree")
+               (:file "format-preserving-edit-render")
+               (:file "format-preserving-edit-semantics")
+               (:file "format-preserving-edit"))
   :in-order-to ((test-op (test-op "cl-yaml-kit/test"))))
 
 (asdf:defsystem "cl-yaml-kit/coverage-gate"
@@ -69,6 +69,7 @@
   :depends-on ("cl-yaml-kit"                ; The system under test.
                "cl-yaml-kit/coverage-gate"  ; Its verdict logic is tested with the suite.
                "cl-weave"                   ; Test-only: framework, generators, and test timeouts.
+               "cl-prolog-kit/weave"        ; Test-only: provides Prolog-backed invariant checks.
                "cl-json-kit")               ; Test-only: reads in.json to distinguish null from false.
   :pathname "t"
   :serial t

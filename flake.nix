@@ -18,6 +18,14 @@
       url = "github:nerima-lisp/cl-codec-kit/v0.6.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    cl-parser-kit = {
+      url = "github:nerima-lisp/cl-parser-kit/v1.1.1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    cl-prolog-kit = {
+      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     cl-json-kit = {
       url = "github:nerima-lisp/cl-json-kit/v1.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -43,6 +51,8 @@
       cl-weave,
       cl-regex-kit,
       cl-codec-kit,
+      cl-parser-kit,
+      cl-prolog-kit,
       cl-json-kit,
       paredit-cli,
       yaml-test-suite,
@@ -78,9 +88,11 @@
       lispDependencies = ctx: [
         cl-regex-kit.packages.${ctx.system}.cl-regex-kit
         cl-codec-kit.packages.${ctx.system}.cl-codec-kit
+        cl-parser-kit.packages.${ctx.system}.cl-parser-kit
       ];
       lispCheckDependencies = ctx: [
         cl-weave.packages.${ctx.system}.cl-weave
+        cl-prolog-kit.packages.${ctx.system}.cl-prolog-kit
         cl-json-kit.packages.${ctx.system}.cl-json-kit
       ];
       packageArgs = _: {

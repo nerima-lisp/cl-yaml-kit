@@ -1,11 +1,5 @@
 (in-package #:yaml-kit)
 
-(defconstant +default-max-input-length+ 104857600)
-(defconstant +default-max-depth+ 1000)
-(defconstant +default-max-scalar-length+ 16777216)
-(defconstant +default-max-nodes+ 1000000)
-(defconstant +default-max-alias-expansions+ 100000)
-
 (defun %resource-limit (name limit actual)
   (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual))
 

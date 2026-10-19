@@ -1,7 +1,5 @@
 ;;;; src/schema.lisp
 (in-package #:yaml-kit)
-
-(defparameter +yaml-tag-prefix+ "tag:yaml.org,2002:")
 (defparameter +yaml-schema-names+ '(:failsafe :json :core))
 
 (defun validate-schema (schema)
