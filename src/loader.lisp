@@ -54,8 +54,7 @@ text, but exclude the line break."
   (let ((text (%parser-input-string input max-input-length))
         (spans nil))
     (when (> (length text) max-input-length)
-      (error 'yaml-resource-limit-error :limit-name "input length"
-             :limit max-input-length :actual (length text)))
+      (%resource-limit "input length" max-input-length (length text)))
     (let ((*scanner-comment-sink* (lambda (span) (push span spans)))
           (scanner (make-scanner text)))
       (loop while (scanner-next-token scanner)

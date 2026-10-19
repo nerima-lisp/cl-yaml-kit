@@ -42,9 +42,9 @@
 (defmacro scanner-fetch-cases (table)
   `(dolist (case ,table)
      (it (first case)
-       (let ((scanner (yaml-kit:make-scanner (scanner-source (second case))))
+       (let ((scanner (yaml-kit::make-scanner (scanner-source (second case))))
              (kinds nil))
-         (loop for token = (yaml-kit:scanner-next-token scanner)
+         (loop for token = (yaml-kit::scanner-next-token scanner)
                while token
                do (push (yaml-kit:token-kind token) kinds))
          (expect (nreverse kinds) :to-equal (third case))))))
@@ -61,9 +61,9 @@
                               `(it ,(first case)
                                  (expect (handler-case
                                              (progn
-                                               (let ((scanner (yaml-kit:make-scanner
+                                               (let ((scanner (yaml-kit::make-scanner
                                                                (scanner-source ,(second case)))))
-                                                 (loop while (yaml-kit:scanner-next-token scanner)))
+                                                 (loop while (yaml-kit::scanner-next-token scanner)))
                                                nil)
                                            (yaml-kit:yaml-parse-error () t))
                                          :to-be-truthy)))

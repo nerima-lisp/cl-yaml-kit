@@ -15,7 +15,7 @@
 (defun %float-nan-p (value)
   (sb-ext:float-nan-p value))
 
-(defun %scan-yaml-float-exponent (text index length mark)
+(defun %scan-yaml-float-exponent (text index length span)
   (incf index)
   (let ((sign 1) (exponent 0))
     (when (and (< index length)
@@ -24,7 +24,7 @@
         (setf sign -1))
       (incf index))
     (unless (and (< index length) (digit-char-p (char text index) 10))
-      (%float-error mark))
+      (%float-error span))
     (loop while (and (< index length)
                      (digit-char-p (char text index) 10))
           do (setf exponent
@@ -47,7 +47,7 @@
                (incf index)))
     (values index mantissa significant-digits saw-significant-digit count)))
 
-(defun %scan-yaml-float (text mark)
+(defun %scan-yaml-float (text span)
   (let* ((lower (string-downcase text))
          (length (length lower))
          (index 0)
@@ -86,9 +86,9 @@
     (let ((saw-digit (plusp total-digits)))
       (when (and (< index length) (char= (char lower index) #\e))
         (multiple-value-setq (index exponent-sign exponent)
-          (%scan-yaml-float-exponent lower index length mark)))
+          (%scan-yaml-float-exponent lower index length span)))
       (unless (and saw-digit (= index length))
-        (%float-error mark))
+        (%float-error span))
       (values sign mantissa
               (- (* exponent-sign exponent) fraction-digits)
               significant-digits))))
@@ -113,7 +113,7 @@
          (if (minusp sign) (%float-negative-infinity)
              (%float-positive-infinity)))))))
 
-(defun %parse-yaml-float (text &optional mark)
+(defun %parse-yaml-float (text &optional span)
   (let ((lower (string-downcase text)))
     (cond
       ((string= lower ".nan") (%float-nan))
@@ -122,7 +122,7 @@
       ((string= lower "-.inf") (%float-negative-infinity))
       (t
        (multiple-value-call #'%decimal-rational-to-double
-         (%scan-yaml-float text mark))))))
+         (%scan-yaml-float text span))))))
 
-(defun %float-error (mark)
-  (signal-yaml-compose-error :mark mark :cause "invalid scalar value"))
+(defun %float-error (span)
+  (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid scalar value" :span span) :cause "invalid scalar value"))

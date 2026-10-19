@@ -7,7 +7,7 @@
   (possible nil :type boolean)
   (required nil :type boolean)
   (token-number 0 :type fixnum)
-  (mark nil :type (or null mark)))
+  (position nil :type (or null simple-vector)))
 
 (defstruct (scanner (:constructor %make-scanner (text))
                     (:copier nil) (:predicate nil))
@@ -35,12 +35,16 @@
   (stream-start-produced nil :type boolean)
   (stream-end-produced nil :type boolean))
 
-(defun make-scanner-token (s kind start-mark end-mark &key value handle suffix style major minor)
-  (let ((token (or (pop (scanner-token-pool s))
-                   (%make-token kind start-mark end-mark))))
+(defun make-scanner-token (s kind start-position end-position &key value handle suffix style major minor)
+  (let* ((start-span (sc-position-span s start-position))
+         (end-span (if (equalp start-position end-position)
+                       start-span
+                       (sc-position-span s end-position)))
+         (token (or (pop (scanner-token-pool s))
+                    (%make-token kind start-span end-span))))
     (setf (token-kind token) kind
-          (token-start-mark token) start-mark
-          (token-end-mark token) end-mark
+          (token-start-span token) start-span
+          (token-end-span token) end-span
           (token-value token) value
           (token-handle token) handle
           (token-suffix token) suffix
@@ -49,7 +53,7 @@
           (token-minor token) minor)
     token))
 
-(declaim (inline sc-check sc-mark sc-skip sc-skip-line sc-read
+(declaim (inline sc-check sc-position sc-skip sc-skip-line sc-read
                  sc-read-line sc-hex-value))
 
 (defun sc-char (s &optional (k 0))
@@ -59,8 +63,24 @@
         #\Nul)))
 (defun sc-check (s char &optional (k 0))
   (char= (sc-char s k) char))
-(defun sc-mark (s)
-  (make-mark (scanner-line s) (scanner-column s) (scanner-pos s)))
+(defun sc-position (s)
+  (sc-position-at (scanner-pos s) (scanner-line s) (scanner-column s)))
+(defun sc-position-span (s position)
+  (let* ((offset (sc-position-offset position))
+         (line (1+ (sc-position-line position)))
+         (column (1+ (sc-position-column position))))
+    (cl-parser-kit:make-span :source (scanner-text s)
+                             :start offset :end offset
+                             :start-line line :start-column column
+                             :end-line line :end-column column)))
+(defun sc-position-column (position)
+  (aref position 2))
+(defun sc-position-line (position)
+  (aref position 1))
+(defun sc-position-offset (position)
+  (aref position 0))
+(defun sc-position-at (offset line column)
+  (vector offset line column))
 (defun sc-skip (s)
   (unless (sc-z-p s)
     (incf (scanner-pos s))
@@ -80,7 +100,7 @@
     nil))
 (defun sc-read (s buffer)
   (unless (sc-printable-p s)
-    (sc-error s "while scanning YAML input" (sc-mark s)
+    (sc-error s "while scanning YAML input" (sc-position s)
               "found an unacceptable control character"))
   (vector-push-extend (sc-char s) buffer)
   (sc-skip s)
@@ -94,17 +114,14 @@
     (cond ((<= (char-code #\0) code (char-code #\9)) (- code (char-code #\0)))
           ((<= (char-code #\A) code (char-code #\F)) (+ 10 (- code (char-code #\A))))
           ((<= (char-code #\a) code (char-code #\f)) (+ 10 (- code (char-code #\a))))
-          (t (sc-error s "while scanning a hexadecimal value" (sc-mark s)
+          (t (sc-error s "while scanning a hexadecimal value" (sc-position s)
                        "expected a hexadecimal digit")))))
-(defun sc-error (s context context-mark problem)
-  (declare (ignore s))
-  (let ((mark context-mark))
-    (error 'yaml-parse-error
-         :line (mark-line mark)
-         :column (mark-column mark)
-         :offset (mark-offset mark)
+(defun sc-error (s context context-position problem)
+  (error 'yaml-parse-error
          :context context
-         :message problem)))
+         :diagnostic (cl-parser-kit:make-diagnostic
+                      :message (princ-to-string problem)
+                      :span (sc-position-span s context-position))))
 (defun make-scan-buffer ()
   (make-array 64 :element-type 'character :adjustable t :fill-pointer 0))
 (defun scan-buffer-string (buffer)

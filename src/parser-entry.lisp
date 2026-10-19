@@ -1,7 +1,11 @@
 (in-package #:yaml-kit)
 
 (defun %resource-limit (name limit actual)
-  (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual))
+  (error 'yaml-resource-limit-error :limit-name name :limit limit
+       :actual actual
+       :diagnostic (cl-parser-kit:make-diagnostic
+                    :message (format nil "~A limit ~S exceeded (actual ~S)"
+                                     name limit actual))))
 
 (defun %simple-character-string (text)
   (make-array (length text) :element-type 'character :initial-contents text))
@@ -28,9 +32,8 @@
          (%simple-character-string
           (cl-codec-kit:octets-to-string input :encoding :auto :errorp t))
        (cl-codec-kit:decode-error (condition)
-         (error 'yaml-parse-error :context "invalid YAML input"
-                :message (princ-to-string condition)))))
-    (otherwise (error 'yaml-parse-error :context "invalid YAML input"))))
+         (error 'yaml-parse-error :context "invalid YAML input" :diagnostic (cl-parser-kit:make-diagnostic :message (format nil "invalid YAML input: ~A" (princ-to-string condition)))))))
+    (otherwise (error 'yaml-parse-error :context "invalid YAML input" :diagnostic (cl-parser-kit:make-diagnostic :message "invalid YAML input")))))
 
 (defun map-events (handler input &key
                            (max-input-length +default-max-input-length+)
@@ -38,8 +41,7 @@
                            (max-scalar-length +default-max-scalar-length+))
   (let ((text (%parser-input-string input max-input-length)))
     (when (> (length text) max-input-length)
-      (error 'yaml-resource-limit-error :limit-name "input length"
-             :limit max-input-length :actual (length text)))
+      (%resource-limit "input length" max-input-length (length text)))
     (let ((scanner (make-scanner text)))
       (let ((parser (make-parser% :scanner scanner
                                 :state 'yaml-parser-parse-stream-start

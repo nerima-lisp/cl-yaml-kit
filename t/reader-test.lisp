@@ -84,12 +84,12 @@
         (error "reader signaled an undeclared condition: ~S" offenders))))
   (it "bounds token production by the input size"
     (expect (yaml-kit::scanner-token-limit
-             (yaml-kit:make-scanner (coerce "x" 'simple-string)))
+             (yaml-kit::make-scanner (coerce "x" 'simple-string)))
             :to-be 72))
   (it "signals a resource limit when the token budget is exhausted"
     (expect (handler-case
                 (progn (yaml-kit::scanner-resource-error
-                        (yaml-kit:make-scanner (coerce "x" 'simple-string))
+                        (yaml-kit::make-scanner (coerce "x" 'simple-string))
                         "tokens" 72 73)
                        nil)
               (yaml-kit:yaml-resource-limit-error (condition) condition))

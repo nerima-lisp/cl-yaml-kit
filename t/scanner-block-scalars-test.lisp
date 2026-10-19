@@ -6,9 +6,9 @@
   (make-array (length text) :element-type 'character :initial-contents text))
 
 (defun scanned-scalars (text)
-  (let ((scanner (yaml-kit:make-scanner (block-scalar-source text)))
+  (let ((scanner (yaml-kit::make-scanner (block-scalar-source text)))
         (scalars nil))
-    (loop for token = (yaml-kit:scanner-next-token scanner)
+    (loop for token = (yaml-kit::scanner-next-token scanner)
           while token
           when (eq (yaml-kit:token-kind token) :scalar)
             do (push (list (yaml-kit:token-value token)

@@ -111,7 +111,7 @@
     leading-blanks))
 
 (defun scan-flow-scalar (s single-p)
-  (let ((start (sc-mark s)) (out (scanner-scan-buffer s))
+  (let ((start (sc-position s)) (out (scanner-scan-buffer s))
         (leading (scanner-scan-leading s))
         (trailing (scanner-scan-trailing s))
         (spaces (scanner-scan-spaces s)) (leading-blanks nil))
@@ -125,14 +125,14 @@
     (when (sc-check s #\#)
       (sc-error s "while scanning a quoted scalar" start
                 "found unexpected comment indicator"))
-    (make-scanner-token s :scalar start (sc-mark s) :value (scan-buffer-string out)
+    (make-scanner-token s :scalar start (sc-position s) :value (scan-buffer-string out)
                 :style (if single-p :single-quoted :double-quoted))))
 
 (defun %scan-plain-scalar-body
   (s start out end leading trailing spaces leading-blanks indent)
-  (let ((end-line (mark-line end))
-        (end-column (mark-column end))
-        (end-offset (mark-offset end)))
+  (let ((end-line (sc-position-line end))
+        (end-column (sc-position-column end))
+        (end-offset (sc-position-offset end)))
     (loop
       (when (and (zerop (scanner-column s))
                  (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
@@ -192,10 +192,10 @@
       (when (and (zerop (scanner-flow-level s))
                  (< (scanner-column s) indent))
         (return)))
-    (values (make-mark end-line end-column end-offset) leading-blanks)))
+    (values (sc-position-at end-offset end-line end-column) leading-blanks)))
 
 (defun scan-plain-scalar (s)
-  (let ((start (sc-mark s))
+  (let ((start (sc-position s))
         (start-pos (scanner-pos s))
         (text (scanner-text s))
         (length (length (scanner-text s)))
@@ -235,11 +235,11 @@
               finally (progn (setf simple-end index) (return)))
         (when (and simple-end (> index start-pos) (sc-printable-p s (- index start-pos))) (loop repeat (- index start-pos) do (sc-skip s))
           (return-from scan-plain-scalar
-            (make-scanner-token s :scalar start (sc-mark s)
+            (make-scanner-token s :scalar start (sc-position s)
                         :value (subseq text start-pos index)
                         :style :plain)))))
     (let ((start start)
-          (end (sc-mark s))
+          (end (sc-position s))
           (out (scanner-scan-buffer s))
           (leading (scanner-scan-leading s))
           (trailing (scanner-scan-trailing s))

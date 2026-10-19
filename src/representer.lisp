@@ -55,10 +55,7 @@
         node)))
 
 (defun %represent-unsupported (value)
-  (signal-yaml-emit-error
-         :cause (list :value value :type (type-of value))
-         :context "unsupported value type"
-         :message (princ-to-string (type-of value))))
+  (signal-yaml-emit-error :diagnostic (cl-parser-kit:make-diagnostic :message (princ-to-string (type-of value))) :cause (list :value value :type (type-of value)) :context "unsupported value type"))
 
 (defmacro define-representer-dispatch (name clauses)
   "Define NAME from a declarative type/function table."

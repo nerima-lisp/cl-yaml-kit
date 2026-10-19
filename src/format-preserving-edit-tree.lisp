@@ -18,10 +18,10 @@
   value)
 
 (defun %format-edit-event-offset (event accessor)
-  (let ((mark (funcall accessor event)))
-    (unless mark
-      (%format-edit-structure-error nil "event has no source mark"))
-    (mark-offset mark)))
+  (let ((span (funcall accessor event)))
+    (unless span
+      (%format-edit-structure-error nil "event has no source span"))
+    (cl-parser-kit:span-start span)))
 
 (defun %format-edit-node-from-events (events)
   (let ((events (coerce events 'vector)))
@@ -31,8 +31,8 @@
                    ((scalar-event-p event)
                     (values (%make-format-edit-node
                              :kind :scalar
-                             :start (%format-edit-event-offset event #'event-start-mark)
-                             :end (%format-edit-event-offset event #'event-end-mark)
+                             :start (%format-edit-event-offset event #'event-start-span)
+                             :end (%format-edit-event-offset event #'event-end-span)
                              :anchor (scalar-event-anchor event)
                              :tag (scalar-event-tag event)
                              :style (scalar-event-style event)
@@ -41,8 +41,8 @@
                    ((alias-event-p event)
                     (values (%make-format-edit-node
                              :kind :alias
-                             :start (%format-edit-event-offset event #'event-start-mark)
-                             :end (%format-edit-event-offset event #'event-end-mark)
+                             :start (%format-edit-event-offset event #'event-start-span)
+                             :end (%format-edit-event-offset event #'event-end-span)
                              :anchor (alias-event-anchor event))
                             (1+ index)))
                    ((sequence-start-event-p event)
@@ -55,8 +55,8 @@
                       (let ((end-event (aref events next)))
                         (values (%make-format-edit-node
                                  :kind :sequence
-                                 :start (%format-edit-event-offset event #'event-start-mark)
-                                 :end (%format-edit-event-offset end-event #'event-end-mark)
+                                 :start (%format-edit-event-offset event #'event-start-span)
+                                 :end (%format-edit-event-offset end-event #'event-end-span)
                                  :anchor (sequence-start-event-anchor event)
                                  :tag (sequence-start-event-tag event)
                                  :style (sequence-start-event-style event)
@@ -73,8 +73,8 @@
                       (let ((end-event (aref events next)))
                         (values (%make-format-edit-node
                                  :kind :mapping
-                                 :start (%format-edit-event-offset event #'event-start-mark)
-                                 :end (%format-edit-event-offset end-event #'event-end-mark)
+                                 :start (%format-edit-event-offset event #'event-start-span)
+                                 :end (%format-edit-event-offset end-event #'event-end-span)
                                  :anchor (mapping-start-event-anchor event)
                                  :tag (mapping-start-event-tag event)
                                  :style (mapping-start-event-style event)

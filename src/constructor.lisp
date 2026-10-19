@@ -16,7 +16,7 @@
       ((%tag-kind tag) (%tag-kind tag))
       (t :str))))
 
-(defun %parse-number (text kind &optional mark)
+(defun %parse-number (text kind &optional span)
   (declare (optimize (speed 3) (safety 1)))
   (handler-case
       (case kind
@@ -36,9 +36,8 @@
                    (char-equal (char text (1+ sign-position)) #\x))
               (* sign (parse-integer text :radix 16 :start (+ sign-position 2))))
              (t (parse-integer text)))))
-        (:float (%parse-yaml-float text mark)))
-    (error () (signal-yaml-compose-error :mark mark
-                                         :cause "invalid scalar value"))))
+        (:float (%parse-yaml-float text span)))
+    (error () (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid scalar value" :span span) :cause "invalid scalar value"))))
 
 (defun %construct-scalar (node schema)
   (let* ((text (scalar-node-value node))
@@ -46,21 +45,18 @@
          (tag (node-tag node)))
     (case kind
       (:invalid-collection
-       (signal-yaml-compose-error :mark (node-start-mark node)
-                                  :cause "collection tag on scalar"))
+       (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "collection tag on scalar" :span (node-start-span node)) :cause "collection tag on scalar"))
       (:null (unless (member text '("" "~" "null" "Null" "NULL")
                               :test #'string=)
-                (signal-yaml-compose-error :mark (node-start-mark node)
-                                           :cause "invalid null scalar"))
+                (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid null scalar" :span (node-start-span node)) :cause "invalid null scalar"))
              +yaml-null+)
       (:bool (cond ((member text '("true" "True" "TRUE") :test #'string=) t)
                    ((member text '("false" "False" "FALSE") :test #'string=)
                     +yaml-false+)
-                   (t (signal-yaml-compose-error :mark (node-start-mark node)
-                                                 :cause "invalid boolean scalar"))))
-      (:int (%parse-number text kind (node-start-mark node)))
+                   (t (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid boolean scalar" :span (node-start-span node)) :cause "invalid boolean scalar"))))
+      (:int (%parse-number text kind (node-start-span node)))
       (:float
-       (let ((number (%parse-number text kind (node-start-mark node))))
+       (let ((number (%parse-number text kind (node-start-span node))))
          (if (or (%float-nan-p number) (%float-infinity-p number)
                  (not (or (null tag) (string= tag "?"))))
              number
@@ -98,21 +94,16 @@
                     (yaml-compose-error (condition)
                       (error condition))
                     (error (condition)
-                      (signal-yaml-compose-error
-                       :mark (node-start-mark object)
-                       :cause "invalid scalar value"
-                       :message (princ-to-string condition)))))
+                      (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message (princ-to-string condition) :span (node-start-span object)) :cause "invalid scalar value"))))
                  ((sequence-node-p object)
                   (unless (%collection-tag-compatible-p object
                                                          "tag:yaml.org,2002:seq")
-                    (signal-yaml-compose-error :mark (node-start-mark object)
-                                               :cause "incompatible sequence tag"))
+                    (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "incompatible sequence tag" :span (node-start-span object)) :cause "incompatible sequence tag"))
                   (%construct-sequence object sequence-type memo #'walk))
                  ((mapping-node-p object)
                   (unless (%collection-tag-compatible-p object
                                                          "tag:yaml.org,2002:map")
-                    (signal-yaml-compose-error :mark (node-start-mark object)
-                                               :cause "incompatible mapping tag"))
+                    (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "incompatible mapping tag" :span (node-start-span object)) :cause "incompatible mapping tag"))
                   (%construct-mapping object mapping-type duplicate-key-policy
                                        memo #'walk))
                  (t (signal-yaml-compose-error :cause "unsupported node type")))))

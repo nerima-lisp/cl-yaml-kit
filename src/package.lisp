@@ -10,16 +10,14 @@
    ;; Sentinel and ordered mapping data
    #:+yaml-null+ #:+yaml-false+ #:yaml-null-p #:yaml-false-p
    #:make-yaml-mapping #:yaml-mapping-p #:yaml-mapping-entries
-   ;; Marks, nodes, and node accessors
-   #:mark #:make-mark #:mark-line #:mark-column #:mark-offset
-   #:token #:make-token #:token-kind #:token-start-mark #:token-end-mark
+   ;; Tokens, nodes, and node accessors
+   #:token #:make-token #:token-kind #:token-start-span #:token-end-span
    #:token-value #:token-handle #:token-suffix #:token-style
    #:token-major #:token-minor
-   #:make-scanner #:scanner-peek-token #:scanner-next-token
    #:scalar-node #:make-scalar-node #:scalar-node-p
    #:sequence-node #:make-sequence-node #:sequence-node-p
    #:mapping-node #:make-mapping-node #:mapping-node-p
-   #:node-tag #:node-anchor #:node-style #:node-start-mark #:node-end-mark
+   #:node-tag #:node-anchor #:node-style #:node-start-span #:node-end-span
    #:scalar-node-value #:sequence-node-items #:mapping-node-pairs
    ;; Events and event accessors
    #:stream-start-event #:stream-end-event
@@ -33,7 +31,7 @@
    #:stream-start-event-p #:stream-end-event-p #:document-start-event-p
    #:document-end-event-p #:sequence-start-event-p #:sequence-end-event-p
    #:mapping-start-event-p #:mapping-end-event-p #:scalar-event-p #:alias-event-p
-   #:event-start-mark #:event-end-mark
+   #:event-start-span #:event-end-span
    #:document-start-event-explicit-p #:document-start-event-version
    #:document-start-event-tag-directives #:document-end-event-explicit-p
    #:sequence-start-event-anchor #:sequence-start-event-tag
@@ -46,11 +44,11 @@
    ;; Format-preserving editing
    #:edit-source
    ;; Conditions
-   #:yaml-kit-error #:yaml-parse-error #:yaml-parse-error-line
-   #:yaml-parse-error-column #:yaml-parse-error-offset #:yaml-parse-error-context
-   #:yaml-compose-error #:yaml-compose-error-mark #:yaml-compose-error-context
+   #:yaml-kit-error #:yaml-kit-error-diagnostic
+   #:yaml-parse-error #:yaml-parse-error-context
+   #:yaml-compose-error #:yaml-compose-error-context
    #:yaml-compose-error-cause
-   #:yaml-emit-error #:yaml-emit-error-mark #:yaml-emit-error-context
+   #:yaml-emit-error #:yaml-emit-error-context
    #:yaml-emit-error-cause
    #:yaml-resource-limit-error
    #:yaml-format-edit-path-error #:yaml-format-edit-path-error-path

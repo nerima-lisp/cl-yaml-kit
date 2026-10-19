@@ -3,14 +3,14 @@
 (defparameter +default-tag-directives+
   '(("!" . "!") ("!!" . "tag:yaml.org,2002:")))
 
-(defun parser-resource-error (parser name limit actual mark)
+(defun parser-resource-error (parser name limit actual span)
   (declare (ignore parser))
-  (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual :mark mark))
+  (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual :diagnostic (cl-parser-kit:make-diagnostic :message (format nil "~A limit ~S exceeded (actual ~S)" name limit actual) :span span)))
 
-(defun append-tag-directive (parser handle prefix allow-duplicates mark)
+(defun append-tag-directive (parser handle prefix allow-duplicates span)
   (when (and (not allow-duplicates)
              (assoc handle (parser-directives parser) :test #'string=))
-    (parser-error (make-token :tag-directive mark mark) "found duplicate %TAG directive"))
+    (parser-error (make-token :tag-directive span span) "found duplicate %TAG directive"))
   (push (cons handle prefix) (parser-directives parser)))
 
 (defun process-directives (parser)
@@ -31,10 +31,10 @@
        (setf (parser-version parser) (cons (token-major token) (token-minor token))))
       (:tag-directive
        (append-tag-directive parser (token-handle token) (token-value token)
-                             nil (token-start-mark token)))))
-  (let ((mark (token-start-mark (parser-peek parser))))
+                             nil (token-start-span token)))))
+  (let ((span (token-start-span (parser-peek parser))))
     (dolist (directive +default-tag-directives+)
-      (append-tag-directive parser (car directive) (cdr directive) t mark))
+      (append-tag-directive parser (car directive) (cdr directive) t span))
     saw-directive)))
 
 (defun parser-tag-token (parser token)
@@ -53,9 +53,9 @@
 (defun parser-implicit-tag-p (tag)
   (or (null tag) (zerop (length tag))))
 
-(defun parser-empty-scalar (parser start-mark &optional end-mark anchor tag)
-  (let ((end-mark (or end-mark start-mark)))
-    (parser-emit parser (make-scalar-event :start-mark start-mark :end-mark end-mark
+(defun parser-empty-scalar (parser start-span &optional end-span anchor tag)
+  (let ((end-span (or end-span start-span)))
+    (parser-emit parser (make-scalar-event :start-span start-span :end-span end-span
                                            :anchor anchor :tag tag :value ""
                                            :style :plain
                                            :plain-implicit-p (parser-implicit-tag-p tag)))))
@@ -64,8 +64,8 @@
   (let ((token (parser-next parser)))
     (unless (and token (eq (token-kind token) :stream-start))
       (parser-error token "expected stream-start token"))
-    (parser-emit parser (make-stream-start-event :start-mark (token-start-mark token)
-                                                 :end-mark (token-end-mark token))))
+    (parser-emit parser (make-stream-start-event :start-span (token-start-span token)
+                                                 :end-span (token-end-span token))))
   #'yaml-parser-parse-document-start)
 
 (define-parser-state yaml-parser-parse-document-start (parser)
@@ -74,8 +74,8 @@
     (when (and saw-directive (not (eq (token-kind token) :document-start)))
       (parser-error token "did not find expected document start"))
     (when (eq (token-kind token) :stream-end)
-      (parser-emit parser (make-stream-end-event :start-mark (token-start-mark token)
-                                                 :end-mark (token-end-mark token)))
+      (parser-emit parser (make-stream-end-event :start-span (token-start-span token)
+                                                 :end-span (token-end-span token)))
       (parser-next parser)
       (return-from yaml-parser-parse-document-start nil))
     ;; A document-end marker without a preceding document is a stream gap,
@@ -86,8 +86,8 @@
         #'yaml-parser-parse-document-start))
     (when (eq (token-kind token) :document-start)
       (setf explicit t) (parser-next parser))
-    (parser-emit parser (make-document-start-event :start-mark (token-start-mark token)
-                         :end-mark (token-end-mark token) :explicit-p explicit
+    (parser-emit parser (make-document-start-event :start-span (token-start-span token)
+                         :end-span (token-end-span token) :explicit-p explicit
                          :version (parser-version parser)
                          :tag-directives (copy-list (parser-directives parser))))))
   #'yaml-parser-parse-document-content)
@@ -95,27 +95,27 @@
 (define-parser-state yaml-parser-parse-document-content (parser)
   (let ((token (parser-peek parser)))
     (if (member (token-kind token) '(:document-start :document-end :stream-end :block-end))
-        (progn (parser-empty-scalar parser (token-start-mark token)) #'yaml-parser-parse-document-end)
+        (progn (parser-empty-scalar parser (token-start-span token)) #'yaml-parser-parse-document-end)
         (progn (parser-push parser #'yaml-parser-parse-document-end) #'yaml-parser-parse-node-block))))
 
 (define-parser-state yaml-parser-parse-document-end (parser)
   (let ((token (parser-peek parser)) (explicit nil))
     (when (eq (token-kind token) :document-end) (setf explicit t) (parser-next parser))
-    (parser-emit parser (make-document-end-event :start-mark (token-start-mark token)
-                         :end-mark (token-end-mark token) :explicit-p explicit))
+    (parser-emit parser (make-document-end-event :start-span (token-start-span token)
+                         :end-span (token-end-span token) :explicit-p explicit))
     (setf (parser-directives parser) nil (parser-version parser) nil)
     (let ((next (parser-peek parser)))
       (when (and explicit next
-                 (= (mark-line (token-end-mark token))
-                    (mark-line (token-start-mark next)))
+                 (= (cl-parser-kit:span-start-line (token-end-span token))
+                    (cl-parser-kit:span-start-line (token-start-span next)))
                  (not (member (token-kind next) '(:stream-end :document-start :version-directive :tag-directive))))
         (parser-error next "did not find expected document start"))
       (when (and (not explicit) next
                  (member (token-kind next) '(:version-directive :tag-directive)))
         (parser-error next "did not find expected document end"))
       (when (and (not explicit) next
-                 (= (mark-line (token-end-mark token))
-                    (mark-line (token-start-mark next)))
+                 (= (cl-parser-kit:span-start-line (token-end-span token))
+                    (cl-parser-kit:span-start-line (token-start-span next)))
                  (not (member (token-kind next)
                               '(:stream-end :document-start :version-directive
                                 :tag-directive))))
@@ -126,6 +126,6 @@
 (define-parser-state yaml-parser-parse-stream-end (parser)
   (let ((token (parser-next parser)))
     (unless (eq (token-kind token) :stream-end) (parser-error token "expected stream-end token"))
-    (parser-emit parser (make-stream-end-event :start-mark (token-start-mark token)
-                                               :end-mark (token-end-mark token))))
+    (parser-emit parser (make-stream-end-event :start-span (token-start-span token)
+                                               :end-span (token-end-span token))))
   nil)

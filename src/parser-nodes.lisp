@@ -1,20 +1,20 @@
 (in-package #:yaml-kit)
 
-(defun parser-increment-depth (parser mark)
+(defun parser-increment-depth (parser span)
   (incf (parser-depth parser))
   (when (> (parser-depth parser) (parser-max-depth parser))
     (parser-resource-error parser "depth" (parser-max-depth parser)
-                           (parser-depth parser) mark)))
+                           (parser-depth parser) span)))
 
 (defun parser-node-properties (parser token)
-  (let ((anchor nil) (tag nil) (start (token-start-mark token)) (end (token-start-mark token)))
+  (let ((anchor nil) (tag nil) (start (token-start-span token)) (end (token-start-span token)))
     (loop while (member (token-kind token) '(:anchor :tag)) do
       (if (eq (token-kind token) :tag)
           (progn (when tag (parser-error token "did not find expected node content"))
                  (setf tag (parser-tag-token parser token)))
           (progn (when anchor (parser-error token "did not find expected node content"))
                  (setf anchor (token-value token))))
-      (setf end (token-end-mark token))
+      (setf end (token-end-span token))
       (parser-next parser)
       (setf token (parser-peek parser)))
     (when (and (or anchor tag) (member (token-kind token) '(:anchor :tag :alias)))
@@ -30,7 +30,7 @@
     (case kind
       ((:flow-sequence-start :block-sequence-start)
        (parser-emit parser (make-sequence-start-event
-                            :start-mark start :end-mark (token-end-mark token)
+                            :start-span start :end-span (token-end-span token)
                             :anchor anchor :tag tag
                             :implicit-p (parser-implicit-tag-p tag)
                             :style (if (eq kind :flow-sequence-start) :flow :block)))
@@ -39,7 +39,7 @@
            #'yaml-parser-parse-block-sequence-entry))
       ((:flow-mapping-start :block-mapping-start)
        (parser-emit parser (make-mapping-start-event
-                            :start-mark start :end-mark (token-end-mark token)
+                            :start-span start :end-span (token-end-span token)
                             :anchor anchor :tag tag
                             :implicit-p (parser-implicit-tag-p tag)
                             :style (if (eq kind :flow-mapping-start) :flow :block)))
@@ -53,9 +53,9 @@
      (parser-next parser)
      (when (> (length (token-value token)) (parser-max-scalar-length parser))
        (parser-resource-error parser "scalar" (parser-max-scalar-length parser)
-                              (length (token-value token)) (token-start-mark token)))
+                              (length (token-value token)) (token-start-span token)))
      (parser-emit parser (make-scalar-event
-                          :start-mark start :end-mark (token-end-mark token)
+                          :start-span start :end-span (token-end-span token)
                           :anchor anchor :tag tag :value (token-value token)
                           :style (token-style token)
                           :plain-implicit-p (or (and (null tag) (eq (token-style token) :plain))
@@ -74,8 +74,8 @@
     (unless token (parser-error token "expected YAML node"))
     (if (eq (token-kind token) :alias)
         (progn (parser-next parser)
-               (parser-emit parser (make-alias-event :start-mark (token-start-mark token)
-                                                     :end-mark (token-end-mark token)
+               (parser-emit parser (make-alias-event :start-span (token-start-span token)
+                                                     :end-span (token-end-span token)
                                                      :anchor (token-value token)))
                (parser-pop parser))
         (multiple-value-bind (content anchor tag start end)
@@ -84,7 +84,7 @@
               (progn
                 (parser-increment-depth parser start)
                 (parser-emit parser (make-sequence-start-event
-                                     :start-mark start :end-mark (token-end-mark content)
+                                     :start-span start :end-span (token-end-span content)
                                      :anchor anchor :tag tag
                                      :implicit-p (parser-implicit-tag-p tag) :style :block))
                 #'yaml-parser-parse-indentless-sequence-entry)
@@ -100,7 +100,7 @@
 (define-parser-state yaml-parser-parse-block-sequence-entry (parser)
   (let ((token (parser-peek parser)))
     (if (eq (token-kind token) :block-end)
-        (progn (parser-next parser) (parser-emit parser (make-sequence-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token))) (decf (parser-depth parser)) (parser-pop parser))
+        (progn (parser-next parser) (parser-emit parser (make-sequence-end-event :start-span (token-start-span token) :end-span (token-end-span token))) (decf (parser-depth parser)) (parser-pop parser))
         (progn
           (when (and (eq (token-kind token) :block-sequence-start)
                      (eq (scanner-previous-token-kind (parser-scanner parser))
@@ -110,7 +110,7 @@
                ;; Only the branch that parses a node may leave a continuation for
                ;; that node to pop; an empty entry has already been consumed.
                (if (member (token-kind (parser-peek parser)) '(:block-entry :block-end))
-                   (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-sequence-entry)
+                   (progn (parser-empty-scalar parser (token-start-span (parser-peek parser))) #'yaml-parser-parse-block-sequence-entry)
                    (progn (parser-push parser #'yaml-parser-parse-block-sequence-entry)
                           #'yaml-parser-parse-node-block))))))
 
@@ -118,19 +118,19 @@
   (let ((token (parser-peek parser)))
     (if (eq (token-kind token) :block-entry)
         (progn
-          (let ((mark (token-end-mark token)))
+          (let ((span (token-end-span token)))
             (parser-next parser)
             (if (member (token-kind (parser-peek parser))
                         '(:block-entry :key :value :block-end))
                 (progn
-                  (parser-emit parser (make-scalar-event :start-mark mark :end-mark mark
+                  (parser-emit parser (make-scalar-event :start-span span :end-span span
                                                          :value "" :style :plain
                                                          :plain-implicit-p t))
                   #'yaml-parser-parse-indentless-sequence-entry)
                 (progn
                   (parser-push parser #'yaml-parser-parse-indentless-sequence-entry)
                   #'yaml-parser-parse-node-block))))
-        (progn (parser-emit parser (make-sequence-end-event :start-mark (token-start-mark token) :end-mark (token-start-mark token)))
+        (progn (parser-emit parser (make-sequence-end-event :start-span (token-start-span token) :end-span (token-start-span token)))
                (decf (parser-depth parser)) (parser-pop parser)))))
 
 (define-parser-state yaml-parser-parse-block-mapping-key (parser)
@@ -139,15 +139,15 @@
            (parser-error token "did not find expected mapping key"))
         ((eq (token-kind token) :block-end)
          (parser-next parser)
-         (parser-emit parser (make-mapping-end-event :start-mark (token-start-mark token) :end-mark (token-end-mark token)))
+         (parser-emit parser (make-mapping-end-event :start-span (token-start-span token) :end-span (token-end-span token)))
          (decf (parser-depth parser)) (parser-pop parser))
         ((eq (token-kind token) :value)
-         (parser-empty-scalar parser (token-start-mark token))
+         (parser-empty-scalar parser (token-start-span token))
          #'yaml-parser-parse-block-mapping-value)
         ((eq (token-kind token) :key)
          (let ((next-token (progn (parser-next parser) (parser-peek parser))))
            (if (member (token-kind next-token) '(:value :block-end))
-               (progn (parser-empty-scalar parser (token-start-mark next-token))
+               (progn (parser-empty-scalar parser (token-start-span next-token))
                       #'yaml-parser-parse-block-mapping-value)
                (progn (parser-push parser #'yaml-parser-parse-block-mapping-value)
                       #'yaml-parser-parse-node-block-indentless))))
@@ -157,6 +157,6 @@
   (let ((token (parser-peek parser)))
     (when (eq (token-kind token) :value) (parser-next parser))
     (if (member (token-kind (parser-peek parser)) '(:key :value :block-end))
-        (progn (parser-empty-scalar parser (token-start-mark (parser-peek parser))) #'yaml-parser-parse-block-mapping-key)
+        (progn (parser-empty-scalar parser (token-start-span (parser-peek parser))) #'yaml-parser-parse-block-mapping-key)
         (progn (parser-push parser #'yaml-parser-parse-block-mapping-key)
                #'yaml-parser-parse-node-block-indentless))))

@@ -216,21 +216,15 @@ Pass `entries` as an ordered association list of key/value conses. The
 constructor shallow-copies the outer list and preserves the supplied entry
 conses and their order.
 
-## Marks, tokens, and scanners
+## Tokens
 
 | Symbol | Lambda list or access | Result |
 | --- | --- | --- |
-| `mark` | structure type | Mark structure |
-| `make-mark` | `(line column offset)` | Mark |
-| `mark-line`, `mark-column`, `mark-offset` | `(mark)` | Nonnegative integer |
 | `token` | structure type | Token structure |
-| `make-token` | `(kind start-mark end-mark &key value handle suffix style major minor)` | Validated token |
-| `token-kind`, `token-start-mark`, `token-end-mark`, `token-value`, `token-handle`, `token-suffix`, `token-style`, `token-major`, `token-minor` | `(token)` | Corresponding token field |
-| `make-scanner` | `(simple-string; includes simple-base-string)` | Scanner |
-| `scanner-peek-token` | `(scanner)` | Next token or `nil`, without consuming it |
-| `scanner-next-token` | `(scanner)` | Next token or `nil`, consuming it |
+| `make-token` | `(kind start-span end-span &key value handle suffix style major minor)` | Validated token |
+| `token-kind`, `token-start-span`, `token-end-span`, `token-value`, `token-handle`, `token-suffix`, `token-style`, `token-major`, `token-minor` | `(token)` | Corresponding token field |
 
-Scanner token kinds are keywords: `:stream-start`, `:stream-end`,
+Token kinds are keywords: `:stream-start`, `:stream-end`,
 `:version-directive`, `:tag-directive`, `:document-start`, `:document-end`,
 `:block-sequence-start`, `:block-mapping-start`, `:block-end`,
 `:flow-sequence-start`, `:flow-sequence-end`, `:flow-mapping-start`,
@@ -238,17 +232,18 @@ Scanner token kinds are keywords: `:stream-start`, `:stream-end`,
 `:scalar`, `:anchor`, `:tag`, and `:alias`. `token-value` contains scalar
 text, an anchor or alias name, or a tag-directive prefix, as applicable.
 `token-handle` and `token-suffix` carry tag data; `token-style` carries a
-scalar style; `token-major` and `token-minor` carry a YAML version. Fields not
-used by a token kind are `nil`.
+scalar style; `token-major` and `token-minor` carry a YAML version. The start
+and end fields hold `cl-parser-kit:span` values or `nil`. Fields not used by a
+token kind are `nil`.
 
 ## Nodes
 
 `make-scalar-node` accepts the base node keywords `:tag :anchor :style
-:start-mark :end-mark` plus `:value`. `make-sequence-node` additionally accepts
+:start-span :end-span` plus `:value`. `make-sequence-node` additionally accepts
 `:items`; `make-mapping-node` additionally accepts `:pairs`. The predicates
 `scalar-node-p`, `sequence-node-p`, and `mapping-node-p` accept one object and
-return a boolean. `node-tag`, `node-anchor`, `node-style`, `node-start-mark`,
-`node-end-mark`, `scalar-node-value`, `sequence-node-items`, and
+return a boolean. `node-tag`, `node-anchor`, `node-style`, `node-start-span`,
+`node-end-span`, `scalar-node-value`, `sequence-node-items`, and
 `mapping-node-pairs` accept the corresponding node and return its field.
 
 `scalar-node`, `sequence-node`, and `mapping-node` are the structure types.
@@ -258,7 +253,7 @@ keys remain present.
 
 ## Events
 
-The constructors all accept the base keywords `:start-mark :end-mark`.
+The constructors all accept the base keywords `:start-span :end-span`.
 `make-document-start-event` adds `:explicit-p :version :tag-directives`;
 `make-document-end-event` adds `:explicit-p`; sequence and mapping start
 constructors add `:anchor :tag :implicit-p :style`; the scalar constructor
@@ -285,7 +280,7 @@ The exported event predicates are `stream-start-event-p`, `stream-end-event-p`,
 `document-start-event-p`, `document-end-event-p`, `sequence-start-event-p`,
 `sequence-end-event-p`, `mapping-start-event-p`, `mapping-end-event-p`,
 `scalar-event-p`, and `alias-event-p`.
-`event-start-mark` and `event-end-mark` accept any event. The remaining event
+`event-start-span` and `event-end-span` accept any event. The remaining event
 readers accept their named event and return the corresponding constructor
 field: `document-start-event-explicit-p`, `document-start-event-version`,
 `document-start-event-tag-directives`, `document-end-event-explicit-p`,
@@ -299,15 +294,18 @@ field: `document-start-event-explicit-p`, `document-start-event-version`,
 
 ## Conditions
 
-`yaml-kit-error` is the base condition. `yaml-parse-error`,
+`yaml-kit-error` is the base condition and stores a `cl-parser-kit:diagnostic`,
+available through `yaml-kit-error-diagnostic`. Its report is formatted by
+`cl-parser-kit:diagnostic->string`. The `cl-parser-kit` type and readers are
+not re-exported by `yaml-kit`; use `cl-parser-kit:diagnostic-message` and
+`cl-parser-kit:diagnostic-span` to read its message and span. `yaml-parse-error`,
 `yaml-compose-error`, `yaml-emit-error`, `yaml-resource-limit-error`,
 `yaml-format-edit-path-error`, `yaml-format-edit-structure-error`, and
 `yaml-format-edit-anchor-error` are its exported subtypes. Their readers and
 defaults are specified in [Conditions](conditions.md). Exported readers are
-`yaml-parse-error-line`, `yaml-parse-error-column`, `yaml-parse-error-offset`,
-`yaml-parse-error-context`, `yaml-compose-error-mark`,
+`yaml-kit-error-diagnostic`, `yaml-parse-error-context`,
 `yaml-compose-error-context`, `yaml-compose-error-cause`,
-`yaml-emit-error-mark`, `yaml-emit-error-context`, `yaml-emit-error-cause`,
+`yaml-emit-error-context`, `yaml-emit-error-cause`,
 `yaml-format-edit-path-error-path`, `yaml-format-edit-path-error-document`,
 `yaml-format-edit-path-error-operation`,
 `yaml-format-edit-structure-error-path`,

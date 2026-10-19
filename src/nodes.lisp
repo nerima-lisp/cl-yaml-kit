@@ -7,8 +7,8 @@
   (tag nil :type (or null simple-string))
   (anchor nil :type (or null simple-string))
   (style nil :type (or null scalar-style collection-style))
-  (start-mark nil :type (or null mark))
-  (end-mark nil :type (or null mark)))
+  (start-span nil :type (or null cl-parser-kit:span))
+  (end-span nil :type (or null cl-parser-kit:span)))
 
 (defmacro define-node (name slots &optional documentation)
   `(define-yaml-subtype ,name node ,slots ,documentation))

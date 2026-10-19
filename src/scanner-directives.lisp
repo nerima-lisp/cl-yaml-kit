@@ -25,15 +25,15 @@
     ((sc-check s #\%) nil)
     ((and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2)
           (sc-blankz-p s 3))
-     (let ((document-start (sc-mark s)))
+     (let ((document-start (sc-position s)))
        (dotimes (i 3) (sc-skip s))
-       (make-scanner-token s :document-start document-start (sc-mark s))))
+       (make-scanner-token s :document-start document-start (sc-position s))))
     (t (sc-error s "while scanning a directive" start
                  "found reserved directive name"))))
 
 (defun scan-directive (s)
   (loop
-    (let ((start (sc-mark s)))
+    (let ((start (sc-position s)))
       (sc-skip s)
       (let ((name (scan-directive-name s start)))
         (cond
@@ -42,11 +42,11 @@
            ;; YAML 1.2.2 only defines the 1.x version family.
            (unless (= major 1) (sc-error s "while scanning a %YAML directive" start
                                          "found incompatible YAML major version"))
-           (let ((end (sc-mark s))) (scan-directive-end s start)
+           (let ((end (sc-position s))) (scan-directive-end s start)
              (return (make-scanner-token s :version-directive start end :major major :minor minor)))))
         ((string= name "TAG")
          (multiple-value-bind (handle prefix) (scan-tag-directive-value s start)
-           (let ((end (sc-mark s))) (scan-directive-end s start)
+           (let ((end (sc-position s))) (scan-directive-end s start)
              (return (make-scanner-token s :tag-directive start end :handle handle :value prefix)))))
           (t
            ;; YAML 1.2.2 reserves unknown directives; consume their line.
@@ -103,7 +103,7 @@
       (values handle prefix))))
 
 (defun scan-anchor (s kind)
-  (let ((start (sc-mark s)) (b (make-scan-buffer)))
+  (let ((start (sc-position s)) (b (make-scan-buffer)))
     (sc-skip s)
     ;; YAML 1.2.2 defines ns-anchor-char as ns-char minus c-flow-indicator, and
     ;; c-flow-indicator is only ",[]{}".  A ":" or "?" is an ordinary anchor
@@ -125,10 +125,10 @@
                       "while scanning an anchor"
                       "while scanning an alias")
                 start "did not find expected anchor name"))
-    (make-scanner-token s kind start (sc-mark s) :value (scan-buffer-string b))))
+    (make-scanner-token s kind start (sc-position s) :value (scan-buffer-string b))))
 
 (defun scan-tag (s)
-  (let ((start (sc-mark s)) handle suffix)
+  (let ((start (sc-position s)) handle suffix)
     (if (sc-check s #\< 1)
         (progn (setf handle "") (sc-skip s) (sc-skip s)
                (setf suffix (scan-tag-uri s t nil nil start))
@@ -144,7 +144,7 @@
                      (when (zerop (length suffix)) (rotatef handle suffix))))))
     (unless (or (sc-blankz-p s) (and (> (scanner-flow-level s) 0) (sc-check s #\,)))
       (sc-error s "while scanning a tag" start "did not find expected whitespace or line break"))
-    (make-scanner-token s :tag start (sc-mark s) :handle handle :suffix suffix)))
+    (make-scanner-token s :tag start (sc-position s) :handle handle :suffix suffix)))
 
 (defun scan-tag-handle (s directive start)
   (let ((b (make-scan-buffer)))

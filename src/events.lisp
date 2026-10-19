@@ -1,17 +1,11 @@
 ;;;; src/events.lisp
 (in-package #:yaml-kit)
 
-(defstruct (mark (:constructor make-mark (line column offset))
-                 (:copier nil) (:predicate nil))
-  (line 0 :type (integer 0 #.most-positive-fixnum) :read-only t)
-  (column 0 :type (integer 0 #.most-positive-fixnum) :read-only t)
-  (offset 0 :type (integer 0 #.most-positive-fixnum) :read-only t))
-
 (defstruct (event (:constructor nil)
                   (:copier nil) (:predicate nil))
   "Base class for YAML parsing and emitting events."
-  (start-mark nil :type (or null mark))
-  (end-mark nil :type (or null mark)))
+  (start-span nil :type (or null cl-parser-kit:span))
+  (end-span nil :type (or null cl-parser-kit:span)))
 
 (defmacro define-yaml-subtype (name base slots &optional documentation)
   (let ((constructor (intern (format nil "MAKE-~A" (string-upcase name)) *package*))

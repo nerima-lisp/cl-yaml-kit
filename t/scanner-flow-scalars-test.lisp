@@ -8,9 +8,9 @@
                            (source (make-array (length text)
                                                :element-type 'character
                                                :initial-contents text))
-                           (scanner (yaml-kit:make-scanner source))
+                           (scanner (yaml-kit::make-scanner source))
                            (actual nil))
-                      (loop for token = (yaml-kit:scanner-next-token scanner)
+                      (loop for token = (yaml-kit::scanner-next-token scanner)
                             while token do
                               (when (eq (yaml-kit:token-kind token) :scalar)
                                 (push (list (yaml-kit:token-value token)
@@ -66,11 +66,11 @@
                               `(it ,(first case)
                                  (let ((text ,(second case)))
                                    (expect (handler-case
-                                               (let ((scanner (yaml-kit:make-scanner
+                                               (let ((scanner (yaml-kit::make-scanner
                                                                (make-array (length text)
                                                                            :element-type 'character
                                                                            :initial-contents text))))
-                                                 (loop while (yaml-kit:scanner-next-token scanner)
+                                                 (loop while (yaml-kit::scanner-next-token scanner)
                                                        finally (return nil)))
                                              (yaml-kit:yaml-parse-error () t))
                                            :to-be-truthy))))
@@ -94,12 +94,12 @@
                     (#.(format nil "a~%") ("a"))
                     (#.(format nil "a~%  b") ("a b"))))
       (destructuring-bind (text expected) case
-        (let ((scanner (yaml-kit:make-scanner
+        (let ((scanner (yaml-kit::make-scanner
                         (make-array (length text)
                                     :element-type 'character
                                     :initial-contents text)))
               (actual nil))
-          (loop for token = (yaml-kit:scanner-next-token scanner)
+          (loop for token = (yaml-kit::scanner-next-token scanner)
                 while token
                 when (eq (yaml-kit:token-kind token) :scalar)
                   do (push (yaml-kit:token-value token) actual))
@@ -107,12 +107,12 @@
 
 (it "rejects an under-indented tab while folding a plain scalar"
   (let* ((text (format nil "a~% ~Abad" #\Tab))
-         (scanner (yaml-kit:make-scanner
+         (scanner (yaml-kit::make-scanner
                    (make-array (length text) :element-type 'character
                                :initial-contents text)))
-         (start (yaml-kit::sc-mark scanner))
+         (start (yaml-kit::sc-position scanner))
          (out (yaml-kit::make-scan-buffer))
-         (end (yaml-kit::sc-mark scanner))
+         (end (yaml-kit::sc-position scanner))
          (leading (yaml-kit::make-scan-buffer))
          (trailing (yaml-kit::make-scan-buffer))
          (spaces (yaml-kit::make-scan-buffer)))
@@ -125,11 +125,11 @@
 
 (it "handles an escaped line break directly"
   (let* ((text (format nil "\\~%"))
-         (scanner (yaml-kit:make-scanner
+         (scanner (yaml-kit::make-scanner
                    (make-array (length text) :element-type 'character
                                :initial-contents text)))
          (out (yaml-kit::make-scan-buffer)))
-    (expect (yaml-kit::%flow-escape scanner out (yaml-kit::sc-mark scanner))
+    (expect (yaml-kit::%flow-escape scanner out (yaml-kit::sc-position scanner))
             :to-be nil)))
 
 (it "folds non-break leading and trailing buffers directly"
@@ -143,12 +143,12 @@
 
 (it "stops a plain scalar at a block indicator directly"
   (let* ((text "- ")
-         (scanner (yaml-kit:make-scanner
+         (scanner (yaml-kit::make-scanner
                    (make-array (length text) :element-type 'character
                                :initial-contents text)))
-         (start (yaml-kit::sc-mark scanner))
+         (start (yaml-kit::sc-position scanner))
          (out (yaml-kit::make-scan-buffer))
-         (end (yaml-kit::sc-mark scanner))
+         (end (yaml-kit::sc-position scanner))
          (leading (yaml-kit::make-scan-buffer))
          (trailing (yaml-kit::make-scan-buffer))
          (spaces (yaml-kit::make-scan-buffer)))

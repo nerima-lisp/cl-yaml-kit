@@ -49,7 +49,20 @@ input, so the bound is a multiple of the input length rather than the length."
 
 (defun scanner-resource-error (s name limit actual)
   (error 'yaml-resource-limit-error
-         :limit-name name :limit limit :actual actual :mark (sc-mark s)))
+         :limit-name name
+         :limit limit
+         :actual actual
+         :context "YAML"
+         :diagnostic
+         (cl-parser-kit:make-diagnostic
+          :message
+          (format nil "YAML resource limit ~S exceeded: limit ~S, actual ~S"
+                  name limit actual)
+          :span (sc-position-span s (sc-position s))
+          :data (list :limit-name name
+                      :limit limit
+                      :actual actual
+                      :context "YAML"))))
 
 (defun fetch-more-tokens (s)
   (when (scanner-stream-end-produced s) (return-from fetch-more-tokens nil))
@@ -135,5 +148,5 @@ input, so the bound is a multiple of the input length rather than the length."
            (and (member c '(#\? #\:))
                 (not (sc-blankz-p s 1))))
        (fetch-plain-scalar s))
-      (t (sc-error s "while scanning for the next token" (sc-mark s)
+      (t (sc-error s "while scanning for the next token" (sc-position s)
                    "found character that cannot start any token")))))

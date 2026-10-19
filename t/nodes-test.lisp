@@ -43,21 +43,21 @@
 
 (define-node-contract-tests yaml-kit:scalar-node yaml-kit:make-scalar-node yaml-kit:scalar-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style
-   yaml-kit:node-start-mark yaml-kit:node-end-mark yaml-kit:scalar-node-value)
+   yaml-kit:node-start-span yaml-kit:node-end-span yaml-kit:scalar-node-value)
   (:tag "tag" :anchor "anchor" :style :plain
-   :start-mark (yaml-kit:make-mark 1 2 3) :end-mark (yaml-kit:make-mark 1 4 5)
+   :start-span (test-point-span 1 2 3) :end-span (test-point-span 1 4 5)
    :value "value"))
 (define-node-contract-tests yaml-kit:sequence-node yaml-kit:make-sequence-node yaml-kit:sequence-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style
-   yaml-kit:node-start-mark yaml-kit:node-end-mark yaml-kit:sequence-node-items)
+   yaml-kit:node-start-span yaml-kit:node-end-span yaml-kit:sequence-node-items)
   (:tag "tag" :anchor "anchor" :style :block
-   :start-mark (yaml-kit:make-mark 2 2 6) :end-mark (yaml-kit:make-mark 2 4 8)
+   :start-span (test-point-span 2 2 6) :end-span (test-point-span 2 4 8)
    :items '(one two)))
 (define-node-contract-tests yaml-kit:mapping-node yaml-kit:make-mapping-node yaml-kit:mapping-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style
-   yaml-kit:node-start-mark yaml-kit:node-end-mark yaml-kit:mapping-node-pairs)
+   yaml-kit:node-start-span yaml-kit:node-end-span yaml-kit:mapping-node-pairs)
   (:tag "tag" :anchor "anchor" :style :flow
-   :start-mark (yaml-kit:make-mark 3 2 9) :end-mark (yaml-kit:make-mark 3 4 11)
+   :start-span (test-point-span 3 2 9) :end-span (test-point-span 3 4 11)
    :pairs '((one . two))))
 
 (it "uses node constructor defaults"
@@ -67,22 +67,22 @@
     (expect (list (yaml-kit:node-tag scalar)
                   (yaml-kit:node-anchor scalar)
                   (yaml-kit:node-style scalar)
-                  (yaml-kit:node-start-mark scalar)
-                  (yaml-kit:node-end-mark scalar)
+                  (yaml-kit:node-start-span scalar)
+                  (yaml-kit:node-end-span scalar)
                   (yaml-kit:scalar-node-value scalar))
             :to-equal '(nil nil nil nil nil ""))
     (expect (list (yaml-kit:node-tag sequence)
                   (yaml-kit:node-anchor sequence)
                   (yaml-kit:node-style sequence)
-                  (yaml-kit:node-start-mark sequence)
-                  (yaml-kit:node-end-mark sequence)
+                  (yaml-kit:node-start-span sequence)
+                  (yaml-kit:node-end-span sequence)
                   (yaml-kit:sequence-node-items sequence))
             :to-equal '(nil nil nil nil nil nil))
     (expect (list (yaml-kit:node-tag mapping)
                   (yaml-kit:node-anchor mapping)
                   (yaml-kit:node-style mapping)
-                  (yaml-kit:node-start-mark mapping)
-                  (yaml-kit:node-end-mark mapping)
+                  (yaml-kit:node-start-span mapping)
+                  (yaml-kit:node-end-span mapping)
                   (yaml-kit:mapping-node-pairs mapping))
             :to-equal '(nil nil nil nil nil nil))))
 (it "rejects invalid node metadata slot values"
@@ -95,8 +95,6 @@
                                   :anchor *invalid-node-slot-value*))
                        (lambda () (yaml-kit:make-scalar-node
                                   :style *invalid-node-slot-value*))
-                       (lambda () (yaml-kit:make-scalar-node
-                                  :start-mark *invalid-node-slot-value*))
-                       (lambda () (yaml-kit:make-scalar-node
-                                  :end-mark *invalid-node-slot-value*))))
+                       (lambda () (yaml-kit:make-scalar-node :start-span *invalid-node-slot-value*))
+                       (lambda () (yaml-kit:make-scalar-node :end-span *invalid-node-slot-value*))))
           :to-be-truthy))

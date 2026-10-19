@@ -1,115 +1,78 @@
 ;;;; src/conditions.lisp
 (in-package #:yaml-kit)
 
-(defun %write-yaml-condition-context (stream prefix context mark)
-  (if mark
-      (format stream "~A at line ~D, column ~D, offset ~D: ~A"
-              prefix (mark-line mark) (mark-column mark) (mark-offset mark)
-              context)
-      (format stream "~A: ~A" prefix context)))
+(defun %yaml-error-diagnostic (diagnostic message)
+  (let ((result
+          (or diagnostic
+              (cl-parser-kit:make-diagnostic
+               :kind :error
+               :message (princ-to-string (or message "YAML error"))))))
+    (check-type result cl-parser-kit:diagnostic)
+    (check-type (cl-parser-kit:diagnostic-message result) string)
+    result))
 
-(define-condition yaml-kit-error (error)
-  ((message :initarg :message :initform nil :reader yaml-kit-error-message))
-  (:report (lambda (condition stream)
-             (if (yaml-kit-error-message condition)
-                 (write-string (yaml-kit-error-message condition) stream)
-                 (write-string "YAML error" stream)))))
+(progn
+  (define-condition yaml-kit-error (error)
+    ((diagnostic :initarg :diagnostic
+                 :initform (cl-parser-kit:make-diagnostic
+                            :kind :error :message "YAML error")
+                 :reader yaml-kit-error-diagnostic
+                 :type cl-parser-kit:diagnostic))
+    (:report (lambda (condition stream)
+               (write-string
+                (cl-parser-kit:diagnostic->string
+                 (yaml-kit-error-diagnostic condition))
+                stream))))
+  (defmethod initialize-instance :after ((condition yaml-kit-error)
+                                         &key &allow-other-keys)
+    (check-type
+     (cl-parser-kit:diagnostic-message
+      (yaml-kit-error-diagnostic condition))
+     string)))
 (define-condition yaml-parse-error (yaml-kit-error)
-  ((line :initarg :line :initform nil :reader yaml-parse-error-line)
-   (column :initarg :column :initform nil :reader yaml-parse-error-column)
-   (offset :initarg :offset :initform 0 :reader yaml-parse-error-offset)
-   (context :initarg :context :initform "YAML" :reader yaml-parse-error-context))
-  (:report (lambda (condition stream)
-            (format stream "YAML parse error~@[ at line ~D, column ~D, offset ~D~]: ~A~@[ (~A)~]"
-                    (yaml-parse-error-line condition)
-                    (yaml-parse-error-column condition)
-                    (yaml-parse-error-offset condition)
-                    (yaml-parse-error-context condition)
-                    (yaml-kit-error-message condition)))))
+  ((context :initarg :context :initform "YAML" :reader yaml-parse-error-context)))
 (define-condition yaml-compose-error (yaml-kit-error)
-  ((mark :initarg :mark :initform nil :reader yaml-compose-error-mark)
-   (context :initarg :context :initform "YAML composition" :reader yaml-compose-error-context)
-   (cause :initarg :cause :initform nil :reader yaml-compose-error-cause))
-  (:report (lambda (condition stream)
-             (%write-yaml-condition-context
-              stream "YAML compose error" (yaml-compose-error-context condition)
-              (yaml-compose-error-mark condition))
-             (when (or (yaml-compose-error-cause condition)
-                       (yaml-kit-error-message condition))
-               (format stream "; ~A~@[ (~A)~]"
-                       (or (yaml-kit-error-message condition)
-                           (yaml-compose-error-cause condition))
-                       (and (yaml-kit-error-message condition)
-                            (yaml-compose-error-cause condition)))))))
+  ((context :initarg :context :initform "YAML composition"
+            :reader yaml-compose-error-context)
+   (cause :initarg :cause :initform nil
+          :reader yaml-compose-error-cause)))
 (define-condition yaml-emit-error (yaml-kit-error)
-  ((mark :initarg :mark :initform nil :reader yaml-emit-error-mark)
-   (context :initarg :context :initform "YAML emission" :reader yaml-emit-error-context)
-   (cause :initarg :cause :initform nil :reader yaml-emit-error-cause))
-  (:report (lambda (condition stream)
-             (%write-yaml-condition-context
-              stream "YAML emit error" (yaml-emit-error-context condition)
-              (yaml-emit-error-mark condition))
-             (when (or (yaml-emit-error-cause condition)
-                       (yaml-kit-error-message condition))
-               (format stream "; ~A~@[ (~A)~]"
-                       (or (yaml-kit-error-message condition)
-                           (yaml-emit-error-cause condition))
-                       (and (yaml-kit-error-message condition)
-                            (yaml-emit-error-cause condition)))))))
+  ((context :initarg :context :initform "YAML emission"
+            :reader yaml-emit-error-context)
+   (cause :initarg :cause :initform nil
+          :reader yaml-emit-error-cause)))
 
-(defmacro signal-yaml-compose-error (&key mark context cause message)
-  `(error 'yaml-compose-error :mark ,mark
+(defmacro signal-yaml-compose-error (&key diagnostic context cause message)
+  `(error 'yaml-compose-error
+          :diagnostic (%yaml-error-diagnostic ,diagnostic ,message)
           :context ,(or context "YAML composition")
-          :cause ,cause :message ,message))
+          :cause ,cause))
 
-(defmacro signal-yaml-emit-error (&key mark context cause message)
-  `(error 'yaml-emit-error :mark ,mark
+(defmacro signal-yaml-emit-error (&key diagnostic context cause message)
+  `(error 'yaml-emit-error
+          :diagnostic (%yaml-error-diagnostic ,diagnostic ,message)
           :context ,(or context "YAML emission")
-          :cause ,cause :message ,message))
+          :cause ,cause))
 (define-condition yaml-resource-limit-error (yaml-kit-error)
-  ((limit-name :initarg :limit-name :initform "resource" :reader yaml-resource-limit-error-limit-name)
+  ((limit-name :initarg :limit-name :initform "resource"
+               :reader yaml-resource-limit-error-limit-name)
    (limit :initarg :limit :initform nil :reader yaml-resource-limit-error-limit)
    (actual :initarg :actual :initform nil :reader yaml-resource-limit-error-actual)
-   (mark :initarg :mark :initform nil :reader yaml-resource-limit-error-mark)
-   (context :initarg :context :initform "YAML" :reader yaml-resource-limit-error-context))
-  (:report (lambda (condition stream)
-             (%write-yaml-condition-context
-              stream "YAML resource limit exceeded"
-              (yaml-resource-limit-error-context condition)
-              (yaml-resource-limit-error-mark condition))
-             (format stream " (~A limit ~S, actual ~S)"
-                     (yaml-resource-limit-error-limit-name condition)
-                     (yaml-resource-limit-error-limit condition)
-                     (yaml-resource-limit-error-actual condition))
-             (when (yaml-kit-error-message condition)
-               (format stream "; ~A" (yaml-kit-error-message condition))))))
+   (context :initarg :context :initform "YAML"
+            :reader yaml-resource-limit-error-context)))
 
 (define-condition yaml-format-edit-path-error (yaml-kit-error)
   ((path :initarg :path :initform nil :reader yaml-format-edit-path-error-path)
    (document :initarg :document :initform 0
              :reader yaml-format-edit-path-error-document)
    (operation :initarg :operation :initform nil
-              :reader yaml-format-edit-path-error-operation))
-  (:report (lambda (condition stream)
-             (format stream "YAML format edit path error for ~S~@[ in document ~D~]~@[ (~S)~]~@[; ~A~]"
-                     (yaml-format-edit-path-error-path condition)
-                     (yaml-format-edit-path-error-document condition)
-                     (yaml-format-edit-path-error-operation condition)
-                     (yaml-kit-error-message condition)))))
+              :reader yaml-format-edit-path-error-operation)))
 
 (define-condition yaml-format-edit-structure-error (yaml-kit-error)
-  ((path :initarg :path :initform nil :reader yaml-format-edit-structure-error-path))
-  (:report (lambda (condition stream)
-             (format stream "YAML format edit structure error for ~S~@[; ~A~]"
-                     (yaml-format-edit-structure-error-path condition)
-                     (yaml-kit-error-message condition)))))
+  ((path :initarg :path :initform nil
+         :reader yaml-format-edit-structure-error-path)))
 
 (define-condition yaml-format-edit-anchor-error (yaml-kit-error)
   ((path :initarg :path :initform nil :reader yaml-format-edit-anchor-error-path)
    (anchor :initarg :anchor :initform nil
-           :reader yaml-format-edit-anchor-error-anchor))
-  (:report (lambda (condition stream)
-             (format stream "YAML format edit anchor error for ~S~@[ (anchor ~S)~]~@[; ~A~]"
-                     (yaml-format-edit-anchor-error-path condition)
-                     (yaml-format-edit-anchor-error-anchor condition)
-                     (yaml-kit-error-message condition)))))
+           :reader yaml-format-edit-anchor-error-anchor)))

@@ -9,11 +9,11 @@
   (pop (parser-test-scanner-tokens scanner)))
 
 (defun parse-parser-token-events (specs)
-  (let* ((mark (yaml-kit:make-mark 1 1 0))
+  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 2 :start-column 2 :end-line 2 :end-column 2))
          (scanner (make-parser-test-scanner
                    :tokens (mapcar (lambda (spec)
                                      (apply #'yaml-kit:make-token
-                                            (first spec) mark mark (rest spec)))
+                                            (first spec) span span (rest spec)))
                                    specs)))
          (events nil)
          (parser (yaml-kit::make-parser%
@@ -119,14 +119,14 @@
   (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) nil) :to-be-truthy)
   (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "") :to-be-truthy)
   (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "tag") :to-equal nil)
-  (let* ((mark (yaml-kit:make-mark 0 0 0))
+  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 1 :start-column 1 :end-line 1 :end-column 1))
          (parser (yaml-kit::make-parser%
                   :directives '(("!" . "!") ("!!" . "tag:yaml.org,2002:")
                                 ("!e!" . "tag:example:")))))
     (dolist (case '((nil "plain") ("!" "suffix") ("!" "<tag>") ("!e!" "value")))
       (destructuring-bind (handle suffix) case
         (expect (funcall (symbol-function 'yaml-kit::parser-tag-token)
-                         parser (yaml-kit:make-token :tag mark mark :handle handle :suffix suffix))
+                         parser (yaml-kit:make-token :tag span span :handle handle :suffix suffix))
                 :to-be-truthy)))))
 
 (it "reports missing parser nodes and invalid mapping keys"
@@ -174,8 +174,8 @@
                  (:scalar :value "value" :style :plain) (:stream-end)))
             (yaml-kit:yaml-parse-error () t))
           :to-be-truthy)
-  (let* ((mark (yaml-kit:make-mark 0 0 0))
-         (token (yaml-kit:make-token :scalar mark mark :value "wrong" :style :plain))
+  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 1 :start-column 1 :end-line 1 :end-column 1))
+         (token (yaml-kit:make-token :scalar span span :value "wrong" :style :plain))
          (parser (yaml-kit::make-parser%
                   :next-function (lambda (scanner) (declare (ignore scanner)) token)
                   :handler (lambda (event) (declare (ignore event))))))

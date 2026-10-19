@@ -1,9 +1,9 @@
 (in-package #:cl-yaml-kit/test)
 
 (defun directive-tokens (text)
-  (let ((s (yaml-kit:make-scanner (make-array (length text) :element-type 'character
+  (let ((s (yaml-kit::make-scanner (make-array (length text) :element-type 'character
                                                :initial-contents text))) (out nil))
-    (loop for token = (yaml-kit:scanner-next-token s) while token do (push token out))
+    (loop for token = (yaml-kit::scanner-next-token s) while token do (push token out))
     (nreverse out)))
 
 (defmacro scanner-directive-cases (&body cases)
@@ -117,17 +117,17 @@
 (it "maps codec URI failures to parse errors"
   (dolist (text '("%E0%80%80" "%ED%A0%80" "%F4%90%80%80" "%E2%82"
                   "%C3%20" "%F0%90"))
-    (let* ((scanner (yaml-kit:make-scanner
+    (let* ((scanner (yaml-kit::make-scanner
                      (make-array (length text) :element-type 'character
                                  :initial-contents text)))
            (buffer (yaml-kit::make-scan-buffer)))
       (expect (handler-case
                   (yaml-kit::scan-uri-escapes
-                   scanner nil (yaml-kit::sc-mark scanner) buffer)
+                   scanner nil (yaml-kit::sc-position scanner) buffer)
                 (yaml-kit:yaml-parse-error () t))
               :to-be-truthy))))
 (it "stops anchor names before a byte order mark"
-  (let* ((scanner (yaml-kit:make-scanner (format nil "&a~C" #\UFEFF)))
+  (let* ((scanner (yaml-kit::make-scanner (format nil "&a~C" #\UFEFF)))
          (token (yaml-kit::scan-anchor scanner :anchor)))
     (expect (list (yaml-kit:token-kind token)
                   (yaml-kit:token-value token)

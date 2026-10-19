@@ -1,14 +1,13 @@
 (in-package #:yaml-kit)
 
 (defun %format-edit-path-error (path document operation message)
-  (error 'yaml-format-edit-path-error
-         :path path :document document :operation operation :message message))
+  (error 'yaml-format-edit-path-error :path path :document document :operation operation :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
 (defun %format-edit-structure-error (path message)
-  (error 'yaml-format-edit-structure-error :path path :message message))
+  (error 'yaml-format-edit-structure-error :path path :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
 (defun %format-edit-anchor-error (path anchor message)
-  (error 'yaml-format-edit-anchor-error :path path :anchor anchor :message message))
+  (error 'yaml-format-edit-anchor-error :path path :anchor anchor :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
 (defun %format-edit-octet-p (object)
   (typep object '(vector (unsigned-byte 8))))
@@ -61,9 +60,7 @@
                              (concatenate '(vector (unsigned-byte 8)) bom encoded)
                              encoded))))))
        (error (condition)
-         (error 'yaml-parse-error
-                :context "invalid source encoding"
-                :message (princ-to-string condition)))))
+         (error 'yaml-parse-error :context "invalid source encoding" :diagnostic (cl-parser-kit:make-diagnostic :message (format nil "invalid source encoding: ~A" (princ-to-string condition)))))))
     (t
      (%format-edit-path-error path document operation
                          "source must be a string or octet vector"))))
