@@ -43,11 +43,16 @@
       yaml-test-suite,
       treefmt-nix,
     }:
-    cl-nix-forge.lib.x86_64-linux.mkPackageFlake {
-      inherit self nixpkgs;
+    let
+      # CI and release jobs remain x86_64-linux; local checks also cover Darwin.
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+      ];
+    in
+    cl-nix-forge.lib.${builtins.head systems}.mkPackageFlake {
+      inherit self systems nixpkgs;
       pname = "cl-yaml-kit";
-      # CI and release verification run only on ubuntu x86_64.
-      systems = [ "x86_64-linux" ];
       asd = ./cl-yaml-kit.asd;
       root = ./.;
       meta = {
