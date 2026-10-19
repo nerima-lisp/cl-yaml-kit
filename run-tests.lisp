@@ -11,14 +11,17 @@
   (list (merge-pathnames "run-tests.lisp" root)
         (merge-pathnames "scripts/run-coverage.lisp" root)
         (merge-pathnames "scripts/run-mutation.lisp" root)))
+
 (defun compile-warning-output-file (file)
   (merge-pathnames
    (make-pathname :name (format nil "~A-check" (pathname-name file))
                   :type "fasl")
    (uiop:temporary-directory)))
+
 (defun compile-warning-entry (condition)
   (when *compile-file-truename*
     (list *compile-file-truename* condition)))
+
 (defun collect-compile-warnings (thunk)
   (let ((warnings nil))
     (handler-bind
@@ -30,6 +33,7 @@
                  (muffle-warning condition))))))
       (funcall thunk))
     warnings))
+
 (defun compile-project-for-warning-check (root)
   (collect-compile-warnings
    (lambda ()
@@ -37,6 +41,7 @@
      (asdf:operate 'asdf:compile-op "cl-yaml-kit/test" :force t)
      (dolist (file (compile-warning-files root))
        (compile-file file :output-file (compile-warning-output-file file))))))
+
 (defun partition-compile-warnings (warnings source-directory)
   (let ((non-style
           (remove-if (lambda (entry)
@@ -51,6 +56,7 @@
                    (namestring (first entry)))))
            warnings)))
     (values non-style source-style)))
+
 (defun report-compile-warnings (non-style source-style)
   (format t "compile warning check: non-style=~D src-style=~D~%"
           (length non-style) (length source-style))
@@ -60,6 +66,7 @@
   (when (or non-style source-style)
     (error "Compilation warning check failed: non-style=~D src-style=~D"
            (length non-style) (length source-style))))
+
 (defun compile-warning-check ()
   (let* ((root (script-directory))
          (source-directory (merge-pathnames "src/" root))

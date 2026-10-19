@@ -68,8 +68,8 @@
   :source-control (:git "https://github.com/nerima-lisp/cl-yaml-kit.git")
   :depends-on ("cl-yaml-kit"                ; The system under test.
                "cl-yaml-kit/coverage-gate"  ; Its verdict logic is tested with the suite.
-               "cl-weave"                   ; Test-only: provides test macros and generators. Runtime deps remain cl-regex-kit and cl-codec-kit.
-               "cl-json-kit")               ; Test-only: reads in.json; distinguishes null from false. Runtime deps remain cl-regex-kit and cl-codec-kit.
+               "cl-weave"                   ; Test-only: framework, generators, and test timeouts.
+               "cl-json-kit")               ; Test-only: reads in.json to distinguish null from false.
   :pathname "t"
   :serial t
   :components ((:file "package") (:file "helpers") (:file "events-test")
