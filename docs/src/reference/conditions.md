@@ -1,35 +1,46 @@
 # Conditions
 
 All exported conditions inherit from `yaml-kit-error`, which inherits from
-`error`. The source condition definitions contain the slots and readers below;
-`package.lisp` exports the parse-error readers and the compose/emit location
-and cause readers. Readers not listed as exports are implementation details.
+`error`.
 
 ## Hierarchy and slots
 
 | Condition | Readers and defaults | When it is signalled |
 | --- | --- | --- |
-| `yaml-kit-error` | `yaml-kit-error-message` (not exported), default `nil` | Base for library failures |
 | `yaml-parse-error` | `yaml-parse-error-line` `nil`, `yaml-parse-error-column` `nil`, `yaml-parse-error-offset` 0, `yaml-parse-error-context` `"YAML"` | Scanning or parsing invalid input |
 | `yaml-compose-error` | `yaml-compose-error-mark` `nil`, `yaml-compose-error-context` `"YAML composition"`, `yaml-compose-error-cause` `nil` | Invalid event stream, alias, tag, scalar, or mapping graph |
 | `yaml-emit-error` | `yaml-emit-error-mark` `nil`, `yaml-emit-error-context` `"YAML emission"`, `yaml-emit-error-cause` `nil` | Unsupported Lisp value or invalid emission state |
-| `yaml-resource-limit-error` | Resource-limit readers are not exported; defaults are `"resource"`, `nil`, `nil`, `nil`, `"YAML"` for limit name, limit, actual, mark, and context | An input, depth, scalar, node, or alias limit is exceeded |
+| `yaml-resource-limit-error` | No detail or mark readers are exported | An input, depth, scalar, node, or alias limit is exceeded |
+| `yaml-format-edit-path-error` | `yaml-format-edit-path-error-path` `nil`, `yaml-format-edit-path-error-document` `0`, `yaml-format-edit-path-error-operation` `nil` | Invalid or missing edit path, document, or operation |
+| `yaml-format-edit-structure-error` | `yaml-format-edit-structure-error-path` `nil` | Unsupported edit to the YAML structure |
+| `yaml-format-edit-anchor-error` | `yaml-format-edit-anchor-error-path` `nil`, `yaml-format-edit-anchor-error-anchor` `nil` | Edit path includes an anchored node, alias, or anchored mapping key |
 
-The mark readers return a `mark` or `nil`. A mark contains line, column, and
-offset fields read with `mark-line`, `mark-column`, and `mark-offset`. Parse
-Scanner-derived parse errors use zero-based line, column, and offset values.
-When the parser has no token mark, its fallback line and column are `1` and its
-offset is `0`. Compose, emit, and resource errors may carry the mark at which
-the operation detected the failure.
+The `yaml-compose-error-cause` and `yaml-emit-error-cause` readers return the
+cause value supplied by the failing stage, or `nil` when it supplies none. A
+cause may be an underlying condition or diagnostic text. The condition report
+includes a cause when available.
+
+`yaml-compose-error-mark` and `yaml-emit-error-mark` return a `mark` or `nil`.
+A mark contains line, column, and offset fields read with `mark-line`,
+`mark-column`, and `mark-offset`. Resource-limit `~A` reports include the limit
+name, configured limit, actual value, context, and mark coordinates when
+available.
+
+The table gives slot defaults for conditions created without explicit values.
+Scanner errors set the offending character's mark, with zero-based line,
+column, and offset values. When the parser raises an error without a current
+token, it sets fallback line, column, and offset values to `1`, `1`, and `0`;
+these fallback values are not source coordinates. Scanner marks start at
+`(0, 0, 0)` and advance the offset with each character.
 
 ## Resource limits
 
-The default limits and their entry points are listed in the [API
-reference](api.md). Set a keyword to a smaller or larger value to change the
-bound. A `nil` bound is accepted by the composer, but the loader supplies its
-numeric default.
-Exceeding a bound signals `yaml-resource-limit-error`; the condition names the
-limit and records the configured and actual values.
+See the [API reference](api.md) for default limits and their entry points. Set
+a keyword to a numeric value to change the bound. For
+`compose-events` and `compose-all-events`, `:max-depth`, `:max-scalar-length`,
+`:max-nodes`, and `:max-alias-expansions` accept `nil` to disable that limit.
+Raw-input entry points use their numeric defaults when a limit keyword is
+omitted; pass a number when overriding one.
 
 ## Handling failures
 
@@ -43,6 +54,6 @@ limit and records the configured and actual values.
 ```
 
 Catch `yaml-kit-error` when the caller does not need to distinguish parsing,
-composition, emission, and resource failures. The report methods include the
-context and, where available, mark coordinates. Conditions do not expose a
-separate input snippet or path accessor in the current public API.
+composition, emission, and resource failures. Formatting a condition with `~A`
+prints its report, which includes context and, where available, mark
+coordinates. Conditions do not expose a separate input snippet.

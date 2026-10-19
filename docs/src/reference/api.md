@@ -10,22 +10,37 @@ implemented by the source.
 | --- | --- | --- |
 | `parse input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First constructed document | `yaml-parse-error`, `yaml-compose-error`, `yaml-resource-limit-error` |
 | `parse-all input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of constructed documents | Same as `parse` |
-| `read-yaml input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | One constructed document | Same as `parse` |
-| `parse-events input &rest keys` | Event list | `yaml-parse-error`, `yaml-resource-limit-error` |
-| `map-events handler input &key max-input-length max-depth max-scalar-length` | `nil` | `yaml-parse-error`, `yaml-resource-limit-error` |
-| `compose-events events &rest keys` | First representation graph | `yaml-compose-error`, `yaml-resource-limit-error` |
-| `compose-all-events events &key max-depth max-scalar-length max-nodes max-alias-expansions` | Representation graphs | `yaml-compose-error`, `yaml-resource-limit-error` |
-| `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node | `yaml-compose-error`, `yaml-resource-limit-error` |
-| `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes | Same as `compose` |
+| `read-yaml input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First constructed document | Same as `parse` |
+| `parse-events input &rest keys` | Event list; forwards `:max-input-length`, `:max-depth`, and `:max-scalar-length` to `map-events` | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `map-events handler input &key max-input-length max-depth max-scalar-length` | `nil`; calls `handler` with each event in source order | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `comment-spans input &key max-input-length` | Ordered list of `(start . end)` comment spans | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `compose-events events &rest keys` | First representation node (root of the graph); `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-all-events events &key max-depth max-scalar-length max-nodes max-alias-expansions first-only document-handler` | Varies with `:first-only` and `:document-handler`; see below. `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node (root of the graph) | `yaml-parse-error`, `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes, one root per document | Same as `compose` |
 
-The exported composition entry points are `compose`, `compose-all`,
-`compose-events`, and `compose-all-events`.
+`parse`, `read-yaml`, and `compose` operate on only the first document in a raw
+input stream. They stop parsing or composing after that document; use
+`parse-all` or `compose-all` to process every document in the stream.
 
-`input` may be a string, octet vector accepted by the reader, or stream where
-the implementation permits it. Octet vectors use cl-codec-kit's `:auto`
-encoding detection, including BOM-less UTF-16 and UTF-32 null-pattern
-detection. Invalid octet sequences are reported as `yaml-parse-error`. The
-defaults are centralized here:
+An empty raw YAML input has no document. `compose`, `compose-all`, and
+`parse-all` return `nil`; `parse` and `read-yaml` signal
+`yaml-compose-error` because there is no node to construct.
+
+`compose-all-events` returns a list of roots by default, or a one-element list
+with the first root when `:first-only` is true. Its `:document-handler` receives
+one root representation node for each completed document, and its return value
+is ignored. With `:document-handler` and no `:first-only`, the composer calls
+the handler for every document and returns `nil`. With both options, it calls
+the handler only for the first document and returns a one-element list, or
+`nil` if no document exists.
+
+`parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `map-events`,
+`parse-events`, and `comment-spans` accept strings, octet vectors, and character
+streams. Octet vectors use
+cl-codec-kit's `:auto` encoding detection, including BOM-less UTF-16 and UTF-32
+null-pattern detection. Invalid octet sequences are reported as
+`yaml-parse-error`.
 
 | Option or limit | Default | Applies to |
 | --- | ---: | --- |
@@ -33,18 +48,27 @@ defaults are centralized here:
 | `:mapping-type` | `:hash-table` | `parse`, `parse-all`, `read-yaml` |
 | `:sequence-type` | `:vector` | `parse`, `parse-all`, `read-yaml` |
 | `:duplicate-key-policy` | `:error` | `parse`, `parse-all`, `read-yaml` |
-| `:max-input-length` | `104857600` | loaders and event parsing |
-| `:max-depth` | `1000` | loaders and composers |
-| `:max-scalar-length` | `16777216` | loaders, composers, and event parsing |
-| `:max-nodes` | `1000000` | loaders and composers |
-| `:max-alias-expansions` | `100000` | loaders and composers |
-| event-parser `:max-depth` | `1000` | `map-events`, `parse-events` |
+| `:max-input-length` | `104857600` | `parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `map-events`, `parse-events`, `comment-spans` |
+| `:max-depth` | `1000` | `parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `compose-events`, `compose-all-events`, `map-events`, `parse-events` |
+| `:max-scalar-length` | `16777216` | `parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `compose-events`, `compose-all-events`, `map-events`, `parse-events` |
+| `:max-nodes` | `1000000` | `parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `compose-events`, `compose-all-events` |
+| `:max-alias-expansions` | `100000` | `parse`, `parse-all`, `read-yaml`, `compose`, `compose-all`, `compose-events`, `compose-all-events` |
+| `:first-only` | `nil` | `compose-all-events` |
+| `:document-handler` | `nil` | `compose-all-events` |
 | `:indent` | `2` | `emit`, `write-yaml`, `emit-events` |
 | `:default-flow-style` | `:block` | `emit`, `write-yaml` |
 | `:explicit-document-start` | `nil` | `emit`, `write-yaml`, `emit-events` |
 
-`read-yaml` accepts the same string, octet-vector, and stream inputs as the
-other reader entry points; its first argument is not restricted to streams.
+The accepted values and effects of `:schema`, `:mapping-type`,
+`:sequence-type`, and `:duplicate-key-policy` are described in the
+[data model guide](../guide/data-model.md). `:default-flow-style` accepts
+`:block` or `:flow`; see [Writing YAML](../guide/writing.md).
+
+`map-events` and `parse-events` apply `:max-depth` while parsing events;
+`compose-events` and `compose-all-events` apply it while building representation
+graphs. The raw-input functions `parse`, `parse-all`, `read-yaml`, `compose`,
+and `compose-all` pass the same `:max-depth` value to both stages.
+
 The limit values are upper bounds. Exceeding one signals
 `yaml-resource-limit-error`. For strings and character streams,
 `:max-input-length` counts characters. For octet vectors, it counts bytes and
@@ -52,17 +76,50 @@ is checked before decoding. Character streams are read only until the first
 character beyond the limit, so a non-terminating stream cannot bypass the
 bound.
 
-Event sources passed to `compose-events` and `compose-all-events` must emit a
-complete stream with ordered stream and document start/end events. Those APIs
-do not accept `:max-input-length`; raw input limits are enforced by the reader
-entry points. Re-defining an anchor is valid YAML and updates the anchor table,
-so a later alias refers to the most recent definition.
+`comment-spans` returns one span for each comment recognized by the YAML lexer,
+in source order. Offsets are zero-based character positions in the decoded
+input. The start is inclusive and the end is exclusive. A span includes `#`
+and the comment text but excludes the following line break. A `#` inside a
+quoted scalar, block scalar content, or plain scalar text without preceding
+separation (for example, `foo#bar`) is not reported as a comment.
 
-The loader is supported on SBCL only. Constructed YAML numeric scalars are
+### Event composition
+
+An event source is a function that receives a handler and sends events to it;
+the source's return value is ignored.
+A complete event stream starts with `stream-start-event`, contains zero or
+more documents, and ends with `stream-end-event`. Each document contains
+`document-start-event`, one root node, and
+`document-end-event`; collection roots include matching start and end events.
+To pass the list returned by `parse-events` to `compose-events`, wrap it in a
+function that calls the supplied handler for each event:
+
+```lisp
+(let ((events (yaml-kit:parse-events "key: value")))
+  (yaml-kit:compose-events
+   (lambda (handler)
+     (dolist (event events)
+       (funcall handler event)))))
+```
+
+`compose-events` always stops after the first `document-end-event`.
+`compose-all-events` stops there when `:first-only` is true. In either case,
+the source can return without sending `stream-end-event`. With `:first-only`
+false, `compose-all-events` consumes the complete stream and requires
+`stream-end-event`. A non-empty source that returns before sending that event
+signals `yaml-compose-error`. A source that sends no events produces no
+document and composition returns `nil`.
+
+These composition APIs do not accept `:max-input-length`; raw-input limits are
+enforced by entry points such as `parse-events`. Re-defining an anchor is valid
+YAML and updates the anchor table, so a later alias refers to the most recent
+definition.
+
+## Runtime and scalar values
+
+This library is supported on SBCL only. Constructed YAML numeric scalars are
 either Common Lisp integers or `double-float` values. Ratios and complex
 numbers are not YAML scalar result types; for example, `1/2` remains a string.
-Floating-point special values are implemented in an isolated SBCL-specific
-source file.
 
 ## Emitting
 
@@ -70,56 +127,80 @@ source file.
 | --- | --- | --- |
 | `emit value &key indent default-flow-style explicit-document-start` | YAML string | `yaml-emit-error` |
 | `write-yaml value stream &key indent default-flow-style explicit-document-start` | `value` | `yaml-emit-error` |
-| `emit-events events &key indent explicit-document-start` | YAML string | `yaml-emit-error` |
-
-The defaults for these options are in the table above.
+| `emit-events events &key indent explicit-document-start` | YAML string; accepts an event list | `yaml-emit-error` |
 
 ## Format-preserving editing
 
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
-| `edit-source source path value &key document operation` | Edited source in the input type | `yaml-parse-error`, `yaml-format-edit-path-error`, `yaml-format-edit-anchor-error`, `yaml-format-edit-structure-error` |
-| `yaml-format-edit-path-error-path`, `yaml-format-edit-path-error-document`, `yaml-format-edit-path-error-operation` | `(condition)` | Path error details |
-| `yaml-format-edit-structure-error-path` | `(condition)` | Structure error path |
-| `yaml-format-edit-anchor-error-path`, `yaml-format-edit-anchor-error-anchor` | `(condition)` | Anchor error details |
+| `edit-source source path value &key (document 0) (operation :set)` | Edited source in the input type | `yaml-parse-error`, `yaml-emit-error`, `yaml-format-edit-path-error`, `yaml-format-edit-anchor-error`, `yaml-format-edit-structure-error` |
 
-`path` is a proper list of string keys and zero-based integer sequence indexes.
+Readers for the edit conditions are listed in the [conditions reference](conditions.md).
+
+`path` is a non-empty proper list of string keys and zero-based integer sequence
+indexes, ordered from the document root toward the selected node. For example,
+`("user" "name")` selects `name` under the top-level `user` key.
 `document` is zero-based. `operation` is `:set` by default; use `:delete` to
-remove a mapping entry or sequence item. The editor parses both the original and
-edited source with `parse-all`, then verifies that the requested semantic change
-is the only value change before returning it. A syntactically valid edit that
-changes an alias-resolved value or any other unrelated value signals
+remove a mapping entry or sequence item. With `:set`, a path whose final
+component is absent adds a mapping entry when that component is a string, or
+appends a sequence item when the component is the next zero-based index.
+All earlier path components must exist; missing intermediate components are
+not created and signal `yaml-format-edit-structure-error`.
+`operation :delete` requires the path to exist. The positional `value` is still
+required for `:delete`, but is ignored. The editor parses both the original and
+edited source with `parse-all`, then verifies that the requested semantic
+change is the only value change before returning it. A syntactically valid edit
+that changes an alias-resolved value or any other unrelated value signals
 `yaml-format-edit-structure-error`.
 
-The supported `:set` form replaces an untagged, non-empty, single-line scalar.
-The replacement value must also be scalar. Scalar replacement in a flow
-collection quotes strings containing flow indicators when necessary. `:set`
-does not replace mappings, sequences, empty values, block scalars, or multiline
-scalars; those cases signal `yaml-format-edit-structure-error`.
+`source` must be a string or an octet vector; streams are not accepted. Other
+input types signal `yaml-format-edit-path-error`. Octet vectors are decoded
+using the detected source encoding and returned in that encoding after editing.
 
-The supported additions are mapping entries and sequence items in block
+When the path exists, `:set` replaces an untagged scalar written on one line in
+plain, single-quoted, or double-quoted style. Quoted empty scalars such as `''`
+and `""` are supported. Implicit empty values such as `key:` or `-`, block
+scalars, and multiline scalars signal `yaml-format-edit-structure-error`.
+Replacement values may be strings, characters, integers, any Common Lisp float
+(`short-float`, `single-float`, `double-float`, or `long-float`), `t`,
+`+yaml-null+`, or `+yaml-false+`. `nil`, mappings, and sequences are not scalar
+replacement values. `:set` does not replace mappings or sequences.
+
+Additions are supported for mapping entries and sequence items in block
 collections. Mapping additions require a string key. Sequence additions are
 append-only: the path index must be the next index. Additions to flow
-collections, additions to mappings or sequences beginning after `- ` on the
-same line, and non-tail sequence additions signal
+collections, additions to collections whose opening appears on the same line
+as a sequence entry (for example, the mapping in `- key: value` or nested
+sequence in `- - item`), and non-tail sequence additions signal
 `yaml-format-edit-structure-error`. The editor also rejects deletion from flow
-collections, deletion of a collection's only child, and deletion of inline
-sequence mappings or sequences.
+collections, deletion of a collection's only child, and deletion from mappings
+or sequences whose opening appears on the same line as a sequence entry, such
+as the mapping in `- key: value` or nested sequence in `- - item`.
 
-Inserted scalar fragments are emitted in flow style. If an emitter fragment
-would span multiple lines, the editor uses a double-quoted fragment with YAML
-escapes. This applies to inserted keys and values whose content contains a
-document marker, comment indicator, sequence indicator, or line break.
+Added mapping keys and values and sequence items are serialized by the emitter
+with `:default-flow-style :flow`; their surrounding block collection keeps its
+block layout. Added values use the scalar types listed for `:set`; collection
+values signal `yaml-format-edit-structure-error`. A string value containing a line break is
+written as a double-quoted scalar with YAML escapes. Replacement strings in
+flow collections are single-quoted when their content requires protection from
+flow indicators.
 
-For safety, edits through tagged nodes, anchors, aliases, duplicate mapping
-keys, or merge-key mappings are rejected. The document root cannot be deleted.
+Each path component's selected value must be untagged and cannot be
+anchored or an alias. This applies to intermediate values used to reach a
+nested value and to the final value being edited. Mapping keys with an anchor
+or alias are also rejected. Tagged-node edits signal
+`yaml-format-edit-structure-error`; edits involving anchors or aliases signal
+`yaml-format-edit-anchor-error`.
+Traversed mappings with duplicate keys or merge keys are also rejected. The
+document root cannot be replaced or deleted.
 Integer path components under mappings are rejected with
-`yaml-format-edit-path-error`. Unsupported source encodings and edited text
-that does not parse signal a `yaml-kit-error` subtype. Within the supported
-subset, comments, key order, source text outside the edit, line endings, final
-newline state, and the input octet encoding including a byte-order mark are
-preserved. Replacing a quoted scalar does not promise to retain its original
-quote style; the replacement uses the emitter's selected safe style.
+`yaml-format-edit-path-error`. Unsupported source encodings signal
+`yaml-parse-error`; edited text that does not parse signals
+`yaml-format-edit-structure-error`. Within the supported subset, comments, key
+order, source text outside the edit, line endings, final newline state, and the
+input octet encoding including a byte-order mark are preserved. Replacing a
+quoted scalar does not promise to retain its original quote style; the
+replacement uses the emitter's selected safe style.
 
 ## Sentinel and mapping values
 
@@ -131,6 +212,10 @@ quote style; the replacement uses the emitter's selected safe style.
 | `yaml-mapping-p` | `(object)` | Boolean |
 | `yaml-mapping-entries` | `(mapping)` | Mapping entry alist |
 
+Pass `entries` as an ordered association list of key/value conses. The
+constructor shallow-copies the outer list and preserves the supplied entry
+conses and their order.
+
 ## Marks, tokens, and scanners
 
 | Symbol | Lambda list or access | Result |
@@ -141,8 +226,20 @@ quote style; the replacement uses the emitter's selected safe style.
 | `token` | structure type | Token structure |
 | `make-token` | `(kind start-mark end-mark &key value handle suffix style major minor)` | Validated token |
 | `token-kind`, `token-start-mark`, `token-end-mark`, `token-value`, `token-handle`, `token-suffix`, `token-style`, `token-major`, `token-minor` | `(token)` | Corresponding token field |
-| `make-scanner` | `(simple-array character (*))` | Scanner |
-| `scanner-peek-token`, `scanner-next-token` | `(scanner)` | Next token or `nil` |
+| `make-scanner` | `(simple-string; includes simple-base-string)` | Scanner |
+| `scanner-peek-token` | `(scanner)` | Next token or `nil`, without consuming it |
+| `scanner-next-token` | `(scanner)` | Next token or `nil`, consuming it |
+
+Scanner token kinds are keywords: `:stream-start`, `:stream-end`,
+`:version-directive`, `:tag-directive`, `:document-start`, `:document-end`,
+`:block-sequence-start`, `:block-mapping-start`, `:block-end`,
+`:flow-sequence-start`, `:flow-sequence-end`, `:flow-mapping-start`,
+`:flow-mapping-end`, `:block-entry`, `:flow-entry`, `:key`, `:value`,
+`:scalar`, `:anchor`, `:tag`, and `:alias`. `token-value` contains scalar
+text, an anchor or alias name, or a tag-directive prefix, as applicable.
+`token-handle` and `token-suffix` carry tag data; `token-style` carries a
+scalar style; `token-major` and `token-minor` carry a YAML version. Fields not
+used by a token kind are `nil`.
 
 ## Nodes
 
@@ -155,6 +252,10 @@ return a boolean. `node-tag`, `node-anchor`, `node-style`, `node-start-mark`,
 `mapping-node-pairs` accept the corresponding node and return its field.
 
 `scalar-node`, `sequence-node`, and `mapping-node` are the structure types.
+`node-tag` and `node-anchor` return their tag or anchor strings, or `nil`.
+`mapping-node-pairs` returns an ordered list of `(key . value)` pairs; repeated
+keys remain present.
+
 ## Events
 
 The constructors all accept the base keywords `:start-mark :end-mark`.
@@ -163,6 +264,12 @@ The constructors all accept the base keywords `:start-mark :end-mark`.
 constructors add `:anchor :tag :implicit-p :style`; the scalar constructor
 adds `:anchor :tag :value :plain-implicit-p :quoted-implicit-p :style`; and
 `make-alias-event` adds `:anchor`.
+
+Collection style is `:block` or `:flow`; `implicit-p` reports whether a
+collection tag can be omitted. Scalar style is `:plain`, `:single-quoted`,
+`:double-quoted`, `:literal`, or `:folded`. `plain-implicit-p` and
+`quoted-implicit-p` report whether a scalar tag can be omitted with the
+corresponding style.
 
 The exported event constructors are `make-stream-start-event`,
 `make-stream-end-event`, `make-document-start-event`,
@@ -173,7 +280,11 @@ The exported event constructors are `make-stream-start-event`,
 The event types are `stream-start-event`, `stream-end-event`,
 `document-start-event`, `document-end-event`, `sequence-start-event`,
 `sequence-end-event`, `mapping-start-event`, `mapping-end-event`,
-`scalar-event`, and `alias-event`. Their `*-p` predicates accept one object.
+`scalar-event`, and `alias-event`.
+The exported event predicates are `stream-start-event-p`, `stream-end-event-p`,
+`document-start-event-p`, `document-end-event-p`, `sequence-start-event-p`,
+`sequence-end-event-p`, `mapping-start-event-p`, `mapping-end-event-p`,
+`scalar-event-p`, and `alias-event-p`.
 `event-start-mark` and `event-end-mark` accept any event. The remaining event
 readers accept their named event and return the corresponding constructor
 field: `document-start-event-explicit-p`, `document-start-event-version`,
@@ -189,18 +300,16 @@ field: `document-start-event-explicit-p`, `document-start-event-version`,
 ## Conditions
 
 `yaml-kit-error` is the base condition. `yaml-parse-error`,
-`yaml-compose-error`, `yaml-emit-error`, and `yaml-resource-limit-error` are
-its exported subtypes. Their readers and defaults are specified in
-[Conditions](conditions.md).
-
-The exported event predicates are `stream-start-event-p`,
-`stream-end-event-p`, `document-start-event-p`, `document-end-event-p`,
-`sequence-start-event-p`, `sequence-end-event-p`, `mapping-start-event-p`,
-`mapping-end-event-p`, `scalar-event-p`, and `alias-event-p`.
-
-The exported condition readers are `yaml-parse-error-line`,
-`yaml-parse-error-column`, `yaml-parse-error-offset`,
+`yaml-compose-error`, `yaml-emit-error`, `yaml-resource-limit-error`,
+`yaml-format-edit-path-error`, `yaml-format-edit-structure-error`, and
+`yaml-format-edit-anchor-error` are its exported subtypes. Their readers and
+defaults are specified in [Conditions](conditions.md). Exported readers are
+`yaml-parse-error-line`, `yaml-parse-error-column`, `yaml-parse-error-offset`,
 `yaml-parse-error-context`, `yaml-compose-error-mark`,
 `yaml-compose-error-context`, `yaml-compose-error-cause`,
-`yaml-emit-error-mark`, `yaml-emit-error-context`, and
-`yaml-emit-error-cause`.
+`yaml-emit-error-mark`, `yaml-emit-error-context`, `yaml-emit-error-cause`,
+`yaml-format-edit-path-error-path`, `yaml-format-edit-path-error-document`,
+`yaml-format-edit-path-error-operation`,
+`yaml-format-edit-structure-error-path`,
+`yaml-format-edit-anchor-error-path`, and `yaml-format-edit-anchor-error-anchor`.
+
