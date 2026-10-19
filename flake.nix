@@ -22,6 +22,10 @@
       url = "github:nerima-lisp/cl-json-kit/v1.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    paredit-cli = {
+      url = "github:nerima-lisp/paredit-cli/v1.7.1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     yaml-test-suite = {
       url = "github:yaml/yaml-test-suite/data-2022-01-17";
       flake = false;
@@ -40,6 +44,7 @@
       cl-regex-kit,
       cl-codec-kit,
       cl-json-kit,
+      paredit-cli,
       yaml-test-suite,
       treefmt-nix,
     }:
@@ -49,6 +54,15 @@
         "x86_64-linux"
         "aarch64-darwin"
       ];
+
+      timeLimit = command: "timeout --kill-after=30 300 ${command}";
+
+      limitCommand =
+        command: script:
+        if nixpkgs.lib.hasInfix command script then
+          builtins.replaceStrings [ command ] [ (timeLimit command) ] script
+        else
+          throw "cl-yaml-kit: `${command}` is missing from a generated check, so its time limit would not apply";
     in
     cl-nix-forge.lib.${builtins.head systems}.mkPackageFlake {
       inherit self systems nixpkgs;
@@ -81,6 +95,18 @@
       docs.root = ./docs;
       treefmt.evalModule = treefmt-nix.lib.evalModule;
       extraOutputs = ctx: {
+        checks.paredit-lint =
+          ctx.pkgs.runCommand "cl-yaml-kit-paredit-lint"
+            {
+              nativeBuildInputs = [
+                ctx.pkgs.coreutils
+                paredit-cli.packages.${ctx.system}.lint
+              ];
+            }
+            ''
+              ${timeLimit "paredit-lint ${./.}"}
+              touch "$out"
+            '';
         checks.coverage = ctx.cl.mkCoverageReport {
           drv = ctx.package;
           # run-coverage.lisp applies scripts/coverage-gate.lisp to cl-weave's
@@ -131,19 +157,31 @@
           killAfterSeconds = 30;
         };
       };
-      overrideOutputs = ctx: {
-        apps.test = {
-          type = "app";
-          program = "${
-            ctx.pkgs.writeShellApplication {
-              name = "cl-yaml-kit-test-with-fixtures";
-              text = ''
-                export YAML_TEST_SUITE=${yaml-test-suite}
-                exec ${ctx.generated.apps.test.program} "$@"
-              '';
-            }
-          }/bin/cl-yaml-kit-test-with-fixtures";
+      overrideOutputs =
+        ctx:
+        let
+          docsSite = ctx.generated.packages.docs.overrideAttrs (old: {
+            buildPhase = limitCommand "mkdocs build" old.buildPhase;
+          });
+        in
+        {
+          apps.test = {
+            type = "app";
+            program = "${
+              ctx.pkgs.writeShellApplication {
+                name = "cl-yaml-kit-test-with-fixtures";
+                text = ''
+                  export YAML_TEST_SUITE=${yaml-test-suite}
+                  exec ${ctx.generated.apps.test.program} "$@"
+                '';
+              }
+            }/bin/cl-yaml-kit-test-with-fixtures";
+          };
+          packages.docs = docsSite;
+          checks.docs = ctx.generated.checks.docs.overrideAttrs { site = docsSite; };
+          checks.formatting = ctx.generated.checks.formatting.overrideAttrs (old: {
+            buildCommand = limitCommand "treefmt --no-cache" old.buildCommand;
+          });
         };
-      };
     };
 }
