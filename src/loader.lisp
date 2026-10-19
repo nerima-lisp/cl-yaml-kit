@@ -45,6 +45,22 @@
                   :max-alias-expansions max-alias-expansions)
    :schema schema :mapping-type mapping-type :sequence-type sequence-type
    :duplicate-key-policy duplicate-key-policy))
+(defun comment-spans (input &key
+                              (max-input-length +default-max-input-length+))
+  "Return source-ordered (START . END) spans, one for each comment recognized by
+the YAML lexer. Offsets are zero-based character positions in the decoded input.
+START is inclusive and END is exclusive. Spans include the leading # and comment
+text, but exclude the line break."
+  (let ((text (%parser-input-string input max-input-length))
+        (spans nil))
+    (when (> (length text) max-input-length)
+      (error 'yaml-resource-limit-error :limit-name "input length"
+             :limit max-input-length :actual (length text)))
+    (let ((*scanner-comment-sink* (lambda (span) (push span spans)))
+          (scanner (make-scanner text)))
+      (loop while (scanner-next-token scanner)
+            do (recycle-scanner-token scanner)))
+    (nreverse spans)))
 
 (defun parse-all (input &key (schema :core) (mapping-type :hash-table)
                                 (sequence-type :vector)

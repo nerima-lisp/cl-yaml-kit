@@ -39,23 +39,31 @@
     (sc-skip s)
     (cond
       ((or (sc-check s #\+) (sc-check s #\-))
-       (setf chomping (if (sc-check s #\+) 1 -1)) (sc-skip s)
+       (setf chomping (if (sc-check s #\+) 1 -1))
+       (sc-skip s)
        (when (sc-digit-p s)
-         (when (sc-check s #\0) (sc-error s "while scanning a block scalar" start-mark
-                                           "found an indentation indicator equal to 0"))
-         (setf increment (- (char-code (sc-char s)) (char-code #\0))) (sc-skip s)))
+         (when (sc-check s #\0)
+           (sc-error s "while scanning a block scalar" start-mark
+                     "found an indentation indicator equal to 0"))
+         (setf increment (- (char-code (sc-char s)) (char-code #\0)))
+         (sc-skip s)))
       ((sc-digit-p s)
-       (when (sc-check s #\0) (sc-error s "while scanning a block scalar" start-mark
-                                         "found an indentation indicator equal to 0"))
-       (setf increment (- (char-code (sc-char s)) (char-code #\0))) (sc-skip s)
+       (when (sc-check s #\0)
+         (sc-error s "while scanning a block scalar" start-mark
+                   "found an indentation indicator equal to 0"))
+       (setf increment (- (char-code (sc-char s)) (char-code #\0)))
+       (sc-skip s)
        (when (or (sc-check s #\+) (sc-check s #\-))
-         (setf chomping (if (sc-check s #\+) 1 -1)) (sc-skip s))))
-    (when (sc-check s #\#) (sc-error s "while scanning a block scalar" start-mark
-                                       "found unexpected character after block scalar indicator"))
+         (setf chomping (if (sc-check s #\+) 1 -1))
+         (sc-skip s))))
+    (when (sc-check s #\#)
+      (sc-error s "while scanning a block scalar" start-mark
+                "found unexpected character after block scalar indicator"))
     (loop while (sc-blank-p s) do (sc-skip s))
-    (when (sc-check s #\#) (loop until (sc-breakz-p s) do (sc-skip s)))
-    (unless (sc-breakz-p s) (sc-error s "while scanning a block scalar" start-mark
-                                       "did not find expected comment or line break"))
+    (when (sc-check s #\#) (sc-skip-comment s))
+    (unless (sc-breakz-p s)
+      (sc-error s "while scanning a block scalar" start-mark
+                "did not find expected comment or line break"))
     (when (sc-break-p s) (sc-skip-line s))
     (values chomping increment)))
 

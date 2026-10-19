@@ -2,16 +2,22 @@
 (declaim (optimize (speed 3) (safety 1)))
 (defconstant +max-version-number-length+ 9)
 
-(defun %skip-reserved-directive-line (s)
-  (loop until (sc-breakz-p s) do (sc-skip s))
-  (when (sc-break-p s) (sc-skip-line s)))
+(defun %skip-reserved-directive-line (s &optional comment-at-start-p)
+  (let ((comment-allowed comment-at-start-p))
+    (loop until (sc-breakz-p s)
+          do (if (and comment-allowed (sc-check s #\#))
+                 (sc-skip-comment s)
+                 (progn
+                   (setf comment-allowed (sc-blank-p s))
+                   (sc-skip s))))
+    (when (sc-break-p s) (sc-skip-line s))))
 
 (defun %skip-directive-gap (s)
   (loop
     (loop while (sc-blank-p s) do (sc-skip s))
     (cond
       ((sc-break-p s) (%skip-reserved-directive-line s))
-      ((sc-check s #\#) (%skip-reserved-directive-line s))
+      ((sc-check s #\#) (%skip-reserved-directive-line s t))
       (t (return)))))
 
 (defun %reserved-directive-result (s start)
@@ -52,9 +58,10 @@
 
 (defun scan-directive-end (s start)
   (loop while (sc-blank-p s) do (sc-skip s))
-  (when (sc-check s #\#) (loop until (sc-breakz-p s) do (sc-skip s)))
-  (unless (sc-breakz-p s) (sc-error s "while scanning a directive" start
-                                      "did not find expected comment or line break"))
+  (when (sc-check s #\#) (sc-skip-comment s))
+  (unless (sc-breakz-p s)
+    (sc-error s "while scanning a directive" start
+              "did not find expected comment or line break"))
   (when (sc-break-p s) (sc-skip-line s)))
 
 (defun scan-directive-name (s start)

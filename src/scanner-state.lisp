@@ -1,5 +1,6 @@
 ;;;; src/scanner-state.lisp
 (in-package #:yaml-kit)
+(defvar *scanner-comment-sink* nil)
 
 (defstruct (simple-key (:constructor make-simple-key ())
                        (:copier nil) (:predicate nil))
@@ -10,7 +11,7 @@
 
 (defstruct (scanner (:constructor %make-scanner (text))
                     (:copier nil) (:predicate nil))
-  (text "" :type (simple-array character (*)) :read-only t)
+  (text "" :type simple-string :read-only t)
   (pos 0 :type fixnum)
   (line 0 :type fixnum)
   (column 0 :type fixnum)
@@ -71,6 +72,12 @@
   (incf (scanner-line s))
   (setf (scanner-column s) 0)
   nil)
+(defun sc-skip-comment (s)
+  (let ((start (scanner-pos s)))
+    (loop until (sc-breakz-p s) do (sc-skip s))
+    (when *scanner-comment-sink*
+      (funcall *scanner-comment-sink* (cons start (scanner-pos s))))
+    nil))
 (defun sc-read (s buffer)
   (unless (sc-printable-p s)
     (sc-error s "while scanning YAML input" (sc-mark s)
@@ -133,7 +140,7 @@
           (scanner-token-available s) t)
     (car (last new-tokens))))
 (defun make-scanner (text)
-  (check-type text (simple-array character (*)))
+  (check-type text simple-string)
   (let ((scanner (%make-scanner text)))
     (setf (scanner-simple-key-allowed scanner) t
           (scanner-simple-keys scanner) (list (make-simple-key)))

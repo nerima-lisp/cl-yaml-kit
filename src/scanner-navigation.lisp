@@ -76,7 +76,7 @@
         (sc-error s "while scanning for the next token" (sc-mark s)
                   "found a line that is not indented enough to continue the flow collection"))
       (when (sc-check s #\#)
-        (loop until (sc-breakz-p s) do (sc-skip s))
+        (sc-skip-comment s)
         (setf after-break nil))
       (if (sc-break-p s)
           (progn (sc-skip-line s)

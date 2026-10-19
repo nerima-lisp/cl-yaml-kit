@@ -3,6 +3,7 @@
   (:use #:cl)
   (:export
    ;; Reading and writing
+   #:comment-spans
    #:parse #:parse-all #:read-yaml #:parse-events #:map-events
    #:compose #:compose-all #:compose-events #:compose-all-events
    #:emit #:write-yaml #:emit-events
