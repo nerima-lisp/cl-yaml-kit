@@ -22,9 +22,9 @@ inputs:
     default: ""
   cachix-auth-token:
     description: >-
-      Cachix auth token (pass secrets.CACHIX_AUTH_TOKEN). When empty — or on
-      pull_request events — the cache is configured pull-only so untrusted runs
-      can never push.
+      Cachix auth token (pass secrets.CACHIX_AUTH_TOKEN). When empty or for
+      pull_request events, the cache is configured as pull-only so untrusted
+      runs can never push.
     required: false
     default: ""
 
