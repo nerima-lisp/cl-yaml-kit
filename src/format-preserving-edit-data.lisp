@@ -16,16 +16,16 @@
 (defparameter *format-edit-crlf*
   (format nil "~C~C" #\Return #\Newline))
 
-(defconstant *format-edit-line-feed-character* #\Newline)
+(defconstant +format-edit-line-feed-character+ #\Newline)
 
-(defconstant *format-edit-single-quote-character* #\')
+(defconstant +format-edit-single-quote-character+ #\')
 
-(defconstant *format-edit-double-quote-character* #\")
+(defconstant +format-edit-double-quote-character+ #\")
 
-(defconstant *format-edit-colon-character* #\:)
+(defconstant +format-edit-colon-character+ #\:)
 
-(defconstant *format-edit-question-character* #\?)
+(defconstant +format-edit-question-character+ #\?)
 
-(defconstant *format-edit-sequence-indicator-character* #\-)
+(defconstant +format-edit-sequence-indicator-character+ #\-)
 
 (defconstant +format-edit-bom-character+ (code-char #xfeff))

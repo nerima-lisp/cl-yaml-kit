@@ -2,16 +2,16 @@
 
 (defun %format-edit-single-quoted-fragment (value)
   (with-output-to-string (stream)
-    (write-char *format-edit-single-quote-character* stream)
+    (write-char +format-edit-single-quote-character+ stream)
     (loop for character across value
-          do (when (char= character *format-edit-single-quote-character*)
-               (write-char *format-edit-single-quote-character* stream))
+          do (when (char= character +format-edit-single-quote-character+)
+               (write-char +format-edit-single-quote-character+ stream))
              (write-char character stream))
-    (write-char *format-edit-single-quote-character* stream)))
+    (write-char +format-edit-single-quote-character+ stream)))
 
 (defun %format-edit-double-quoted-fragment (value)
   (with-output-to-string (stream)
-    (write-char *format-edit-double-quote-character* stream)
+    (write-char +format-edit-double-quote-character+ stream)
     (loop for character across value
           for code = (char-code character)
           do (let ((escape (gethash character *yaml-escape-table*)))
@@ -24,7 +24,7 @@
                            (if (<= code #xffff)
                                (format stream "\\u~4,'0X" code)
                                (format stream "\\U~8,'0X" code)))))))
-    (write-char *format-edit-double-quote-character* stream)))
+    (write-char +format-edit-double-quote-character+ stream)))
 
 (defun %format-edit-flow-dangerous-string-p (value)
   (or (zerop (length value))
@@ -35,14 +35,14 @@
       (loop for index below (length value)
             for next-index = (1+ index)
             thereis (and (char= (char value index)
-                                *format-edit-colon-character*)
+                                +format-edit-colon-character+)
                          (< next-index (length value))
                          (or (yaml-whitespace-p (char value next-index))
                              (yaml-line-break-p (char value next-index))
                              (yaml-flow-indicator-p (char value next-index))
                              (and (< (+ index 2) (length value))
                                   (char= (char value next-index)
-                                         *format-edit-question-character*)))))))
+                                         +format-edit-question-character+)))))))
 
 (defun %format-edit-layout-whitespace-p (character)
   (or (yaml-whitespace-p character)

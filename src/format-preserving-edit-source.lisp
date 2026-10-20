@@ -113,7 +113,7 @@
 (defun %format-edit-newline (text)
   (let ((position (position-if #'yaml-line-break-p text)))
     (if (null position)
-        (string *format-edit-line-feed-character*)
+        (string +format-edit-line-feed-character+)
         (if (%format-edit-crlf-at-p text position)
             *format-edit-crlf*
             (string (char text position))))))

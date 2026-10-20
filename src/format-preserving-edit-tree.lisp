@@ -145,7 +145,7 @@
     (let* ((start (format-edit-node-start node))
            (line-start (%format-edit-line-start text start))
            (prefix (subseq text line-start start))
-           (dash (position *format-edit-sequence-indicator-character*
+           (dash (position +format-edit-sequence-indicator-character+
                            prefix :from-end t)))
       (and dash
            (every #'yaml-whitespace-p (subseq prefix (1+ dash)))))))
