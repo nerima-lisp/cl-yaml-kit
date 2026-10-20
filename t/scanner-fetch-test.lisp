@@ -1,74 +1,102 @@
 (in-package #:cl-yaml-kit/test)
 
-;; The expected token lists are quoted: this SBCL build miscompiles a literal
-;; list that appears directly as a function argument, and "~%" is how a line
-;; break gets into a string because the reader here does not expand "\n".
-(defparameter *scanner-fetch-cases*
-  (list
-    (list "block sequence" "- a"
-          '(:stream-start :block-sequence-start :block-entry :scalar :block-end :stream-end))
-    (list "nested block sequence" "- - a"
-          '(:stream-start :block-sequence-start :block-entry :block-sequence-start
-            :block-entry :scalar :block-end :block-end :stream-end))
-    (list "simple mapping" "a: b"
-          '(:stream-start :block-mapping-start :key :scalar :value :scalar :block-end :stream-end))
-    ;; "? a : b" opens a block mapping for the key "a", because a compact mapping
-    ;; rolls its own indentation, so the outer mapping only supplies a KEY.
-    (list "complex mapping key" "? a : b"
-          '(:stream-start :block-mapping-start :key :block-mapping-start :key :scalar
-            :value :scalar :block-end :block-end :stream-end))
-    (list "flow sequence" "[a, b]"
-          '(:stream-start :flow-sequence-start :scalar :flow-entry :scalar :flow-sequence-end :stream-end))
-    (list "flow mapping" "{a: b}"
-          '(:stream-start :flow-mapping-start :key :scalar :value :scalar :flow-mapping-end :stream-end))
-    (list "flow sequence pair" "[a: b]"
-          '(:stream-start :flow-sequence-start :key :scalar :value :scalar :flow-sequence-end :stream-end))
-    (list "anchor" "&x a" '(:stream-start :anchor :scalar :stream-end))
-    (list "alias" "*x" '(:stream-start :alias :stream-end))
-    (list "tag" "!t a" '(:stream-start :tag :scalar :stream-end))
-    (list "literal scalar" (format nil "|~%a~%") '(:stream-start :scalar :stream-end))
-    (list "folded scalar" (format nil ">~%a~%") '(:stream-start :scalar :stream-end))
-    (list "single quoted scalar" "'a'" '(:stream-start :scalar :stream-end))
-    (list "double quoted scalar" "\"a\"" '(:stream-start :scalar :stream-end))
-    ;; The "..." sits in column 6, so libyaml scans it as plain scalar content
-    ;; (scanner.c requires column zero for a document end) and the scalar is
-    ;; "a ...".  Tokenising it as a document end once stalled the scanner.
-    (list "document indicators" "--- a ..." '(:stream-start :document-start :scalar :stream-end))
-    (list "document end in flow context" (format nil "[~%...~%]")
-          '(:stream-start :flow-sequence-start :document-end :flow-sequence-end :stream-end))
-    (list "indented document-looking plain scalar in flow context" (format nil "[~%  ...~%]")
-          '(:stream-start :flow-sequence-start :scalar :flow-sequence-end :stream-end))))
+(cl-weave:it-each
+    ((block-sequence "- a"
+       (:stream-start :block-sequence-start :block-entry :scalar :block-end :stream-end))
+     (nested-block-sequence "- - a"
+       (:stream-start :block-sequence-start :block-entry :block-sequence-start
+        :block-entry :scalar :block-end :block-end :stream-end))
+     (simple-mapping "a: b"
+       (:stream-start :block-mapping-start :key :scalar :value :scalar :block-end :stream-end))
+     ;; A compact mapping introduces its own block mapping beneath an explicit key.
+     (complex-mapping-key "? a : b"
+       (:stream-start :block-mapping-start :key :block-mapping-start :key :scalar
+        :value :scalar :block-end :block-end :stream-end))
+     (flow-sequence "[a, b]"
+       (:stream-start :flow-sequence-start :scalar :flow-entry :scalar
+        :flow-sequence-end :stream-end))
+     (flow-mapping "{a: b}"
+       (:stream-start :flow-mapping-start :key :scalar :value :scalar
+        :flow-mapping-end :stream-end))
+     (flow-sequence-pair "[a: b]"
+       (:stream-start :flow-sequence-start :key :scalar :value :scalar
+        :flow-sequence-end :stream-end))
+     (anchor "&x a" (:stream-start :anchor :scalar :stream-end))
+     (alias "*x" (:stream-start :alias :stream-end))
+     (tag "!t a" (:stream-start :tag :scalar :stream-end))
+     (literal-scalar #.(format nil "|~%a~%") (:stream-start :scalar :stream-end))
+     (folded-scalar #.(format nil ">~%a~%") (:stream-start :scalar :stream-end))
+     (single-quoted-scalar "'a'" (:stream-start :scalar :stream-end))
+     (double-quoted-scalar "\"a\"" (:stream-start :scalar :stream-end))
+     ;; The `...` after scalar text on this line is not a document-end marker.
+     (document-indicators "--- a ..." (:stream-start :document-start :scalar :stream-end))
+     (document-end-in-flow-context #.(format nil "[~%...~%]")
+       (:stream-start :flow-sequence-start :document-end :flow-sequence-end :stream-end))
+     (indented-document-looking-scalar-in-flow-context #.(format nil "[~%  ...~%]")
+       (:stream-start :flow-sequence-start :scalar :flow-sequence-end :stream-end)))
+  "scans ~S into the expected token kinds"
+  (name text expected)
+  (declare (ignore name))
+  (expect (scanner-token-kinds text) :to-equal expected))
 
-(defmacro scanner-fetch-cases (table)
-  `(dolist (case ,table)
-     (it (first case)
-       (let ((scanner (yaml-kit::make-scanner (scanner-source (second case))))
-             (kinds nil))
-         (loop for token = (yaml-kit::scanner-next-token scanner)
-               while token
-               do (push (yaml-kit:token-kind token) kinds))
-         (expect (nreverse kinds) :to-equal (third case))))))
+(cl-weave:it-each
+    ((block-entry-after-value "a: -")
+     (block-key-after-value "a: ?")
+     (block-value-after-value "a: :"))
+  "signals a YAML parse error when scanning ~S"
+  (name text)
+  (declare (ignore name))
+  (expect (nth-value 1
+                   (ignore-errors (scanner-token-kinds text)))
+        :to-be-type-of 'yaml-kit:yaml-parse-error))
 
-(describe "scanner fetch"
-  (scanner-fetch-cases *scanner-fetch-cases*))
+(defun scanner-token-offsets (text)
+  (let ((scanner (yaml-kit::make-scanner (scanner-source text))))
+    (loop for token = (yaml-kit::%scanner-next-token scanner)
+          while token
+          collect (list (cl-parser-kit:span-start (yaml-kit:token-start-span token))
+                        (cl-parser-kit:span-end (yaml-kit:token-end-span token))))))
 
-(describe "scanner fetch errors"
-  ;; A value indicator leaves simple-key-allowed off, so a further block
-  ;; indicator cannot start the value node it announced.
-  (macrolet ((scanner-error-cases (&body cases)
-               `(progn
-                  ,@(mapcar (lambda (case)
-                              `(it ,(first case)
-                                 (expect (handler-case
-                                             (progn
-                                               (let ((scanner (yaml-kit::make-scanner
-                                                               (scanner-source ,(second case)))))
-                                                 (loop while (yaml-kit::scanner-next-token scanner)))
-                                               nil)
-                                           (yaml-kit:yaml-parse-error () t))
-                                         :to-be-truthy)))
-                            cases))))
-    (scanner-error-cases
-      ("rejects a block entry after a value indicator" "a: -")
-      ("rejects a block key after a value indicator" "a: ?")
-      ("rejects a block value after a value indicator" "a: :"))))
+(defun scanner-token-offsets-valid-p (offsets text-length)
+  (and (consp offsets)
+       (loop with previous-end = 0
+             for offset in offsets
+             for start = (first offset)
+             for end = (second offset)
+             always (and (integerp start)
+                         (integerp end)
+                         (<= previous-end start end text-length))
+             do (setf previous-end end))
+       (= (second (car (last offsets))) text-length)))
+
+(defun scanner-token-outcome (text)
+  (handler-case
+      (cons :tokens (scanner-token-offsets text))
+    (yaml-kit:yaml-parse-error (condition)
+      (cons :parse-error condition))))
+
+(cl-weave:it-property
+ "preserves generated plain scalar values and endpoint offsets"
+ ((text (cl-weave:gen-string :min-length 1 :max-length 32
+                             :alphabet "abcXYZ012")))
+ (let* ((scanner (yaml-kit::make-scanner (scanner-source text)))
+        (scalar (loop for token = (yaml-kit::%scanner-next-token scanner)
+                      while token
+                      when (eq (yaml-kit:token-kind token) :scalar)
+                        return token)))
+   (expect (list (yaml-kit:token-value scalar)
+                 (cl-parser-kit:span-start (yaml-kit:token-start-span scalar))
+                 (cl-parser-kit:span-end (yaml-kit:token-end-span scalar)))
+           :to-equal (list text 0 (length text)))))
+
+(cl-weave:it-fuzz "classifies generated scanner inputs and preserves token progress"
+  ((text (cl-weave:gen-string :min-length 0 :max-length 64
+                              :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))
+  (:trials 100 :timeout-per-trial 5)
+  (let ((outcome (scanner-token-outcome text)))
+    (ecase (car outcome)
+      (:tokens
+       (expect (scanner-token-offsets-valid-p (cdr outcome) (length text))
+               :to-be-truthy))
+      (:parse-error
+       (expect (cdr outcome) :to-be-type-of 'yaml-kit:yaml-parse-error)))))

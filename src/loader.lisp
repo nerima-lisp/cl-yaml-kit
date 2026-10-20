@@ -47,7 +47,7 @@ text, but exclude the line break."
          (spans nil))
     (let ((*scanner-comment-sink* (lambda (span) (push span spans)))
           (scanner (make-scanner text)))
-      (loop while (scanner-next-token scanner)
+      (loop while (%scanner-next-token scanner)
             do (recycle-scanner-token scanner)))
     (nreverse spans)))
 

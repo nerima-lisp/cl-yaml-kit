@@ -12,8 +12,6 @@
   (unless (scanner-token-available s) (fetch-more-tokens s))
   (when (scanner-queue-nonempty-p s)
     (aref (scanner-tokens s) (scanner-tokens-head s))))
-(defun scanner-peek-token (s) (%scanner-peek-token s))
-
 (defun %scanner-next-token (s)
   (let ((token (%scanner-peek-token s)))
     (when token
@@ -35,8 +33,6 @@
           (setf (fill-pointer tokens) remaining
                 (scanner-tokens-head s) 0)))
       token)))
-(defun scanner-next-token (s) (%scanner-next-token s))
-
 (defun scanner-token-limit (s)
   "Upper bound on tokens this scanner may produce for its input.
 Block collections emit :block-end and inserted :key tokens that consume no

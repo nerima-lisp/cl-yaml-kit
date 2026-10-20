@@ -1,0 +1,90 @@
+(in-package #:cl-yaml-kit/test)
+
+(defparameter *invalid-scanner-state-slot-value* -1)
+
+(it "reuses a recycled token for the next scanner token"
+  (let* ((scanner (yaml-kit::make-scanner (scanner-source "payload")))
+         (seeded-span (test-point-span 9 8 7))
+         (recycled (yaml-kit:make-token :tag seeded-span seeded-span
+                                        :handle "!e!" :suffix "old")))
+    (setf (yaml-kit::scanner-token-pool scanner) (list recycled))
+    (let ((stream-start (yaml-kit::%scanner-next-token scanner)))
+      (expect (list (eq stream-start recycled)
+                    (yaml-kit:token-kind stream-start)
+                    (yaml-kit:token-value stream-start)
+                    (yaml-kit:token-handle stream-start)
+                    (yaml-kit:token-suffix stream-start)
+                    (yaml-kit:token-style stream-start)
+                    (yaml-kit:token-major stream-start)
+                    (yaml-kit:token-minor stream-start)
+                    (list (cl-parser-kit:span-start-line (yaml-kit:token-start-span stream-start))
+                          (cl-parser-kit:span-start-column (yaml-kit:token-start-span stream-start))
+                          (cl-parser-kit:span-start (yaml-kit:token-start-span stream-start)))
+                    (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span stream-start))
+                          (cl-parser-kit:span-start-column (yaml-kit:token-end-span stream-start))
+                          (cl-parser-kit:span-start (yaml-kit:token-end-span stream-start))))
+              :to-equal (quote (t :stream-start nil nil nil nil nil nil
+                                  (1 1 0) (1 1 0))))
+      (yaml-kit::recycle-scanner-token scanner)
+      (expect (eq (first (yaml-kit::scanner-token-pool scanner)) stream-start)
+              :to-be-truthy)
+      (let ((scalar (yaml-kit::%scanner-next-token scanner)))
+        (expect (list (eq scalar recycled)
+                      (yaml-kit:token-kind scalar)
+                      (yaml-kit:token-value scalar)
+                      (yaml-kit:token-handle scalar)
+                      (yaml-kit:token-suffix scalar)
+                      (yaml-kit:token-style scalar)
+                      (yaml-kit:token-major scalar)
+                      (yaml-kit:token-minor scalar)
+                      (list (cl-parser-kit:span-start-line (yaml-kit:token-start-span scalar))
+                            (cl-parser-kit:span-start-column (yaml-kit:token-start-span scalar))
+                            (cl-parser-kit:span-start (yaml-kit:token-start-span scalar)))
+                      (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span scalar))
+                            (cl-parser-kit:span-start-column (yaml-kit:token-end-span scalar))
+                            (cl-parser-kit:span-start (yaml-kit:token-end-span scalar)))
+                      (yaml-kit::scanner-previous-token-kind scanner))
+                :to-equal (quote (t :scalar "payload" nil nil :plain nil nil
+                                  (1 1 0) (1 8 7) :scalar)))))))
+
+(it "rejects invalid scanner state slot values"
+  (let ((scanner (yaml-kit::make-scanner (scanner-source ""))))
+    (expect (nth-value 1
+                       (ignore-errors
+                         (setf (yaml-kit::scanner-recyclable-token scanner)
+                               *invalid-scanner-state-slot-value*)))
+            :to-be-type-of 'type-error)
+    (expect (nth-value 1
+                       (ignore-errors
+                         (setf (yaml-kit::scanner-previous-token-kind scanner)
+                               *invalid-scanner-state-slot-value*)))
+            :to-be-type-of 'type-error)))
+
+(it "preserves a long token sequence across queue compaction"
+  (let* ((values (loop for index below 40 collect (format nil "item-~D" index)))
+         (scanner (yaml-kit::make-scanner
+                   (scanner-source (format nil "[~{~A~^,~}]" values))))
+         (kinds nil)
+         (scalars nil)
+         (previous-head 0)
+         (compacted-p nil))
+    (loop for token = (yaml-kit::%scanner-next-token scanner)
+          while token
+          do (let ((head (yaml-kit::scanner-tokens-head scanner)))
+               (when (< head previous-head)
+                 (setf compacted-p t))
+               (setf previous-head head))
+             (push (yaml-kit:token-kind token) kinds)
+             (when (eq (yaml-kit:token-kind token) :scalar)
+               (push (yaml-kit:token-value token) scalars)))
+    (expect (list (> (length kinds) 64) compacted-p)
+            :to-equal (quote (t t)))
+    (expect (nreverse kinds)
+            :to-equal
+            (append (quote (:stream-start :flow-sequence-start))
+                    (loop for index below (length values)
+                          append (if (< index (1- (length values)))
+                                     (quote (:scalar :flow-entry))
+                                     (quote (:scalar))))
+                    (quote (:flow-sequence-end :stream-end))))
+    (expect (nreverse scalars) :to-equal values)))

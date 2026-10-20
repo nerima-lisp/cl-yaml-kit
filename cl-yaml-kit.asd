@@ -86,6 +86,7 @@
                (:file "conditions-test")
                (:file "continuation-entry-test")
                (:file "scanner-test")
+               (:file "scanner-queue-test")
                (:file "scanner-boundary-test")
                (:file "scanner-directives-test")
                (:file "scanner-block-scalars-test")

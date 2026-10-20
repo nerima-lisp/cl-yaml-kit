@@ -22,12 +22,12 @@
 (defparameter *targets*
   '((:reader "src/char-classes.lisp" sc-alpha-p "scanner character classes")
     (:reader "src/scanner-navigation.lisp" stale-simple-keys "scanner token errors")
-    (:reader "src/scanner-navigation.lisp" save-simple-key "scanner fetch")
+    (:reader "src/scanner-navigation.lisp" save-simple-key "scanner token errors")
     (:reader "src/scanner-navigation.lisp" remove-simple-key "scanner token errors")
     (:reader "src/scanner-block-scalars.lisp" scan-block-scalar-breaks
      "loader block scalar regressions")
     (:reader "src/scanner-block-scalars.lisp" scan-block-scalar "block scalar")
-    (:reader "src/scanner-flow-scalars.lisp" scan-flow-scalar "flow scalar scanner")
+    (:reader "src/scanner-flow-scalars.lisp" scan-flow-scalar "flow scalar case")
     (:reader "src/scanner-plain-scalars.lisp" scan-plain-scalar "scanner")
     (:reader "src/parser-nodes.lisp" parser-node "parser")
     (:reader "src/parser-nodes.lisp" parser-node-content "parser")
