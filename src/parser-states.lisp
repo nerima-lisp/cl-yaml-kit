@@ -4,7 +4,7 @@
             (:constructor make-parser%)
             (:copier nil)
             (:predicate nil))
-           scanner state states handler directives version depth max-depth max-scalar-length)
+  scanner state states handler directives version depth max-depth max-scalar-length)
 
 (defmacro define-parser-state (name (parser &rest arguments) &body body)
   `(defun ,name (,parser ,@arguments)

@@ -90,8 +90,8 @@
 
 (it "PARSER-EMPTY-ANCHOR-SCALAR-PRESERVES-PROPERTIES"
   (expect (parser-event-signature (nth 2 (yaml-kit:parse-events "&a")))
-            :to-equal
-            '(:scalar "" "a" nil t nil)))
+          :to-equal
+          '(:scalar "" "a" nil t nil)))
 
 (it "PARSER-FLOW-NODE-EXPECTED-CONTENT"
   (expect (lambda () (yaml-kit:parse-events "[-]"))
@@ -103,10 +103,34 @@
                           (yaml-kit:yaml-kit-error-diagnostic condition)))))))
 
 (cl-weave:it-each
-    (("flow sequence empty mapping value" "[a:]")
-     ("flow sequence missing value indicator" "[? a]")
-     ("flow sequence empty mapping key" "[?]"))
-  "accepts flow sequence case ~S"
-  (name input)
-  (declare (ignore name))
-  (expect (yaml-kit:parse-events input) :to-be-truthy))
+    (("[a:]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT" "MAPPING-END-EVENT"
+       "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT" "STREAM-END-EVENT"))
+     ("[? a]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT" "MAPPING-END-EVENT"
+       "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT" "STREAM-END-EVENT"))
+     ("[a, ? b]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "SCALAR-EVENT" "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT"
+       "MAPPING-END-EVENT" "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT"
+       "STREAM-END-EVENT"))
+     ("[a, ? b: c]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "SCALAR-EVENT" "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT"
+       "MAPPING-END-EVENT" "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT"
+       "STREAM-END-EVENT"))
+     ("[?]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT" "MAPPING-END-EVENT"
+       "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT" "STREAM-END-EVENT"))
+     ("[:]"
+      ("STREAM-START-EVENT" "DOCUMENT-START-EVENT" "SEQUENCE-START-EVENT"
+       "MAPPING-START-EVENT" "SCALAR-EVENT" "SCALAR-EVENT" "MAPPING-END-EVENT"
+       "SEQUENCE-END-EVENT" "DOCUMENT-END-EVENT" "STREAM-END-EVENT")))
+  "emits exact flow pair event types for ~S"
+  (input expected)
+  (expect (mapcar (lambda (event) (symbol-name (type-of event)))
+                  (yaml-kit:parse-events input))
+          :to-equal expected))
