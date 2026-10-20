@@ -26,6 +26,15 @@
        (loop for i below (length prefix)
              always (= (aref octets i) (aref prefix i)))))
 
+(defun %format-edit-byte-pattern-p (octets pattern)
+  (and (>= (length octets) (length pattern))
+       (loop for index below (length pattern)
+             for expected = (aref pattern index)
+             for actual = (aref octets index)
+             always (if (eq expected :nonzero)
+                        (plusp actual)
+                        (= expected actual)))))
+
 (defun %format-edit-source-encoding (octets)
   (let ((bom-entry
           (find-if (lambda (entry)
@@ -33,22 +42,14 @@
                    *format-edit-byte-order-marks*)))
     (if bom-entry
         (values (car bom-entry) (length (cdr bom-entry)))
-        (cond
-          ((and (>= (length octets) 4)
-                (zerop (aref octets 0)) (zerop (aref octets 1))
-                (zerop (aref octets 2)) (plusp (aref octets 3)))
-           (values :utf-32be 0))
-          ((and (>= (length octets) 4)
-                (plusp (aref octets 0)) (zerop (aref octets 1))
-                (zerop (aref octets 2)) (zerop (aref octets 3)))
-           (values :utf-32le 0))
-          ((and (>= (length octets) 2)
-                (zerop (aref octets 0)) (plusp (aref octets 1)))
-           (values :utf-16be 0))
-          ((and (>= (length octets) 2)
-                (plusp (aref octets 0)) (zerop (aref octets 1)))
-           (values :utf-16le 0))
-          (t (values :utf-8 0))))))
+        (let ((encoding-entry
+                (find-if (lambda (entry)
+                           (%format-edit-byte-pattern-p octets (cdr entry)))
+                         *format-edit-no-bom-byte-patterns*)))
+          (values (if encoding-entry
+                      (car encoding-entry)
+                      :utf-8)
+                  0)))))
 
 (defun %format-edit-source-text (source path document operation)
   (cond
