@@ -146,3 +146,48 @@
                       ((string yaml-kit::%represent-scalar))))) )
    (expect (first expansion) :to-equal 'defun)
    (expect (second expansion) :to-equal 'test-dispatch)))
+(cl-weave:it
+ "returns only the primary value from emit/k"
+ (let ((calls 0))
+   (expect
+    (multiple-value-list
+     (yaml-kit:emit/k
+      "value"
+      (lambda (value)
+        (declare (ignore value))
+        (incf calls)
+        (values :first :second))))
+    :to-equal (list :first))
+   (expect calls :to-equal 1)))
+(cl-weave:it
+ "returns only the primary value from emit-events/k"
+ (let ((calls 0)
+       (events (list (yaml-kit:make-stream-start-event)
+                     (yaml-kit:make-document-start-event)
+                     (yaml-kit:make-scalar-event :value "value")
+                     (yaml-kit:make-document-end-event)
+                     (yaml-kit:make-stream-end-event))))
+   (expect
+    (multiple-value-list
+     (yaml-kit:emit-events/k
+      events
+      (lambda (value)
+        (declare (ignore value))
+        (incf calls)
+        (values :first :second))))
+    :to-equal (list :first))
+   (expect calls :to-equal 1)))
+(cl-weave:it
+ "returns only the primary value from write-yaml/k"
+ (let ((calls 0)
+       (stream (make-string-output-stream)))
+   (expect
+    (multiple-value-list
+     (yaml-kit:write-yaml/k
+      "value" stream
+      (lambda (value)
+        (declare (ignore value))
+        (incf calls)
+        (values :first :second))))
+    :to-equal (list :first))
+   (expect calls :to-equal 1)))
