@@ -48,7 +48,7 @@
          (node-name accessor key)
          (let ((value (,constructor ,@arguments)))
            (expect (contract-value-equal-p
-                    (,accessor value)
+                    (funcall accessor value)
                     (getf (list ,@arguments) key))
                    :to-be-truthy))))))
 
