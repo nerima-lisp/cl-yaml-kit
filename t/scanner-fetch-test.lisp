@@ -38,6 +38,21 @@
   (declare (ignore name))
   (expect (scanner-token-kinds text) :to-equal expected))
 
+(it "scans an adjacent flow-map value marker after a JSON-like key"
+  (expect
+    (scanner-token-kinds "{\"key\":value}")
+    :to-equal
+    '(:stream-start :flow-mapping-start :key :scalar :value :scalar
+      :flow-mapping-end :stream-end)))
+(it "keeps a non-column-zero document end marker in plain scalar content"
+  (let ((scanner (yaml-kit::make-scanner (scanner-source "--- a ...")))
+        (values nil))
+    (loop for token = (yaml-kit::%scanner-next-token scanner)
+          while token
+          when (eq (yaml-kit:token-kind token) :scalar)
+            do (push (yaml-kit:token-value token) values))
+    (expect (nreverse values) :to-equal '("a ..."))))
+
 (cl-weave:it-each
     ((block-entry-after-value "a: -")
      (block-key-after-value "a: ?")
