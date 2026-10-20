@@ -60,8 +60,7 @@
 
 (defun conformance-stage-summary (cases stage exclusions)
   (let ((summary (list :stage stage :total 0 :passed 0 :failed 0 :skipped 0
-                       :excluded 0 :drift 0 :failure-ids nil :drift-ids nil
-                       :failure-causes nil :failure-details nil)))
+                       :excluded 0 :drift 0 :failure-ids nil :drift-ids nil)))
     (dolist (case cases summary)
       (multiple-value-bind (applicable passedp condition)
           (conformance-stage-result case stage)
@@ -82,18 +81,8 @@
                          (push (conformance-case-id case) (getf summary :drift-ids)))
                        (progn
                          (incf (getf summary :failed))
-                         (push (conformance-case-id case) (getf summary :failure-ids))
-                         (push (list (conformance-case-id case) condition)
-                               (getf summary :failure-causes))
-                         (push (list :stage stage :id (conformance-case-id case)
-                                     :detail (princ-to-string condition))
-                               (getf summary :failure-details))))))
+                         (push (conformance-case-id case) (getf summary :failure-ids))))))
                 (passedp (incf (getf summary :passed)))
                 (t
                  (incf (getf summary :failed))
-                 (push (conformance-case-id case) (getf summary :failure-ids))
-                 (push (list (conformance-case-id case) condition)
-                       (getf summary :failure-causes))
-                 (push (list :stage stage :id (conformance-case-id case)
-                             :detail (princ-to-string condition))
-                       (getf summary :failure-details))))))))))
+                 (push (conformance-case-id case) (getf summary :failure-ids))))))))))
