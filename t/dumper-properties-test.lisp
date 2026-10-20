@@ -19,7 +19,8 @@
          (cl-weave:gen-string :min-length 1 :max-length 5
                               :alphabet "abcXYZ")
          self)
-        :min-length 0 :max-length 3))))))
+        :min-length 0 :max-length 3))))
+   :max-depth 3))
 
 (defun dumper-roundtrip-canonical-value (value)
   (cond
@@ -56,16 +57,12 @@
          :to-equal
          (dumper-roundtrip-canonical-value value)))
 
-(cl-weave:it-property
- "block scalar and flow collection values round-trip"
- ((text (cl-weave:gen-one-of
-         (cl-weave:gen-member (list (format nil "value: |~%  unicode あ~%")))
-         (cl-weave:gen-member (list (format nil "{a: [1, 2], b: あ}~%"))))))
- (let ((value (yaml-kit:parse text)))
-   (expect (dumper-roundtrip-canonical-value
-            (yaml-kit:parse (yaml-kit:emit value)))
-           :to-equal
-           (dumper-roundtrip-canonical-value value))))
+(cl-weave:it-each
+ ((#.(format nil "value: |~%  unicode あ~%"))
+  (#.(format nil "{a: [1, 2], b: あ}~%")))
+ "round-trips values parsed from multiline and flow-style YAML"
+ (text)
+ (expect (yaml-kit:parse text) :to-round-trip t))
 
 (cl-weave:it
  "round-trips repeated shared structures"
@@ -77,10 +74,9 @@
            (dumper-roundtrip-canonical-value value))))
 
 (cl-weave:it
- "round-trips NIL as the empty sequence convention"
- (let ((round-tripped (yaml-kit:parse (yaml-kit:emit nil))))
-   (expect (vectorp round-tripped) :to-be-truthy)
-   (expect (= (length round-tripped) 0) :to-be-truthy)
-   (expect (dumper-roundtrip-canonical-value round-tripped)
-           :to-equal
-           '(:array nil))))
+ "emits NIL as an empty sequence"
+ (expect nil :to-emit-as #.(format nil "[]~%"))
+ (expect (dumper-roundtrip-canonical-value
+          (yaml-kit:parse (yaml-kit:emit nil)))
+         :to-equal
+         '(:array nil)))

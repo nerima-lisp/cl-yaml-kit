@@ -1,4 +1,4 @@
-;;;; t/dumper-test.lisp
+;;;; t/dumper-representer-test.lisp
 (in-package #:cl-yaml-kit/test)
 
 (defun dump-to-string-with-newline (value)
@@ -35,23 +35,22 @@
     (expect (dump-to-string-with-newline value) :to-equal expected)))
 
 (cl-weave:it-each
- (("true" "'true'")
-  ("1.5" "'1.5'")
-  ("0x1F" "'0x1F'")
-  ("~" "'~'")
-  ("" "''")
-  (": " "': '")
-  ("- a" "'- a'")
-  ("#x" "'#x'")
-  (" lead" "' lead'")
-  ("trail " "'trail '")
-  (#.(format nil "a~%b") "\"a\\nb\"")
-  (#.(format nil " folded~%") "\" folded\\n\"")
+    (("true" "'true'")
+     ("1.5" "'1.5'")
+     ("0x1F" "'0x1F'")
+     ("~" "'~'")
+     ("" "''")
+     (": " "': '")
+     ("- a" "'- a'")
+     ("#x" "'#x'")
+     (" lead" "' lead'")
+     ("trail " "'trail '")
+     (#.(format nil "a~%b") "\"a\\nb\"")
+     (#.(format nil " folded~%") "\" folded\\n\"")
      (#.(string (code-char 1)) "\"\\x01\""))
-  "emits scalar boundary ~S as ~S"
+  "emits boundary strings through the representer ~S as ~S"
   (value expected)
-  (expect (dump-to-string-with-newline value)
-          :to-equal (format nil "~A~%" expected)))
+  (expect value :to-emit-as (format nil "~A~%" expected)))
 
 (cl-weave:it-each
     ((empty-string "")
@@ -62,7 +61,7 @@
   "reads back emitted scalar boundary value ~S"
   (name value)
   (declare (ignore name))
-  (expect (yaml-kit:parse (yaml-kit:emit value)) :to-equal value))
+  (expect value :to-round-trip t))
 
 (defun emit-events-to-string (events)
   (yaml-kit:emit-events events))
@@ -115,7 +114,7 @@
   "dumps representer dispatch cases ~S"
   (name value expected)
   (declare (ignore name))
-  (expect (yaml-kit:emit value) :to-equal expected))
+  (expect value :to-emit-as expected))
 
 (cl-weave:it
  "dumps a hash table and preserves an explicit document marker"
@@ -126,8 +125,8 @@
 
 (cl-weave:it
  "dumps an empty mapping"
- (expect (yaml-kit:emit (yaml-kit:make-yaml-mapping nil))
-         :to-equal #.(format nil "{}~%")))
+ (expect (yaml-kit:make-yaml-mapping nil)
+         :to-emit-as #.(format nil "{}~%")))
 
 (cl-weave:it
  "supports event lists and write-yaml"
@@ -136,22 +135,18 @@
                      (yaml-kit:make-scalar-event :value "ok")
                      (yaml-kit:make-document-end-event)
                      (yaml-kit:make-stream-end-event))))
-   (expect (yaml-kit:emit-events events)
-           :to-equal #.(format nil "ok~%"))
+   (expect (yaml-kit:emit-events events) :to-equal #.(format nil "ok~%"))
    (with-output-to-string (stream)
      (expect (yaml-kit:write-yaml 7 stream) :to-equal 7)
      (expect (get-output-stream-string stream) :to-equal #.(format nil "7~%")))))
 
 (cl-weave:it-each
-    ((plain-analysis "plain")
-     (flow-analysis "a,b")
-     (line-break-analysis #.(format nil "a~%b"))
-     (control-analysis #.(string (code-char 1)))
-     (unicode-analysis #.(string (code-char #x2028))))
-  "covers scalar analysis and escaping boundaries ~S"
-  (name value)
+    ((plain-analysis "plain" nil :plain)
+     (flow-analysis "a,b" t :single-quoted)
+     (line-break-analysis #.(format nil "a~%b") nil :plain)
+     (control-analysis #.(string (code-char 1)) nil :double-quoted)
+     (unicode-analysis #.(string (code-char #x2028)) nil :plain))
+  "selects styles without a string tag for plain-request values ~S"
+  (name value flow expected-style)
   (declare (ignore name))
-  (expect (not (null (yaml-kit::%scalar-analysis value))) :to-equal t)
-  (expect (not (null (member (yaml-kit::%scalar-style value :plain nil)
-                             '(:plain :single-quoted :double-quoted))))
-          :to-equal t))
+  (expect (yaml-kit::%scalar-style value :plain flow) :to-equal expected-style))
