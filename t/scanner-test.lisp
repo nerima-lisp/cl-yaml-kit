@@ -129,7 +129,6 @@
           :flow-mapping-end :stream-end))
        (explicit-key "? a"
          (:stream-start :block-mapping-start :key :scalar :block-end :stream-end))
-       ;; A line break inside a plain scalar folds into the same scalar token.
        (plain-scalar-folds-a-line-break #.(format nil "a~%b")
          (:stream-start :scalar :stream-end))
        (simple-key-at-the-1024-character-limit

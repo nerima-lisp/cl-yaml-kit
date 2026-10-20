@@ -2,50 +2,115 @@
 
 (defparameter *invalid-scanner-state-slot-value* -1)
 
-(it "reuses a recycled token for the next scanner token"
-  (let* ((scanner (yaml-kit::make-scanner (scanner-source "payload")))
-         (seeded-span (test-point-span 9 8 7))
-         (recycled (yaml-kit:make-token :tag seeded-span seeded-span
-                                        :handle "!e!" :suffix "old")))
-    (setf (yaml-kit::scanner-token-pool scanner) (list recycled))
-    (let ((stream-start (yaml-kit::%scanner-next-token scanner)))
-      (expect (list (eq stream-start recycled)
-                    (yaml-kit:token-kind stream-start)
-                    (yaml-kit:token-value stream-start)
-                    (yaml-kit:token-handle stream-start)
-                    (yaml-kit:token-suffix stream-start)
-                    (yaml-kit:token-style stream-start)
-                    (yaml-kit:token-major stream-start)
-                    (yaml-kit:token-minor stream-start)
-                    (list (cl-parser-kit:span-start-line (yaml-kit:token-start-span stream-start))
-                          (cl-parser-kit:span-start-column (yaml-kit:token-start-span stream-start))
-                          (cl-parser-kit:span-start (yaml-kit:token-start-span stream-start)))
-                    (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span stream-start))
-                          (cl-parser-kit:span-start-column (yaml-kit:token-end-span stream-start))
-                          (cl-parser-kit:span-start (yaml-kit:token-end-span stream-start))))
-              :to-equal '(t :stream-start nil nil nil nil nil nil
-                                  (1 1 0) (1 1 0)))
+(progn
+  (defun scanner-with-recycled-token (text)
+    (let* ((scanner (yaml-kit::make-scanner (scanner-source text)))
+           (seeded-span (test-point-span 9 8 7))
+           (recycled (yaml-kit:make-token :tag seeded-span seeded-span
+                                          :handle "!e!" :suffix "old")))
+      (setf (yaml-kit::scanner-token-pool scanner) (list recycled))
+      (values scanner recycled)))
+
+  (defun scanner-recycled-stream-start ()
+    (multiple-value-bind (scanner recycled)
+        (scanner-with-recycled-token "payload")
+      (values scanner recycled (yaml-kit::%scanner-next-token scanner))))
+
+  (defun scanner-recycled-scalar ()
+    (multiple-value-bind (scanner recycled)
+        (scanner-with-recycled-token "payload")
+      (yaml-kit::%scanner-next-token scanner)
       (yaml-kit::recycle-scanner-token scanner)
-      (expect (eq (first (yaml-kit::scanner-token-pool scanner)) stream-start)
-              :to-be-truthy)
-      (let ((scalar (yaml-kit::%scanner-next-token scanner)))
-        (expect (list (eq scalar recycled)
-                      (yaml-kit:token-kind scalar)
-                      (yaml-kit:token-value scalar)
-                      (yaml-kit:token-handle scalar)
-                      (yaml-kit:token-suffix scalar)
-                      (yaml-kit:token-style scalar)
-                      (yaml-kit:token-major scalar)
-                      (yaml-kit:token-minor scalar)
-                      (list (cl-parser-kit:span-start-line (yaml-kit:token-start-span scalar))
-                            (cl-parser-kit:span-start-column (yaml-kit:token-start-span scalar))
-                            (cl-parser-kit:span-start (yaml-kit:token-start-span scalar)))
-                      (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span scalar))
-                            (cl-parser-kit:span-start-column (yaml-kit:token-end-span scalar))
-                            (cl-parser-kit:span-start (yaml-kit:token-end-span scalar)))
-                      (yaml-kit::scanner-previous-token-kind scanner))
-                :to-equal '(t :scalar "payload" nil nil :plain nil nil
-                                  (1 1 0) (1 8 7) :scalar))))))
+      (values scanner recycled (yaml-kit::%scanner-next-token scanner))))
+
+  (defun scanner-token-positions (token)
+    (list (list (cl-parser-kit:span-start-line (yaml-kit:token-start-span token))
+                (cl-parser-kit:span-start-column (yaml-kit:token-start-span token))
+                (cl-parser-kit:span-start (yaml-kit:token-start-span token)))
+          (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span token))
+                (cl-parser-kit:span-start-column (yaml-kit:token-end-span token))
+                (cl-parser-kit:span-start (yaml-kit:token-end-span token)))))
+
+  (it "uses the recycled object for the stream-start token"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-stream-start)
+      (declare (ignore scanner))
+      (expect (eq token recycled) :to-be-truthy)))
+
+  (it "sets the recycled token kind to stream-start"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-stream-start)
+      (declare (ignore scanner recycled))
+      (expect (yaml-kit:token-kind token) :to-be :stream-start)))
+
+  (it "clears recycled token fields for stream-start"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-stream-start)
+      (declare (ignore scanner recycled))
+      (expect (list (yaml-kit:token-value token)
+                    (yaml-kit:token-handle token)
+                    (yaml-kit:token-suffix token)
+                    (yaml-kit:token-style token)
+                    (yaml-kit:token-major token)
+                    (yaml-kit:token-minor token))
+              :to-equal (list nil nil nil nil nil nil))))
+
+  (it "resets recycled stream-start token spans"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-stream-start)
+      (declare (ignore scanner recycled))
+      (expect (scanner-token-positions token)
+              :to-equal (list (list 1 1 0) (list 1 1 0)))))
+
+  (it "returns a recycled token to the scanner pool"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-stream-start)
+      (declare (ignore recycled))
+      (yaml-kit::recycle-scanner-token scanner)
+      (expect (eq (first (yaml-kit::scanner-token-pool scanner)) token)
+              :to-be-truthy)))
+
+  (it "reuses a recycled stream-start token for the next scalar"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore scanner))
+      (expect (eq token recycled) :to-be-truthy)))
+
+  (it "sets the reused scalar token kind and value"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore scanner recycled))
+      (expect (list (yaml-kit:token-kind token) (yaml-kit:token-value token))
+              :to-equal (list :scalar "payload"))))
+
+  (it "clears tag metadata on a reused scalar token"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore scanner recycled))
+      (expect (list (yaml-kit:token-handle token)
+                    (yaml-kit:token-suffix token)
+                    (yaml-kit:token-major token)
+                    (yaml-kit:token-minor token))
+              :to-equal (list nil nil nil nil))))
+
+  (it "sets plain style on a reused scalar token"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore scanner recycled))
+      (expect (yaml-kit:token-style token) :to-be :plain)))
+
+  (it "sets spans on a reused scalar token"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore scanner recycled))
+      (expect (scanner-token-positions token)
+              :to-equal (list (list 1 1 0) (list 1 8 7)))))
+
+  (it "records the reused scalar as the previous scanner token kind"
+    (multiple-value-bind (scanner recycled token)
+        (scanner-recycled-scalar)
+      (declare (ignore recycled token))
+      (expect (yaml-kit::scanner-previous-token-kind scanner) :to-be :scalar))))
 
 (it "rejects invalid scanner state slot values"
   (let ((scanner (yaml-kit::make-scanner (scanner-source ""))))
