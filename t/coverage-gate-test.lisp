@@ -39,11 +39,9 @@
          (child-form
            (if form
                form
-               `(progn
-                  (uiop:chdir ,root)
-                  (load (merge-pathnames
+               `(load (merge-pathnames
                          (format nil "scripts/coverage-reproductions/~A" ,label)
-                         ,root)))))
+                         ,root))))
          (result
            (cl-weave:run-isolated
             child-form
@@ -246,7 +244,7 @@
 
   (it "rejects fake 50 percent expression and 10 percent branch coverage"
     (multiple-value-bind (output exit-code status)
-        (run-coverage-reproduction-process "fake-gate.lisp" :systems (list "cl-yaml-kit"))
+        (run-coverage-reproduction-process "fake-gate.lisp")
       (expect (list status exit-code) :to-equal (list :fail 1))
       (expect (every (lambda (fragment) (search fragment output))
                      (list "fake coverage: expression 50%, branch 10%"
