@@ -36,7 +36,6 @@
         (:scalar "unicode anchor" nil nil nil nil)))
      (anchor-accepts-non-flow-punctuation #.(format nil "&a! value~%")
        ((:anchor "a!" nil nil nil nil) (:scalar "value" nil nil nil nil)))
-     ;; ns-anchor-char excludes only c-flow-indicator, so ":" stays in the name.
      (anchor-keeps-trailing-colon #.(format nil "&a: value~%")
        ((:anchor "a:" nil nil nil nil) (:scalar "value" nil nil nil nil)))
      (tag-forms #.(format nil "! !!str !e!foo !<tag:yaml.org,2002:str>~%")

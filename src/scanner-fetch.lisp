@@ -49,14 +49,16 @@
   (%fetch-character-token s kind))
 
 (defun fetch-flow-entry (s)
-  ;; YAML 1.2.2 lists "," among the c-flow-indicator characters, so it can only
-  ;; separate entries inside a flow collection.
+  ;; YAML 1.2.2 treats "," as a flow indicator, so it separates entries only
+  ;; inside a flow collection.
   (unless (plusp (scanner-flow-level s))
     (sc-error s "while scanning for the next token" (sc-position s)
               "found character that cannot start any token"))
   (when (sc-check s #\# 1)
     (sc-error s "while scanning a flow collection" (sc-position s)
               "did not find expected separation space"))
+  ;; Reject an empty first flow-sequence entry when only whitespace separates
+  ;; '[' from ','.
   (when (plusp (scanner-flow-level s))
     (let ((i (1- (scanner-pos s))))
       (loop while (and (>= i 0)
@@ -75,8 +77,8 @@
       (sc-error s nil (sc-position s)
                 "block sequence entries are not allowed in this context"))
     (roll-indent s (scanner-column s) -1 :block-sequence-start (sc-position s)))
-  ;; YAML 1.2.2 leaves a '-' in flow context for the parser to diagnose,
-  ;; matching libyaml's scanner/parser boundary.
+  ;; YAML 1.2.2 classifies '-' as :block-entry here; flow parser states reject
+  ;; that token where a flow node is expected.
   (remove-simple-key s)
   (setf (scanner-simple-key-allowed s) t)
   (%fetch-character-token s :block-entry))

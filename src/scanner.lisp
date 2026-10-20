@@ -65,6 +65,8 @@ input, so the bound is a multiple of the input length rather than the length."
         (unless need-more
           (return (setf (scanner-token-available s) t)))
         (fetch-next-token s)
+        ;; A fetch that stops advancing would otherwise enqueue tokens forever.
+        ;; The input-relative limit makes that loop raise a resource-limit error.
         (let ((produced (fill-pointer (scanner-tokens s))))
           (when (> produced limit)
             (scanner-resource-error s "tokens" limit produced)))))))
@@ -102,11 +104,9 @@ input, so the bound is a multiple of the input length rather than the length."
               (and (plusp (scanner-flow-level s))
                    (yaml-flow-indicator-p next-character))))
      (fetch-key s))
-    ;; YAML 1.2.2 has two value indicators in flow context.
-    ;; c-ns-flow-map-separate-value needs separation after ":", and
-    ;; c-ns-flow-map-adjacent-value follows a c-flow-json-node whose closing
-    ;; indicator makes the ":" unambiguous. libyaml only tests flow_level
-    ;; against the next character, which rejects every adjacent JSON key.
+    ;; YAML 1.2.2 accepts a flow-map value marker after separation or adjacent
+    ;; to a JSON-like key whose closing indicator makes the colon unambiguous.
+    ;; libyaml only tests flow level, which rejects every adjacent JSON key.
     ((and (char= character +scanner-value-indicator+)
           (or (sc-blankz-p s 1)
               (and (plusp (scanner-flow-level s))

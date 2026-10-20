@@ -102,10 +102,9 @@
 (defun scan-anchor (s kind)
   (let ((start (sc-position s)) (b (make-scan-buffer)))
     (sc-skip s)
-    ;; YAML 1.2.2 defines ns-anchor-char as ns-char minus c-flow-indicator, and
-    ;; c-flow-indicator is only ",[]{}".  A ":" or "?" is an ordinary anchor
-    ;; character, which is what makes "&a: key" an anchor named "a:" rather than
-    ;; a mapping with an anchored key.
+    ;; Only flow indicators end an anchor name. A ":" or "?" stays in the name,
+    ;; so "&a: key" is an anchor named "a:" rather than a mapping with an
+    ;; anchored key.
     (loop while (and (sc-printable-p s)
                      (not (sc-bom-p s))
                      (not (sc-blankz-p s))

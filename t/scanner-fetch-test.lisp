@@ -28,7 +28,6 @@
      (folded-scalar #.(format nil ">~%a~%") (:stream-start :scalar :stream-end))
      (single-quoted-scalar "'a'" (:stream-start :scalar :stream-end))
      (double-quoted-scalar "\"a\"" (:stream-start :scalar :stream-end))
-     ;; The `...` after scalar text on this line is not a document-end marker.
      (document-indicators "--- a ..." (:stream-start :document-start :scalar :stream-end))
      (document-end-in-flow-context #.(format nil "[~%...~%]")
        (:stream-start :flow-sequence-start :document-end :flow-sequence-end :stream-end))
@@ -43,6 +42,8 @@
     ((block-entry-after-value "a: -")
      (block-key-after-value "a: ?")
      (block-value-after-value "a: :"))
+  ;; After a mapping value indicator, another block indicator cannot start the
+  ;; value node that the mapping announced.
   "signals a YAML parse error when scanning ~S"
   (name text)
   (declare (ignore name))

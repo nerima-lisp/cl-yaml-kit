@@ -11,6 +11,7 @@
 (defconstant +scanner-key-indicator+ #\?)
 (defconstant +scanner-value-indicator+ #\:)
 
+;; Keep existing list values on reload; a fresh list literal is not EQL to them.
 (defconstant +scanner-flow-block-entry-terminators+
   (if (boundp '+scanner-flow-block-entry-terminators+)
       (symbol-value '+scanner-flow-block-entry-terminators+)
