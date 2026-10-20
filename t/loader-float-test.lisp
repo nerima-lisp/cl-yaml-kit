@@ -12,6 +12,34 @@
    (cl-weave:gen-integer :min 0 :max 999999)
    (cl-weave:gen-integer :min -20 :max 20)))
 
+(progn
+  (defun call-with-loader-floating-point-traps (thunk)
+    (let ((modes (sb-int:get-floating-point-modes)))
+      (unwind-protect
+           (progn
+             (sb-int:set-floating-point-modes
+              :traps '(:invalid :overflow :divide-by-zero :underflow))
+             (funcall thunk))
+        (apply #'sb-int:set-floating-point-modes modes))))
+
+  (defun loader-float-kind (value)
+    (cond ((yaml-kit::%float-nan-p value) :nan)
+          ((yaml-kit::%float-infinity-p value)
+           (if (minusp value) :-inf :+inf))
+          (t :finite)))
+
+  (defun loader-float-kinds (values)
+    (mapcar #'loader-float-kind values))
+
+  (defun loader-float-mapping-values (value mapping-type)
+    (case mapping-type
+      (:hash-table (gethash "values" value))
+      (:alist (cdr (assoc "values" value :test #'string=)))
+      (:yaml-mapping
+       (cdr (assoc "values"
+                   (yaml-kit:yaml-mapping-entries value)
+                   :test #'string=))))))
+
 (cl-weave:it-property
  "parses decimal floats with one correctly rounded conversion"
  ((parts (loader-float-text-generator)))
@@ -36,56 +64,22 @@
     (expect (minusp (float-sign actual))
             :to-equal
             (minusp (float-sign oracle)))))
-(cl-weave:it
- "handles special floats with floating-point traps enabled"
- (let ((modes (sb-int:get-floating-point-modes)))
-   (unwind-protect
-        (progn
-          (sb-int:set-floating-point-modes
-           :traps '(:invalid :overflow :divide-by-zero :underflow))
-          (labels ((kind (value)
-                   (cond ((yaml-kit::%float-nan-p value) :nan)
-                         ((yaml-kit::%float-infinity-p value)
-                          (if (minusp value) :-inf :+inf))
-                         (t :finite)))
-                 (kinds (value)
-                   (mapcar #'kind value))
-                 (values-for (value mapping-type)
-                   (case mapping-type
-                     (:hash-table (gethash "values" value))
-                     (:alist (cdr (assoc "values" value :test #'string=)))
-                     (:yaml-mapping
-                      (cdr (assoc "values"
-                                  (yaml-kit:yaml-mapping-entries value)
-                                  :test #'string=))))))
-            (dolist (case '((".nan" :nan)
-                            (".NaN" :nan)
-                            (".inf" :+inf)
-                            ("-.inf" :-inf)))
-              (let* ((text (first case))
-                     (expected (second case))
-                     (value (yaml-kit:parse text)))
-                (expect (kind value) :to-equal expected)
-                (expect (kind (yaml-kit:parse (yaml-kit:emit value)))
-                        :to-equal expected)))
-            (let ((value (yaml-kit:parse "values: [.nan, .NaN, .inf, -.inf]"
-                                         :mapping-type :hash-table
-                                         :sequence-type :vector)))
-              (expect (kinds (coerce (values-for value :hash-table) 'list))
-                      :to-equal '(:nan :nan :+inf :-inf)))
-            (dolist (mapping-type '(:hash-table :alist :yaml-mapping))
-              (let ((value (yaml-kit:parse "values: [.nan, .NaN, .inf, -.inf]"
-                                           :mapping-type mapping-type
-                                           :sequence-type :list)))
-                (expect (kinds (values-for value mapping-type))
-                        :to-equal '(:nan :nan :+inf :-inf))
-                (expect (kinds (values-for
-                                (yaml-kit:parse (yaml-kit:emit value)
-                                                :mapping-type mapping-type
-                                                :sequence-type :list)
-                                mapping-type))
-                        :to-equal '(:nan :nan :+inf :-inf))))))
-     (apply #'sb-int:set-floating-point-modes modes))))
+(cl-weave:it-each
+    ((lowercase-nan ".nan" :nan)
+     (mixed-case-nan ".NaN" :nan)
+     (positive-infinity ".inf" :+inf)
+     (negative-infinity "-.inf" :-inf))
+  "handles special float scalar ~S with traps enabled"
+  (name text expected-kind)
+  (declare (ignore name))
+  (call-with-loader-floating-point-traps
+   (lambda ()
+     (let ((value (yaml-kit:parse text)))
+       (expect (loader-float-kind value) :to-equal expected-kind)
+       (expect (loader-float-kind (yaml-kit:parse (yaml-kit:emit value)))
+               :to-equal
+               expected-kind)))))
+
 (cl-weave:it-each
     ((positive-shortcut-overflow "1e401" :infinity nil)
      (negative-shortcut-overflow "-1e401" :infinity t)
@@ -103,3 +97,42 @@
                    (:zero (zerop value))))
             :to-be-truthy)
     (expect (minusp (float-sign value)) :to-equal negative)))
+
+(cl-weave:it
+ "preserves special float kinds in hash-table vectors with traps enabled"
+ (call-with-loader-floating-point-traps
+  (lambda ()
+    (let* ((value
+             (yaml-kit:parse "values: [.nan, .NaN, .inf, -.inf]"
+                             :mapping-type :hash-table
+                             :sequence-type :vector))
+           (parsed-values (loader-float-mapping-values value :hash-table)))
+      (expect (loader-float-kinds (coerce parsed-values 'list))
+              :to-equal
+              '(:nan :nan :+inf :-inf))))))
+
+(cl-weave:it-each
+    ((hash-table :hash-table)
+     (alist :alist)
+     (yaml-mapping :yaml-mapping))
+  "preserves special float kinds in ~S mappings with traps enabled"
+  (name mapping-type)
+  (declare (ignore name))
+  (call-with-loader-floating-point-traps
+   (lambda ()
+     (let* ((value
+              (yaml-kit:parse "values: [.nan, .NaN, .inf, -.inf]"
+                              :mapping-type mapping-type
+                              :sequence-type :list))
+            (round-trip
+              (yaml-kit:parse (yaml-kit:emit value)
+                             :mapping-type mapping-type
+                             :sequence-type :list)))
+       (expect (loader-float-kinds
+                (loader-float-mapping-values value mapping-type))
+               :to-equal
+               '(:nan :nan :+inf :-inf))
+       (expect (loader-float-kinds
+                (loader-float-mapping-values round-trip mapping-type))
+               :to-equal
+               '(:nan :nan :+inf :-inf))))))

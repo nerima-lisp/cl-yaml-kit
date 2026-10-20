@@ -47,47 +47,53 @@
                (incf index)))
     (values index mantissa significant-digits saw-significant-digit count)))
 
-(defun %scan-yaml-float (text span)
-  (let* ((lower (string-downcase text))
-         (length (length lower))
-         (index 0)
-         (sign 1)
-         (mantissa 0)
-         (fraction-digits 0)
-         (exponent 0)
-         (exponent-sign 1)
-         (saw-significant-digit nil)
-         (significant-digits 0)
-         (total-digits 0))
+(defun %scan-yaml-float-mantissa (text length)
+  (let ((index 0)
+        (sign 1)
+        (mantissa 0)
+        (fraction-digits 0)
+        (significant-digits 0)
+        (saw-significant-digit nil)
+        (total-digits 0))
     (when (and (< index length)
-               (member (char lower index) '(#\+ #\-) :test #'char=))
-      (when (char= (char lower index) #\-)
+               (member (char text index) '(#\+ #\-) :test #'char=))
+      (when (char= (char text index) #\-)
         (setf sign -1))
       (incf index))
     (multiple-value-bind (new-index new-mantissa new-significant
                           new-saw-significant integer-digits)
-        (%scan-yaml-float-digits lower index length mantissa
+        (%scan-yaml-float-digits text index length mantissa
                                  significant-digits saw-significant-digit)
       (setf index new-index mantissa new-mantissa
             significant-digits new-significant
             saw-significant-digit new-saw-significant
             total-digits integer-digits))
-    (when (and (< index length) (char= (char lower index) #\.))
+    (when (and (< index length) (char= (char text index) #\.))
       (incf index)
       (multiple-value-bind (new-index new-mantissa new-significant
                             new-saw-significant digits)
-          (%scan-yaml-float-digits lower index length mantissa
+          (%scan-yaml-float-digits text index length mantissa
                                    significant-digits saw-significant-digit)
         (setf index new-index mantissa new-mantissa
               significant-digits new-significant
               saw-significant-digit new-saw-significant
               fraction-digits digits
               total-digits (+ total-digits digits))))
-    (let ((saw-digit (plusp total-digits)))
+    (values index sign mantissa fraction-digits
+            significant-digits total-digits)))
+
+(defun %scan-yaml-float (text span)
+  (let* ((lower (string-downcase text))
+         (length (length lower))
+         (exponent 0)
+         (exponent-sign 1))
+    (multiple-value-bind (index sign mantissa fraction-digits
+                          significant-digits total-digits)
+        (%scan-yaml-float-mantissa lower length)
       (when (and (< index length) (char= (char lower index) #\e))
         (multiple-value-setq (index exponent-sign exponent)
           (%scan-yaml-float-exponent lower index length span)))
-      (unless (and saw-digit (= index length))
+      (unless (and (plusp total-digits) (= index length))
         (%float-error span))
       (values sign mantissa
               (- (* exponent-sign exponent) fraction-digits)
