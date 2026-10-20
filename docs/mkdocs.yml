@@ -12,14 +12,20 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Migration from v0.2.1 to v0.3.0: migration.md
   - Guide:
       - Data Model: guide/data-model.md
       - Pipeline: guide/pipeline.md
       - Writing: guide/writing.md
   - Reference:
       - API: reference/api.md
+      - API Data Structures: reference/api-structures.md
+      - Format-Preserving Editing: reference/api-format-editing.md
       - Architecture: reference/architecture.md
       - Conditions: reference/conditions.md
       - Conformance: reference/conformance.md
   - Project:
       - Development: project/development.md
+      - Testing: project/development/testing.md
+      - Benchmarking: project/development/benchmarking.md
+      - Coverage: project/development/coverage.md
