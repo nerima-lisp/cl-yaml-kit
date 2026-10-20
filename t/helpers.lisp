@@ -174,7 +174,7 @@
               condition
               (if expected-valid-p expected-type expected)))))
 (defmacro it-each (cases suite-name bindings &body body)
-  "Expands CASES as tests; both lists must be proper and equal-length; SUITE-NAME must contain ~S."
+  "Expands CASES as tests; lists must be proper, each case must match BINDINGS, and SUITE-NAME must contain ~S."
   (labels ((proper-list-length (value)
              (handler-case
                  (values (list-length value) t)
