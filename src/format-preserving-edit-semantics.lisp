@@ -6,7 +6,7 @@
       (values nil nil)))
 
 (defun %format-edit-semantic-child (container component)
-  (%format-edit-container-case (container kind) container
+  (%format-edit-container-case (container) container
     (:hash-table (gethash component container))
     (:yaml-mapping
      (let ((entry (assoc component (yaml-mapping-entries container)
@@ -17,7 +17,7 @@
     (otherwise (values nil nil))))
 
 (defun %format-edit-semantic-copy (value)
-  (%format-edit-container-case (value kind) value
+  (%format-edit-container-case (value) value
     (:hash-table
      (let ((copy (make-hash-table :test (hash-table-test value))))
        (maphash (lambda (key item)
@@ -49,7 +49,7 @@
     copy))
 
 (defun %format-edit-semantic-replace-child (container component child path)
-  (%format-edit-container-case (container kind) container
+  (%format-edit-container-case (container) container
     (:hash-table
      (let ((copy (%format-edit-semantic-copy container)))
        (setf (gethash component copy) child)
@@ -132,7 +132,7 @@
       (append container (list child))))
 
 (defun %format-edit-semantic-add-child (container component child path)
-  (%format-edit-container-case (container kind) container
+  (%format-edit-container-case (container) container
     (:hash-table
      (when (nth-value 1 (gethash component container))
        (%format-edit-structure-error path "added path already exists"))
@@ -166,7 +166,7 @@
               (nthcdr (1+ component) container))))
 
 (defun %format-edit-semantic-delete-child (container component path)
-  (%format-edit-container-case (container kind) container
+  (%format-edit-container-case (container) container
     (:hash-table
      (unless (nth-value 1 (gethash component container))
        (%format-edit-structure-error path "deleted path is absent"))

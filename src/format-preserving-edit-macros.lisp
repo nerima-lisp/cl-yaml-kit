@@ -2,7 +2,7 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defmacro %format-edit-container-case
-      ((container kind) expression &body clauses)
+      ((container) expression &body clauses)
     (let ((container-value (gensym "CONTAINER-"))
           (container-kind (gensym "KIND-")))
       `(let* ((,container-value ,expression)
@@ -13,9 +13,8 @@
                   ((vectorp ,container-value) :vector)
                   ((listp ,container-value) :list)
                   (t :other))))
-         (let ((,container ,container-value)
-               (,kind ,container-kind))
-           (case ,kind ,@clauses)))))
+         (let ((,container ,container-value))
+           (case ,container-kind ,@clauses)))))
   (declaim (inline %format-edit-sequence-index-p))
 
   (defun %format-edit-sequence-index-p (index length &optional require-end-p)
