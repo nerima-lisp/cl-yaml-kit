@@ -113,80 +113,116 @@
                                    :tag *invalid-event-slot-value*))))
           :to-be-truthy))
 
-(defmacro define-event-contract-tests (name constructor predicate accessors arguments)
-  (let ((keys (mapcar (lambda (accessor)
-                        (loop for key in arguments by #'cddr
-                              when (and (keywordp key)
-                                        (search (string-upcase (symbol-name key))
-                                                (string-upcase (symbol-name accessor))
-                                                :from-end t))
-                                do (return key)))
-                      accessors)))
-    `(progn
-       (it ,(format nil "constructs ~A" name)
-         (let ((value (,constructor ,@arguments)))
-           (expect (,predicate value) :to-be-truthy)
-           (expect (typep value ',name) :to-be-truthy)))
-       ,@(mapcar (lambda (accessor key)
-                   `(it ,(format nil "sets ~A via ~A" name accessor)
-                        (let ((value (,constructor ,@arguments)))
-                          (expect (contract-value-equal-p
-                                   (,accessor value)
-                                   (getf (list ,@arguments) ,key))
-                                  :to-be-truthy))))
-                 accessors keys))))
+(defun register-event-contract-tests (name constructor predicate accessors arguments)
+  (let* ((keys
+           (mapcar (lambda (accessor)
+                     (loop for key in arguments by #'cddr
+                           when (and (keywordp key)
+                                     (search (string-upcase (symbol-name key))
+                                             (string-upcase (symbol-name accessor))
+                                             :from-end t))
+                             do (return key)))
+                   accessors))
+         (cases
+           (append
+            (list (list (format nil "constructs ~A" name)
+                        name :constructor nil nil))
+            (loop for accessor in accessors
+                  for key in keys
+                  collect (list (format nil "sets ~A via ~A" name accessor)
+                                name :accessor accessor key)))))
+    (eval
+     `(it-each
+        ,cases
+        "~A for event ~S"
+        (label event-name kind accessor key)
+        (declare (ignore label event-name))
+        (let ((value (,constructor ,@arguments)))
+          (ecase kind
+            (:constructor
+             (expect (,predicate value) :to-be-truthy)
+             (expect (typep value ',name) :to-be-truthy))
+            (:accessor
+             (expect (contract-value-equal-p
+                      (funcall accessor value)
+                      (getf (list ,@arguments) key))
+                     :to-be-truthy))))))))
 
-(define-event-contract-tests yaml-kit:stream-start-event yaml-kit:make-stream-start-event
-  yaml-kit:stream-start-event-p (yaml-kit:event-start-span yaml-kit:event-end-span)
-  (:start-span (test-point-span 1 2 3) :end-span (test-point-span 1 3 4)))
-(define-event-contract-tests yaml-kit:stream-end-event yaml-kit:make-stream-end-event
-  yaml-kit:stream-end-event-p (yaml-kit:event-start-span yaml-kit:event-end-span)
-  (:start-span (test-point-span 2 0 5) :end-span (test-point-span 2 1 6)))
-(define-event-contract-tests yaml-kit:document-start-event yaml-kit:make-document-start-event
-  yaml-kit:document-start-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:document-start-event-explicit-p
+(register-event-contract-tests
+  'yaml-kit:stream-start-event
+  'yaml-kit:make-stream-start-event
+  'yaml-kit:stream-start-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span)
+  '(:start-span (test-point-span 1 2 3) :end-span (test-point-span 1 3 4)))
+(register-event-contract-tests
+  'yaml-kit:stream-end-event
+  'yaml-kit:make-stream-end-event
+  'yaml-kit:stream-end-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span)
+  '(:start-span (test-point-span 2 0 5) :end-span (test-point-span 2 1 6)))
+(register-event-contract-tests
+  'yaml-kit:document-start-event
+  'yaml-kit:make-document-start-event
+  'yaml-kit:document-start-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:document-start-event-explicit-p
    yaml-kit:document-start-event-version yaml-kit:document-start-event-tag-directives)
-  (:start-span (test-point-span 3 0 7) :end-span (test-point-span 3 1 8)
+  '(:start-span (test-point-span 3 0 7) :end-span (test-point-span 3 1 8)
    :explicit-p t :version '(1 . 2) :tag-directives '(directive)))
-(define-event-contract-tests yaml-kit:document-end-event yaml-kit:make-document-end-event
-  yaml-kit:document-end-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:document-end-event-explicit-p)
-  (:start-span (test-point-span 4 0 9) :end-span (test-point-span 4 1 10) :explicit-p t))
-(define-event-contract-tests yaml-kit:sequence-start-event yaml-kit:make-sequence-start-event
-  yaml-kit:sequence-start-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:sequence-start-event-anchor
+(register-event-contract-tests
+  'yaml-kit:document-end-event
+  'yaml-kit:make-document-end-event
+  'yaml-kit:document-end-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:document-end-event-explicit-p)
+  '(:start-span (test-point-span 4 0 9) :end-span (test-point-span 4 1 10) :explicit-p t))
+(register-event-contract-tests
+  'yaml-kit:sequence-start-event
+  'yaml-kit:make-sequence-start-event
+  'yaml-kit:sequence-start-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:sequence-start-event-anchor
    yaml-kit:sequence-start-event-tag yaml-kit:sequence-start-event-implicit-p
    yaml-kit:sequence-start-event-style)
-  (:start-span (test-point-span 5 0 11) :end-span (test-point-span 5 1 12)
+  '(:start-span (test-point-span 5 0 11) :end-span (test-point-span 5 1 12)
    :anchor "a" :tag "t" :implicit-p t :style :flow))
-(define-event-contract-tests yaml-kit:sequence-end-event yaml-kit:make-sequence-end-event
-  yaml-kit:sequence-end-event-p (yaml-kit:event-start-span yaml-kit:event-end-span)
-  (:start-span (test-point-span 6 0 13) :end-span (test-point-span 6 1 14)))
-(define-event-contract-tests yaml-kit:mapping-start-event yaml-kit:make-mapping-start-event
-  yaml-kit:mapping-start-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:mapping-start-event-anchor
+(register-event-contract-tests
+  'yaml-kit:sequence-end-event
+  'yaml-kit:make-sequence-end-event
+  'yaml-kit:sequence-end-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span)
+  '(:start-span (test-point-span 6 0 13) :end-span (test-point-span 6 1 14)))
+(register-event-contract-tests
+  'yaml-kit:mapping-start-event
+  'yaml-kit:make-mapping-start-event
+  'yaml-kit:mapping-start-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:mapping-start-event-anchor
    yaml-kit:mapping-start-event-tag yaml-kit:mapping-start-event-implicit-p
    yaml-kit:mapping-start-event-style)
-  (:start-span (test-point-span 7 0 15) :end-span (test-point-span 7 1 16)
+  '(:start-span (test-point-span 7 0 15) :end-span (test-point-span 7 1 16)
    :anchor "a" :tag "t" :implicit-p t :style :flow))
-(define-event-contract-tests yaml-kit:mapping-end-event yaml-kit:make-mapping-end-event
-  yaml-kit:mapping-end-event-p (yaml-kit:event-start-span yaml-kit:event-end-span)
-  (:start-span (test-point-span 8 0 17) :end-span (test-point-span 8 1 18)))
-(define-event-contract-tests yaml-kit:scalar-event yaml-kit:make-scalar-event
-  yaml-kit:scalar-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:scalar-event-anchor
+(register-event-contract-tests
+  'yaml-kit:mapping-end-event
+  'yaml-kit:make-mapping-end-event
+  'yaml-kit:mapping-end-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span)
+  '(:start-span (test-point-span 8 0 17) :end-span (test-point-span 8 1 18)))
+(register-event-contract-tests
+  'yaml-kit:scalar-event
+  'yaml-kit:make-scalar-event
+  'yaml-kit:scalar-event-p
+  '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:scalar-event-anchor
    yaml-kit:scalar-event-tag yaml-kit:scalar-event-value
    yaml-kit:scalar-event-plain-implicit-p yaml-kit:scalar-event-quoted-implicit-p
    yaml-kit:scalar-event-style)
-  (:start-span (test-point-span 9 0 19) :end-span (test-point-span 9 1 20)
+  '(:start-span (test-point-span 9 0 19) :end-span (test-point-span 9 1 20)
    :anchor "a" :tag "t" :value "value" :plain-implicit-p t
    :quoted-implicit-p t :style :double-quoted))
 (progn
-  (define-event-contract-tests yaml-kit:alias-event yaml-kit:make-alias-event
-    yaml-kit:alias-event-p
-    (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:alias-event-anchor)
-    (:start-span (test-point-span 10 0 21) :end-span (test-point-span 10 1 22)
-     :anchor "a"))
+  (register-event-contract-tests
+    'yaml-kit:alias-event
+    'yaml-kit:make-alias-event
+    'yaml-kit:alias-event-p
+    '(yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:alias-event-anchor)
+    '(:start-span (test-point-span 10 0 21) :end-span (test-point-span 10 1 22)
+      :anchor "a"))
   (it "returns anchor, tag, and style from events"
     (let ((event (yaml-kit:make-scalar-event
                   :anchor "a" :tag "tag:example" :style :double-quoted)))
@@ -198,9 +234,8 @@
              (yaml-kit:make-stream-start-event) :anchor)
             :to-equal nil))
   (it "rejects an unsupported event attribute"
-    (expect (handler-case
-                (progn
-                  (yaml-kit::%event-attribute (yaml-kit:make-scalar-event) :unknown)
-                  nil)
-              (type-error () t))
-            :to-be-truthy)))
+    (expect (lambda ()
+              (yaml-kit::%event-attribute (yaml-kit:make-scalar-event) :unknown))
+            :to-throw
+            (lambda (condition)
+              (typep condition 'type-error)))))

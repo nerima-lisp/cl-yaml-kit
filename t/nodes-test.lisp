@@ -29,27 +29,28 @@
       (expect (funcall (symbol-function predicate) value) :to-be-truthy)
       (expect (funcall (symbol-function accessor) value) :to-equal 42))))
 (defmacro define-node-contract-tests (name constructor predicate accessors arguments)
-  (let ((keys (mapcar (lambda (accessor)
-                        (loop for key in arguments by #'cddr
-                              when (and (keywordp key)
-                                        (search (string-upcase (symbol-name key))
-                                                (string-upcase (symbol-name accessor))
-                                                :from-end t))
-                                do (return key)))
-                      accessors)))
+  (let ((accessor-cases
+          (loop for accessor in accessors
+                for key = (loop for key in arguments by #'cddr
+                                when (and (keywordp key)
+                                          (search (string-upcase (symbol-name key))
+                                                  (string-upcase (symbol-name accessor))
+                                                  :from-end t))
+                                  do (return key))
+                collect (list name accessor key))))
     `(progn
        (it ,(format nil "constructs ~A" name)
          (let ((value (,constructor ,@arguments)))
            (expect (,predicate value) :to-be-truthy)
            (expect (typep value ',name) :to-be-truthy)))
-       ,@(mapcar (lambda (accessor key)
-                   `(it ,(format nil "sets ~A via ~A" name accessor)
-                        (let ((value (,constructor ,@arguments)))
-                          (expect (contract-value-equal-p
-                                   (,accessor value)
-                                   (getf (list ,@arguments) ,key))
-                                  :to-be-truthy))))
-                 accessors keys))))
+       (cl-weave:it-each ,accessor-cases
+         "sets ~A via ~A"
+         (node-name accessor key)
+         (let ((value (,constructor ,@arguments)))
+           (expect (contract-value-equal-p
+                    (,accessor value)
+                    (getf (list ,@arguments) key))
+                   :to-be-truthy))))))
 
 (define-node-contract-tests yaml-kit:scalar-node yaml-kit:make-scalar-node yaml-kit:scalar-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style
