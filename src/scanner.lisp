@@ -67,10 +67,7 @@ input, so the bound is a multiple of the input length rather than the length."
         (fetch-next-token s)
         (let ((produced (fill-pointer (scanner-tokens s))))
           (when (> produced limit)
-            (%signal-yaml-resource-limit
-             "tokens" limit produced
-             :span (sc-position-span s (sc-position s))
-             :context "YAML")))))))
+            (scanner-resource-error s "tokens" limit produced)))))))
 
 (defun %fetch-structural-token (s character)
   (cond
@@ -95,7 +92,7 @@ input, so the bound is a multiple of the input length rather than the length."
 
 (defun %fetch-indicator-token (s character next-character)
   (cond
-    ((and (char= character +scanner-document-start-indicator+)
+    ((and (char= character +scanner-block-entry-indicator+)
           (or (sc-blankz-p s 1)
               (and (plusp (scanner-flow-level s))
                    (member next-character +scanner-flow-block-entry-terminators+))))
@@ -131,7 +128,7 @@ input, so the bound is a multiple of the input length rather than the length."
   (if (or (not (or (sc-blankz-p s) (yaml-indicator-p character)))
           (and (zerop (scanner-flow-level s))
                (yaml-flow-indicator-p character))
-          (and (char= character +scanner-document-start-indicator+)
+          (and (char= character +scanner-block-entry-indicator+)
                (not (sc-blank-p s 1)))
           (and (member character +scanner-key-value-indicators+)
                (not (sc-blankz-p s 1))))

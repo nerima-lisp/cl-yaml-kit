@@ -4,6 +4,8 @@
 (defconstant +max-simple-key-length+ 1024)
 (defconstant +max-version-number-length+ 9)
 
+(defconstant +scanner-block-entry-indicator+ #\-)
+
 (defconstant +scanner-document-start-indicator+ #\-)
 (defconstant +scanner-document-end-indicator+ #\.)
 (defconstant +scanner-key-indicator+ #\?)
@@ -19,11 +21,6 @@
       (symbol-value '+scanner-flow-value-terminators+)
       '(#\, #\? #\[ #\] #\{ #\})))
 
-(defconstant +scanner-flow-plain-terminators+
-  (if (boundp '+scanner-flow-plain-terminators+)
-      (symbol-value '+scanner-flow-plain-terminators+)
-      '(#\, #\[ #\] #\{ #\})))
-
 (defconstant +scanner-key-value-indicators+
   (if (boundp '+scanner-key-value-indicators+)
       (symbol-value '+scanner-key-value-indicators+)
@@ -33,7 +30,8 @@
 (defparameter *scanner-uri-flow-characters* ",[]")
 
 (defparameter *flow-escape-table*
-  ;; The escape table accepts \/ and a backslash followed by a literal tab.
+  ;; YAML 1.2.2 permits \/. The scanner also accepts a literal tab after a
+  ;; backslash for compatibility with libyaml.
   (let ((table (make-array 128 :initial-element nil)))
     (dolist (entry '((#\0 . 0) (#\a . 7) (#\b . 8) (#\t . 9) (#\Tab . 9)
                      (#\n . 10) (#\v . 11) (#\f . 12) (#\r . 13) (#\e . 27)

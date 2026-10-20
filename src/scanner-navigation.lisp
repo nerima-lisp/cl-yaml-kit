@@ -21,8 +21,7 @@
               (simple-key-token-number key)
               (+ (scanner-tokens-parsed s)
                  (- (fill-pointer (scanner-tokens s)) (scanner-tokens-head s)))
-              (simple-key-position key) (sc-position s))))))
-
+         (simple-key-position key) (sc-position s))))))
 
 (defun remove-simple-key (s)
   (let ((key (first (scanner-simple-keys s))))
