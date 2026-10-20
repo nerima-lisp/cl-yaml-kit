@@ -163,8 +163,25 @@
 (it "parses adjustable strings"
   (let ((input (make-array 4 :element-type 'character :adjustable t
                            :initial-contents "a: 1")))
-    (expect (gethash "a" (yaml-kit:parse input)) :to-equal 1))
-  (expect (handler-case
-              (progn (yaml-kit:parse-events "long" :max-input-length 3) nil)
-            (yaml-kit:yaml-resource-limit-error () t))
-          :to-be-truthy))
+    (expect (gethash "a" (yaml-kit:parse input)) :to-equal 1)))
+
+(it "rejects strings exceeding max input length"
+  (expect (lambda ()
+            (yaml-kit:parse-events "long" :max-input-length 3))
+          :to-signal-parser-error 'yaml-kit:yaml-resource-limit-error))
+
+(it "returns only primary parser continuation values"
+  (let ((continuation (lambda (value)
+                       (declare (ignore value))
+                       (values :primary :secondary))))
+    (expect (multiple-value-list
+             (yaml-kit:map-events/k
+              (lambda (event) (declare (ignore event)))
+              "value"
+              continuation))
+            :to-equal
+            '(:primary))
+    (expect (multiple-value-list
+             (yaml-kit:parse-events/k "value" continuation))
+            :to-equal
+            '(:primary))))
