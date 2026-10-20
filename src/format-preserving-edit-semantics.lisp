@@ -221,7 +221,7 @@
     ((and (consp left) (consp right))
      (and (= (length left) (length right))
           (every #'%format-edit-semantic-equal-p left right)))
-    (t (equalp left right))))
+    (t (equal left right))))
 
 (defun %format-edit-semantic-expected (original path value operation document)
   (let ((expected (mapcar #'%format-edit-semantic-copy original)))

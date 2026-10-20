@@ -96,10 +96,17 @@
   (it "does not equate semantic lists with vectors"
     (expect (yaml-kit::%format-edit-semantic-equal-p '(10 20) #(10 20))
             :to-be-falsy))
-  (it "compares numerically equal scalar leaves"
-    (expect (yaml-kit::%format-edit-semantic-equal-p 3 3.0) :to-be-truthy))
+  (it "distinguishes numeric scalar types"
+    (expect (yaml-kit::%format-edit-semantic-equal-p 3 3.0)
+            :to-be-falsy))
   (it "detects unequal scalar leaves"
     (expect (yaml-kit::%format-edit-semantic-equal-p 3 4) :to-be-falsy))
+  (it "detects numeric type changes in edited YAML"
+    (expect (format-edit-condition-type
+             (lambda ()
+               (yaml-kit::%format-edit-validate-semantics
+                '((1)) '((1.0)) '(0) 1 :set 0)))
+            :to-equal 'yaml-kit:yaml-format-edit-structure-error))
   (it "calls edit-source/k once with the edited source"
     (let ((callback-count 0)
           (callback-source nil)
