@@ -2,23 +2,23 @@
 
 (defun register-conformance-case-tests ()
   (let ((cases (conformance-cases)))
-    (dolist (stage *conformance-stage-names*)
-      (dolist (case cases)
-        (multiple-value-bind (applicable passedp condition)
-            (conformance-stage-result case stage)
-          (declare (ignore passedp condition))
-          (when applicable
-            (let* ((id (conformance-case-id case))
-                   (name (format nil "~A case ~A" stage id)))
-              (eval
-               `(it ,name
-                  (multiple-value-bind (case-applicable case-passedp)
-                      (conformance-stage-result
-                       (find ,id (conformance-cases)
-                             :key #'conformance-case-id :test #'string=)
-                       ,stage)
-                    (expect (and case-applicable
-                                 (or (eq case-passedp :skipped) case-passedp))
-                            :to-be-truthy)))))))))))
+    (eval
+     `(it-each
+          ,(loop for stage in *conformance-stage-names*
+                 append
+                 (loop for case in cases
+                       when (nth-value 0 (conformance-stage-result case stage))
+                         collect (list stage (conformance-case-id case))))
+        "~A case ~S"
+        (stage case-id)
+        (multiple-value-bind (case-applicable case-passedp)
+            (conformance-stage-result
+             (find case-id (conformance-cases)
+                   :key #'conformance-case-id :test #'string=)
+             stage)
+          (expect (and case-applicable
+                       (or (eq case-passedp :skipped) case-passedp))
+                  :to-be-truthy))))
+    nil))
 
 (register-conformance-case-tests)
