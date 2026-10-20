@@ -2,11 +2,17 @@
 (defpackage #:yaml-kit
   (:use #:cl)
   (:export
-   ;; Reading and writing
-   #:comment-spans
-   #:parse #:parse-all #:read-yaml #:parse-events #:map-events
-   #:compose #:compose-all #:compose-events #:compose-all-events
-   #:emit #:write-yaml #:emit-events
+   ;; Reading and event composition
+   #:comment-spans #:comment-spans/k
+   #:parse #:parse/k #:parse-all #:parse-all/k
+   #:read-yaml #:read-yaml/k
+   #:parse-events #:parse-events/k #:map-events #:map-events/k
+   #:compose #:compose/k #:compose-all #:compose-all/k
+   #:compose-events #:compose-events/k
+   #:compose-all-events #:compose-all-events/k
+   ;; Writing
+   #:emit #:emit/k #:write-yaml #:write-yaml/k
+   #:emit-events #:emit-events/k
    ;; Sentinel and ordered mapping data
    #:+yaml-null+ #:+yaml-false+ #:yaml-null-p #:yaml-false-p
    #:make-yaml-mapping #:yaml-mapping-p #:yaml-mapping-entries
@@ -42,7 +48,7 @@
    #:scalar-event-plain-implicit-p #:scalar-event-quoted-implicit-p
    #:scalar-event-style #:alias-event-anchor
    ;; Format-preserving editing
-   #:edit-source
+   #:edit-source #:edit-source/k
    ;; Conditions
    #:yaml-kit-error #:yaml-kit-error-diagnostic
    #:yaml-parse-error #:yaml-parse-error-context

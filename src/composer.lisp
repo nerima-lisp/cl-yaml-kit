@@ -177,3 +177,47 @@
   "Compose the first graph from an event source."
   (car (apply #'compose-all-events
               (cons events (append options '(:first-only t))))))
+(defun compose-events/k (event-source k
+                          &key (max-depth +default-max-depth+)
+                               (max-scalar-length +default-max-scalar-length+)
+                               (max-nodes +default-max-nodes+)
+                               (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (compose-events event-source
+                           :max-depth max-depth
+                           :max-scalar-length max-scalar-length
+                           :max-nodes max-nodes
+                           :max-alias-expansions max-alias-expansions)))
+(defun compose-all-events/k (event-source k
+                              &key (max-depth +default-max-depth+)
+                                   (max-scalar-length +default-max-scalar-length+)
+                                   (max-nodes +default-max-nodes+)
+                                   (max-alias-expansions +default-max-alias-expansions+)
+                                   (first-only nil)
+                                   (document-handler nil))
+  (check-type k function)
+  (funcall k
+           (compose-all-events event-source
+                               :max-depth max-depth
+                               :max-scalar-length max-scalar-length
+                               :max-nodes max-nodes
+                               :max-alias-expansions max-alias-expansions
+                               :first-only first-only
+                               :document-handler document-handler)))
+(defun %composer-compose-all-events/cps (events k
+                                         &key (max-depth +default-max-depth+)
+                                              (max-scalar-length +default-max-scalar-length+)
+                                              (max-nodes +default-max-nodes+)
+                                              (max-alias-expansions +default-max-alias-expansions+)
+                                              (first-only nil)
+                                              (document-handler nil))
+  (check-type k function)
+  (funcall k
+           (compose-all-events events
+                               :max-depth max-depth
+                               :max-scalar-length max-scalar-length
+                               :max-nodes max-nodes
+                               :max-alias-expansions max-alias-expansions
+                               :first-only first-only
+                               :document-handler document-handler)))

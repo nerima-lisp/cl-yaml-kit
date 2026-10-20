@@ -45,3 +45,15 @@
             do (let ((current (dequeue)))
                  (%emit-dispatch current state queue))))
     stream))
+(defun %emitter-emit-event-stream/cps
+    (events stream k &key (indent 2)
+                          (explicit-document-start nil)
+                          (suppress-empty-document-marker nil))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (emit-event-stream events stream
+                     :indent indent
+                     :explicit-document-start explicit-document-start
+                     :suppress-empty-document-marker
+                     suppress-empty-document-marker)
+  (funcall k nil))

@@ -45,3 +45,31 @@
                       :explicit-document-start explicit-document-start)
                 stream)
   value)
+(defun write-yaml/k (value stream k &key (indent 2)
+                                      (default-flow-style :block)
+                                      (explicit-document-start nil))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k
+           (write-yaml value stream
+                       :indent indent
+                       :default-flow-style default-flow-style
+                       :explicit-document-start explicit-document-start)))
+(defun emit/k (value k &key (indent 2)
+                           (default-flow-style :block)
+                           (explicit-document-start nil))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k
+           (emit value
+                 :indent indent
+                 :default-flow-style default-flow-style
+                 :explicit-document-start explicit-document-start)))
+(defun emit-events/k (events k &key (indent 2)
+                                  (explicit-document-start nil))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k
+           (emit-events events
+                        :indent indent
+                        :explicit-document-start explicit-document-start)))

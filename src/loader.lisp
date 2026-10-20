@@ -99,3 +99,100 @@ text, but exclude the line break."
                :max-input-length max-input-length :max-depth max-depth
                :max-scalar-length max-scalar-length :max-nodes max-nodes
                :max-alias-expansions max-alias-expansions))
+(defun comment-spans/k (input k &key (max-input-length +default-max-input-length+))
+  (check-type k function)
+  (funcall k (comment-spans input :max-input-length max-input-length)))
+(defun compose/k (input k
+                  &key (max-input-length +default-max-input-length+)
+                       (max-depth +default-max-depth+)
+                       (max-scalar-length +default-max-scalar-length+)
+                       (max-nodes +default-max-nodes+)
+                       (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (compose input
+                    :max-input-length max-input-length
+                    :max-depth max-depth
+                    :max-scalar-length max-scalar-length
+                    :max-nodes max-nodes
+                    :max-alias-expansions max-alias-expansions)))
+(defun compose-all/k (input k
+                      &key (max-input-length +default-max-input-length+)
+                           (max-depth +default-max-depth+)
+                           (max-scalar-length +default-max-scalar-length+)
+                           (max-nodes +default-max-nodes+)
+                           (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (compose-all input
+                        :max-input-length max-input-length
+                        :max-depth max-depth
+                        :max-scalar-length max-scalar-length
+                        :max-nodes max-nodes
+                        :max-alias-expansions max-alias-expansions)))
+(defun parse/k (input k
+                &key (schema :core)
+                     (mapping-type :hash-table)
+                     (sequence-type :vector)
+                     (duplicate-key-policy :error)
+                     (max-input-length +default-max-input-length+)
+                     (max-depth +default-max-depth+)
+                     (max-scalar-length +default-max-scalar-length+)
+                     (max-nodes +default-max-nodes+)
+                     (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (parse input
+                  :schema schema
+                  :mapping-type mapping-type
+                  :sequence-type sequence-type
+                  :duplicate-key-policy duplicate-key-policy
+                  :max-input-length max-input-length
+                  :max-depth max-depth
+                  :max-scalar-length max-scalar-length
+                  :max-nodes max-nodes
+                  :max-alias-expansions max-alias-expansions)))
+(defun parse-all/k (input k
+                    &key (schema :core)
+                         (mapping-type :hash-table)
+                         (sequence-type :vector)
+                         (duplicate-key-policy :error)
+                         (max-input-length +default-max-input-length+)
+                         (max-depth +default-max-depth+)
+                         (max-scalar-length +default-max-scalar-length+)
+                         (max-nodes +default-max-nodes+)
+                         (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (parse-all input
+                      :schema schema
+                      :mapping-type mapping-type
+                      :sequence-type sequence-type
+                      :duplicate-key-policy duplicate-key-policy
+                      :max-input-length max-input-length
+                      :max-depth max-depth
+                      :max-scalar-length max-scalar-length
+                      :max-nodes max-nodes
+                      :max-alias-expansions max-alias-expansions)))
+(defun read-yaml/k (stream k
+                     &key (schema :core)
+                          (mapping-type :hash-table)
+                          (sequence-type :vector)
+                          (duplicate-key-policy :error)
+                          (max-input-length +default-max-input-length+)
+                          (max-depth +default-max-depth+)
+                          (max-scalar-length +default-max-scalar-length+)
+                          (max-nodes +default-max-nodes+)
+                          (max-alias-expansions +default-max-alias-expansions+))
+  (check-type k function)
+  (funcall k
+           (read-yaml stream
+                      :schema schema
+                      :mapping-type mapping-type
+                      :sequence-type sequence-type
+                      :duplicate-key-policy duplicate-key-policy
+                      :max-input-length max-input-length
+                      :max-depth max-depth
+                      :max-scalar-length max-scalar-length
+                      :max-nodes max-nodes
+                      :max-alias-expansions max-alias-expansions)))

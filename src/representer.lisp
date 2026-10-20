@@ -103,3 +103,7 @@
   (let ((*representer-cache* (or *representer-cache*
                                 (make-hash-table :test #'eq))))
     (%represent-dispatch value)))
+(defun %representer-represent/cps (value k)
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k (represent value)))

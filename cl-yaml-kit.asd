@@ -101,7 +101,7 @@
                (:file "coverage-gate-test")
                (:file "conformance/events") (:file "conformance/values")
                (:file "conformance-test") (:file "conformance/stages")
-               (:file "conformance/report") (:file "conformance/cases"))
+               (:file "conformance/report") (:file "conformance/cases") (:file "continuation-entry-test"))
   :perform (test-op (operation component)
              (declare (ignore operation component))
              (unless (uiop:symbol-call :cl-yaml-kit/test :run-tests)

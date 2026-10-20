@@ -108,3 +108,14 @@
                                        memo #'walk))
                  (t (signal-yaml-compose-error :cause "unsupported node type")))))
       (walk node))))
+(defun %constructor-construct/cps
+    (node k &key (schema :core) (mapping-type :hash-table)
+               (sequence-type :vector) (duplicate-key-policy :error))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k
+           (construct node
+                      :schema schema
+                      :mapping-type mapping-type
+                      :sequence-type sequence-type
+                      :duplicate-key-policy duplicate-key-policy)))

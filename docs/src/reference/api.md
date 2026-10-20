@@ -4,20 +4,33 @@ The public package is `yaml-kit`. All symbols below are exported by
 `src/package.lisp`. Optional arguments shown with a default use the default
 implemented by the source.
 
+Each `/k` entry requires a function-valued `k` and signals `type-error` before
+processing if `k` is not a function. It returns all values returned by `k`.
+
 ## Reading and composing
 
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
 | `parse input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First constructed document | `yaml-parse-error`, `yaml-compose-error`, `yaml-resource-limit-error` |
+| `parse/k input k &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the first constructed document | Same as `parse` |
 | `parse-all input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of constructed documents | Same as `parse` |
+| `parse-all/k input k &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the document list | Same as `parse-all` |
 | `read-yaml input &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First constructed document | Same as `parse` |
+| `read-yaml/k stream k &key schema mapping-type sequence-type duplicate-key-policy max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the first constructed document | Same as `read-yaml` |
 | `parse-events input &rest keys` | Event list; forwards `:max-input-length`, `:max-depth`, and `:max-scalar-length` to `map-events` | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `parse-events/k input k &key max-input-length max-depth max-scalar-length` | Values returned by `k`; calls `k` once with the event list | Same as `parse-events` |
 | `map-events handler input &key max-input-length max-depth max-scalar-length` | `nil`; calls `handler` with each event in source order | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `map-events/k handler input k &key max-input-length max-depth max-scalar-length` | Values returned by `k`; calls `k` once with `nil` after all events | Same as `map-events` |
 | `comment-spans input &key max-input-length` | Ordered list of `(start . end)` comment spans | `yaml-parse-error`, `yaml-resource-limit-error` |
+| `comment-spans/k input k &key max-input-length` | Values returned by `k`; calls `k` once with the comment-span list | Same as `comment-spans` |
 | `compose-events events &rest keys` | First representation node (root of the graph); `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-events/k event-source k &key max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the first node or `nil` | Same as `compose-events` |
 | `compose-all-events events &key max-depth max-scalar-length max-nodes max-alias-expansions first-only document-handler` | Varies with `:first-only` and `:document-handler`; see below. `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-all-events/k event-source k &key max-depth max-scalar-length max-nodes max-alias-expansions first-only document-handler` | Values returned by `k`; calls `k` once with the result described for `compose-all-events` | Same as `compose-all-events` |
 | `compose input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | First representation node (root of the graph) | `yaml-parse-error`, `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose/k input k &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the first node or `nil` | Same as `compose` |
 | `compose-all input &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | List of representation nodes, one root per document | Same as `compose` |
+| `compose-all/k input k &key max-input-length max-depth max-scalar-length max-nodes max-alias-expansions` | Values returned by `k`; calls `k` once with the node list | Same as `compose-all` |
 
 `parse`, `read-yaml`, and `compose` operate on only the first document in a raw
 input stream. They stop parsing or composing after that document; use
@@ -126,14 +139,18 @@ numbers are not YAML scalar result types; for example, `1/2` remains a string.
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
 | `emit value &key indent default-flow-style explicit-document-start` | YAML string | `yaml-emit-error` |
+| `emit/k value k &key indent default-flow-style explicit-document-start` | Values returned by `k`; calls `k` once with the YAML string | Same as `emit` |
 | `write-yaml value stream &key indent default-flow-style explicit-document-start` | `value` | `yaml-emit-error` |
+| `write-yaml/k value stream k &key indent default-flow-style explicit-document-start` | Values returned by `k`; calls `k` once with the written value | Same as `write-yaml` |
 | `emit-events events &key indent explicit-document-start` | YAML string; accepts an event list | `yaml-emit-error` |
+| `emit-events/k events k &key indent explicit-document-start` | Values returned by `k`; calls `k` once with the YAML string | Same as `emit-events` |
 
 ## Format-preserving editing
 
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
 | `edit-source source path value &key (document 0) (operation :set)` | Edited source in the input type | `yaml-parse-error`, `yaml-emit-error`, `yaml-format-edit-path-error`, `yaml-format-edit-anchor-error`, `yaml-format-edit-structure-error` |
+| `edit-source/k source path value &key (document 0) (operation :set) (k nil)` | Values returned by `k`; calls `k` once with the edited source | Same as `edit-source`, plus `type-error` if `k` is omitted or not a function |
 
 Readers for the edit conditions are listed in the [conditions reference](conditions.md).
 

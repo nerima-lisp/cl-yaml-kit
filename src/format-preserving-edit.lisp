@@ -79,3 +79,18 @@
                (let ((edited (%format-edit-apply-replacement text position position insertion)))
                  (finish (%format-edit-preserve-final-newline text edited)
                          :add)))))))))))
+(progn
+  (defun %format-edit-source/cps
+      (source path value &key (document 0) (operation :set) (k nil))
+    (check-type k function)
+    (funcall k
+             (edit-source source path value
+                          :document document
+                          :operation operation)))
+
+  (defun edit-source/k
+      (source path value &key (document 0) (operation :set) (k nil))
+    (%format-edit-source/cps source path value
+                             :document document
+                             :operation operation
+                             :k k)))

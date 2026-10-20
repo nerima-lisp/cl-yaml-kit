@@ -78,3 +78,10 @@
       (walk root)
       (send (make-document-end-event :start-span (span) :end-span (span)))
       (send (make-stream-end-event :start-span (span) :end-span (span))))))
+(defun %serializer-serialize/cps
+    (root handler k &key (explicit-document-start nil))
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (serialize root handler
+             :explicit-document-start explicit-document-start)
+  (funcall k nil))

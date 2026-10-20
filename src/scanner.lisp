@@ -150,3 +150,7 @@ input, so the bound is a multiple of the input length rather than the length."
        (fetch-plain-scalar s))
       (t (sc-error s "while scanning for the next token" (sc-position s)
                    "found character that cannot start any token")))))
+(defun %scanner-next-token/cps (scanner k)
+  (unless (functionp k)
+    (error 'type-error :datum k :expected-type 'function))
+  (funcall k (%scanner-next-token scanner)))

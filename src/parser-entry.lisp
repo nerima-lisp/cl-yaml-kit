@@ -56,3 +56,43 @@
 
 (defun parse-events (input &rest keys)
   (let ((events nil)) (apply #'map-events (lambda (event) (push event events)) input keys) (nreverse events)))
+(defun map-events/k (handler input k
+                     &key (max-input-length +default-max-input-length+)
+                          (max-depth +default-max-depth+)
+                          (max-scalar-length +default-max-scalar-length+))
+  "Call HANDLER for each event, then call K once with NIL."
+  (check-type k function)
+  (map-events handler input
+              :max-input-length max-input-length
+              :max-depth max-depth
+              :max-scalar-length max-scalar-length)
+  (funcall k nil))
+(defun parse-events/k (input k
+                       &key (max-input-length +default-max-input-length+)
+                            (max-depth +default-max-depth+)
+                            (max-scalar-length +default-max-scalar-length+))
+  (check-type k function)
+  (funcall k
+           (parse-events input
+                         :max-input-length max-input-length
+                         :max-depth max-depth
+                         :max-scalar-length max-scalar-length)))
+(defun %parser-run/cps (handler input k
+                         &key (max-input-length +default-max-input-length+)
+                              (max-depth +default-max-depth+)
+                              (max-scalar-length +default-max-scalar-length+))
+  (check-type k function)
+  (let ((text (%parser-input-string input max-input-length)))
+    (when (> (length text) max-input-length)
+      (%resource-limit "input length" max-input-length (length text)))
+    (let* ((scanner (make-scanner text))
+           (parser (make-parser% :scanner scanner
+                                 :state #'yaml-parser-parse-stream-start
+                                 :states nil :handler handler :directives nil
+                                 :version nil :depth 0 :max-depth max-depth
+                                 :max-scalar-length max-scalar-length)))
+      (loop for state = (parser-state parser)
+            while state
+            do (setf (parser-state parser) (funcall state parser))
+               (recycle-scanner-token scanner))))
+  (funcall k nil))
