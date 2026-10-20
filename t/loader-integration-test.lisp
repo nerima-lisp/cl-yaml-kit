@@ -39,37 +39,27 @@
       (expect documents :to-equal '("handled"))))
 
   (it "rejects an unknown event in the integration path"
-    (expect (handler-case
-                (progn (loader-compose-all-events
-                        (list (loader-event :stream-start) 42))
-                       nil)
-              (yaml-kit:yaml-compose-error () t))
-            :to-be-truthy))
+    (expect (lambda ()
+              (loader-compose-all-events
+               (list (loader-event :stream-start) 42)))
+            :to-signal-loader-error
+            'yaml-kit:yaml-compose-error))
 
   (it "exposes compose-all and reports resource limits"
     (let ((events (loader-document
                    (loader-event :scalar :value "long"))))
       (expect (length (loader-compose-all-events events)) :to-equal 1)
-      (expect (handler-case
-                  (progn (loader-compose-all-events events :max-nodes 0) nil)
-                (yaml-kit:yaml-resource-limit-error (condition)
-                  (and (equal (yaml-kit::yaml-resource-limit-error-limit condition)
-                              0)
-                       (equal (yaml-kit::yaml-resource-limit-error-actual condition)
-                              1))))
-              :to-be-truthy)))
+      (expect (lambda ()
+                (loader-compose-all-events events :max-nodes 0))
+              :to-signal-loader-resource-limit
+              '(:name "nodes" :limit 0 :actual 1))))
 
   (it "covers the direct resource limit contract"
     (let ((limit (symbol-function 'yaml-kit::%limit!)))
       (expect (funcall limit 0 nil) :to-be-falsy)
-      (expect (handler-case
-                  (progn (funcall limit 2 1 "nodes") nil)
-                (yaml-kit:yaml-resource-limit-error (condition)
-                  (and (equal (yaml-kit::yaml-resource-limit-error-limit-name condition)
-                              "nodes")
-                       (equal (yaml-kit::yaml-resource-limit-error-limit condition) 1)
-                       (equal (yaml-kit::yaml-resource-limit-error-actual condition) 2))))
-              :to-be-truthy)))
+      (expect (lambda () (funcall limit 2 1 "nodes"))
+              :to-signal-loader-resource-limit
+              '(:name "nodes" :limit 1 :actual 2))))
 
   (it "uses list and alist construction options"
     (let ((events (loader-document
@@ -139,9 +129,9 @@
               :to-equal "first")
       (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :last))
               :to-equal "last")
-      (expect (handler-case (progn (loader-parse-events events) nil)
-                (yaml-kit:yaml-compose-error () t))
-              :to-be-truthy)))
+      (expect (lambda () (loader-parse-events events))
+              :to-signal-loader-error
+              'yaml-kit:yaml-compose-error)))
 
   (it "applies duplicate policies to alists and hash tables"
     (let ((events (loader-document
@@ -151,8 +141,10 @@
                    (loader-event :scalar :value "key")
                    (loader-event :scalar :value "last")
                    (loader-event :mapping-end))))
-      (expect (handler-case (progn (loader-parse-events events :mapping-type :alist) nil)
-                (yaml-kit:yaml-compose-error () t)) :to-be-truthy)
+      (expect (lambda ()
+                (loader-parse-events events :mapping-type :alist))
+              :to-signal-loader-error
+              'yaml-kit:yaml-compose-error)
       (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :first))
               :to-equal "first")
       (expect (gethash "key" (loader-parse-events events :duplicate-key-policy :last))
@@ -162,11 +154,11 @@
     (let ((events (loader-document
                    (loader-event :sequence-start :tag "!!str")
                    (loader-event :sequence-end))))
-      (expect (handler-case (progn (loader-parse-events events) nil)
-                (yaml-kit:yaml-compose-error () t))
-              :to-be-truthy))
+      (expect (lambda () (loader-parse-events events))
+              :to-signal-loader-error
+              'yaml-kit:yaml-compose-error))
     (let ((events (loader-document (loader-event :scalar :value "long"))))
-      (expect (handler-case
-                  (progn (loader-parse-events events :max-scalar-length 3) nil)
-                (yaml-kit:yaml-resource-limit-error () t))
-              :to-be-truthy))))
+      (expect (lambda ()
+                (loader-parse-events events :max-scalar-length 3))
+              :to-signal-loader-resource-limit
+              '(:name "scalar" :limit 3 :actual 4)))))

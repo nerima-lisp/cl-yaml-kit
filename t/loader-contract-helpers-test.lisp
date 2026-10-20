@@ -65,63 +65,6 @@
              values)))
     (nreverse values)))
 
-(defmacro loader-scalar-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (yaml-kit::resolve-plain-scalar-tag
-                             ,(third case) ,(second case))
-                            :to-equal ,(fourth case))))
-               cases)))
-(defmacro loader-parse-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (loader-parse-events
-                             (loader-document
-                              (loader-event :scalar :value ,(second case)))
-                             ,@(third case))
-                            :to-equal ,(fourth case))))
-               cases)))
-
-(defmacro loader-value-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect ,(second case) :to-equal ,(third case))))
-               cases)))
-
-(defmacro loader-predicate-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (funcall ,(third case) ,(second case))
-                            :to-be-truthy)))
-               cases)))
-
-(defmacro loader-error-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (handler-case
-                                (progn ,(second case) nil)
-                              (,(third case) () t))
-                            :to-be-truthy)))
-               cases)))
-
-(defmacro loader-limit-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (handler-case
-                                (progn ,(second case) nil)
-                              (yaml-kit:yaml-resource-limit-error (condition)
-                                (string= (yaml-kit::yaml-resource-limit-error-limit-name
-                                          condition)
-                                         ,(third case))))
-                            :to-be-truthy)))
-               cases)))
-
 (defun loader-empty-collection-events (kind tag)
   (loader-document
    (if (eq kind :sequence)

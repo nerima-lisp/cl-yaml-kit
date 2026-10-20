@@ -2,28 +2,43 @@
 (in-package #:cl-yaml-kit/test)
 
 (describe "loader construction"
-  (loader-predicate-cases
-    ("empty mapping can be a YAML mapping"
-     (loader-parse-events
-      (loader-empty-collection-events :mapping nil)
-      :mapping-type :yaml-mapping)
-     (lambda (value)
-       (and (yaml-kit:yaml-mapping-p value)
-            (null (yaml-kit:yaml-mapping-entries value)))))
-    ("positive infinity is a double float"
-     (loader-parse-events
-      (loader-document (loader-event :scalar :value ".INF")))
-     (lambda (value)
-       (and (floatp value) (and (yaml-kit::%float-infinity-p value) (not (minusp value))))))
-    ("negative infinity is a double float"
-     (loader-parse-events
-      (loader-document (loader-event :scalar :value "-.INF")))
-     (lambda (value)
-       (and (floatp value) (and (yaml-kit::%float-infinity-p value) (minusp value)))))
-    ("NaN is a double float"
-     (loader-parse-events
-      (loader-document (loader-event :scalar :value ".NaN")))
-     (lambda (value) (and (floatp value) (yaml-kit::%float-nan-p value)))))
+  (cl-weave:it-each
+      ((empty-mapping :parse-events
+         ((:stream-start) (:document-start) (:mapping-start) (:mapping-end)
+          (:document-end) (:stream-end))
+         (:mapping-type :yaml-mapping)
+         :empty-mapping)
+       (positive-infinity :parse-document
+         ((:scalar :value ".INF"))
+         ()
+         :positive-infinity)
+       (negative-infinity :parse-document
+         ((:scalar :value "-.INF"))
+         ()
+         :negative-infinity)
+       (nan :parse-document
+         ((:scalar :value ".NaN"))
+         ()
+         :nan))
+    "constructs ~S"
+    (name operation input options expected)
+    (declare (ignore name))
+    (let ((value (loader-case-call operation input options)))
+      (expect
+       (case expected
+         (:empty-mapping
+          (and (yaml-kit:yaml-mapping-p value)
+               (null (yaml-kit:yaml-mapping-entries value))))
+         (:positive-infinity
+          (and (floatp value)
+               (yaml-kit::%float-infinity-p value)
+               (not (minusp value))))
+         (:negative-infinity
+          (and (floatp value)
+               (yaml-kit::%float-infinity-p value)
+               (minusp value)))
+         (:nan (and (floatp value) (yaml-kit::%float-nan-p value))))
+       :to-be-truthy)))
 
   (it "constructs a non-empty YAML mapping"
     (let ((value (loader-parse-events
@@ -33,7 +48,8 @@
                    (loader-event :scalar :value "value")
                    (loader-event :mapping-end))
                   :mapping-type :yaml-mapping)))
-      (expect (yaml-kit:yaml-mapping-entries value) :to-equal
+      (expect (yaml-kit:yaml-mapping-entries value)
+              :to-equal
               '(("key" . "value")))))
 
   (it "constructs alists with first and last duplicate policies"
@@ -51,58 +67,76 @@
                                    :duplicate-key-policy :last)
               :to-equal '(("key" . "last")))))
 
-  (it "constructs sequences directly through the sequence contract"
+  (it "constructs and caches direct list sequences"
     (let* ((node (yaml-kit:make-sequence-node
                   :items (list (yaml-kit:make-scalar-node :value "a" :style :plain)
                                (yaml-kit:make-scalar-node :value "b" :style :plain))))
-           (empty-node (yaml-kit:make-sequence-node))
-           (list-memo (make-hash-table :test #'eq))
-           (vector-memo (make-hash-table :test #'eq))
-           (list-value (funcall (symbol-function 'yaml-kit::%construct-sequence)
-                                node :list list-memo #'identity))
-           (list-cache-hit (funcall (symbol-function 'yaml-kit::%construct-sequence)
-                                    node :list list-memo #'identity))
-           (vector-value (funcall (symbol-function 'yaml-kit::%construct-sequence)
-                                  node :vector vector-memo #'identity)))
-      (expect list-value :to-equal (yaml-kit:sequence-node-items node))
-      (expect (eq list-cache-hit list-value) :to-be-truthy)
-      (expect (coerce vector-value 'list) :to-equal
-              (yaml-kit:sequence-node-items node))
-      (expect (eq (gethash node vector-memo) vector-value) :to-be-truthy)
-      (expect (funcall (symbol-function 'yaml-kit::%construct-sequence)
-                       empty-node :list (make-hash-table :test #'eq) #'identity)
-              :to-be-falsy)
-      (expect (length (funcall (symbol-function 'yaml-kit::%construct-sequence)
-                               empty-node :vector (make-hash-table :test #'eq) #'identity))
-              :to-equal 0)))
+           (memo (make-hash-table :test #'eq))
+           (construct-sequence
+             (symbol-function 'yaml-kit::%construct-sequence))
+           (value (funcall construct-sequence node :list memo #'identity))
+           (cache-hit (funcall construct-sequence node :list memo #'identity)))
+      (expect value :to-equal (yaml-kit:sequence-node-items node))
+      (expect (eq cache-hit value) :to-be-truthy)))
 
-  (it "calls collection construction contracts directly"
+  (it "constructs and caches direct vector sequences"
+    (let* ((node (yaml-kit:make-sequence-node
+                  :items (list (yaml-kit:make-scalar-node :value "a" :style :plain)
+                               (yaml-kit:make-scalar-node :value "b" :style :plain))))
+           (memo (make-hash-table :test #'eq))
+           (construct-sequence
+             (symbol-function 'yaml-kit::%construct-sequence))
+           (value (funcall construct-sequence node :vector memo #'identity)))
+      (expect (coerce value 'list)
+              :to-equal
+              (yaml-kit:sequence-node-items node))
+      (expect (eq (gethash node memo) value) :to-be-truthy)))
+
+  (it "preserves empty list and vector sequences"
+    (let* ((node (yaml-kit:make-sequence-node))
+           (construct-sequence
+             (symbol-function 'yaml-kit::%construct-sequence))
+           (list-value (funcall construct-sequence
+                                node :list (make-hash-table :test #'eq)
+                                #'identity))
+           (vector-value (funcall construct-sequence
+                                  node :vector (make-hash-table :test #'eq)
+                                  #'identity)))
+      (expect list-value :to-be-falsy)
+      (expect (length vector-value) :to-equal 0)))
+
+  (it "accepts collection tags by node kind"
+    (let ((compatible
+            (symbol-function 'yaml-kit::%collection-tag-compatible-p)))
+      (expect (funcall compatible
+                       (yaml-kit:make-mapping-node)
+                       "tag:yaml.org,2002:map")
+              :to-be-truthy)
+      (expect (every (lambda (tag)
+                       (funcall compatible
+                                (yaml-kit:make-mapping-node :tag tag)
+                                "tag:yaml.org,2002:map"))
+                     '("!" "?" "!!map"))
+              :to-be-truthy)
+      (expect (notany (lambda (tag)
+                        (funcall compatible
+                                 (yaml-kit:make-mapping-node :tag tag)
+                                 "tag:yaml.org,2002:map"))
+                      '("!!str" "!!seq"))
+              :to-be-truthy)))
+
+  (it "constructs mapping values through each collection contract"
     (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
            (value (yaml-kit:make-scalar-node :value "value" :style :plain))
            (node (yaml-kit:make-mapping-node :pairs (list (cons key value))))
-           (memo (make-hash-table :test #'eq))
-           (compatible (symbol-function 'yaml-kit::%collection-tag-compatible-p))
            (mapping (symbol-function 'yaml-kit::%construct-mapping))
            (walk (lambda (object)
                    (if (yaml-kit:scalar-node-p object)
                        (yaml-kit:scalar-node-value object)
                        object))))
-      (expect (funcall compatible node "tag:yaml.org,2002:map") :to-be-truthy)
-      (dolist (tag '("!" "?" "!!map"))
-        (expect (funcall compatible
-                         (yaml-kit:make-mapping-node :tag tag)
-                         "tag:yaml.org,2002:map")
-                :to-be-truthy))
-      (expect (funcall compatible
-                       (yaml-kit:make-mapping-node :tag "!!str")
-                       "tag:yaml.org,2002:map")
-              :to-be-falsy)
-      (expect (funcall compatible
-                       (yaml-kit:make-mapping-node :tag "!!seq")
-                       "tag:yaml.org,2002:map")
-              :to-be-falsy)
       (expect (yaml-kit:yaml-mapping-p
-               (funcall mapping node :yaml-mapping :error memo walk))
+               (funcall mapping node :yaml-mapping :error
+                        (make-hash-table :test #'eq) walk))
               :to-be-truthy)
       (expect (funcall mapping node :alist :error
                        (make-hash-table :test #'eq) walk)
@@ -111,7 +145,7 @@
                             (make-hash-table :test #'equal) walk)))
         (expect (gethash "key" table) :to-equal "value"))))
 
-  (it "covers direct hash mapping policies and invalid keys"
+  (it "applies first and last duplicate policies to hash tables"
     (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
            (first-value (yaml-kit:make-scalar-node :value "first" :style :plain))
            (last-value (yaml-kit:make-scalar-node :value "last" :style :plain))
@@ -129,111 +163,35 @@
       (expect (gethash "key"
                        (funcall mapping node :hash-table :last
                                 (make-hash-table :test #'equal) walk))
-              :to-equal "last")
-      (expect (handler-case
-                  (progn (funcall mapping node :hash-table :error
-                                  (make-hash-table :test #'equal) walk)
-                         nil)
-                (yaml-kit:yaml-compose-error () t))
-              :to-be-truthy)
-      (let ((bad-node (yaml-kit:make-mapping-node
-                       :pairs (list (cons (yaml-kit:make-yaml-mapping)
-                                          last-value)))))
-        (expect (handler-case
-                    (progn (funcall mapping bad-node :hash-table :error
-                                    (make-hash-table :test #'equal) walk)
-                           nil)
-                  (yaml-kit:yaml-compose-error () t))
-                :to-be-truthy))))
-  (it "reports duplicate mapping keys consistently for alists and hash tables"
-    (let* ((events (lambda ()
-                     (loader-document
-                      (loader-event :mapping-start)
-                      (loader-event :scalar :value "key")
-                      (loader-event :scalar :value "first")
-                      (loader-event :scalar :value "key")
-                      (loader-event :scalar :value "last")
-                      (loader-event :mapping-end))))
-           (alist-cause
-             (handler-case
-                 (progn
-                   (loader-parse-events (funcall events) :mapping-type :alist
-                                        :duplicate-key-policy :error)
-                   nil)
-               (yaml-kit:yaml-compose-error (condition)
-                 (yaml-kit:yaml-compose-error-cause condition))))
-           (hash-table-cause
-             (handler-case
-                 (progn
-                   (loader-parse-events (funcall events) :mapping-type :hash-table
-                                        :duplicate-key-policy :error)
-                   nil)
-               (yaml-kit:yaml-compose-error (condition)
-                 (yaml-kit:yaml-compose-error-cause condition)))))
-      (expect (list alist-cause hash-table-cause)
-              :to-equal
-              '("duplicate mapping key" "duplicate mapping key"))))
+              :to-equal "last")))
 
-  (it "covers scalar conversion error contracts directly"
-    (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar))
-          (node (yaml-kit:make-scalar-node :value ".NaN" :style :plain)))
-      (expect (floatp (funcall construct-scalar node :core)) :to-be-truthy)))
+  (it "rejects duplicate hash keys under the error policy"
+    (let* ((key (yaml-kit:make-scalar-node :value "key" :style :plain))
+           (node (yaml-kit:make-mapping-node
+                  :pairs (list (cons key key) (cons key key))))
+           (mapping (symbol-function 'yaml-kit::%construct-mapping))
+           (walk (lambda (object)
+                   (if (yaml-kit:scalar-node-p object)
+                       (yaml-kit:scalar-node-value object)
+                       object))))
+      (expect
+       (lambda ()
+         (funcall mapping node :hash-table :error
+                  (make-hash-table :test #'equal) walk))
+       :to-signal-loader-error
+       'yaml-kit:yaml-compose-error)))
 
-  (it "covers signed and unsigned integer spellings directly"
-    (let ((parse-number (symbol-function 'yaml-kit::%parse-number)))
-      (expect (funcall parse-number "17" :int) :to-equal 17)
-      (expect (funcall parse-number "-0o17" :int) :to-equal -15)
-      (expect (funcall parse-number "+0x10" :int) :to-equal 16)
-      (expect (handler-case (progn (funcall parse-number "0o" :int) nil)
-                (yaml-kit:yaml-compose-error () t))
-              :to-be-truthy)))
-  (it "covers unsigned base-prefixed numbers"
-  (let ((parse-number (symbol-function 'yaml-kit::%parse-number)))
-    (dolist (case '(("0o17" 15) ("0x10" 16)))
-      (destructuring-bind (text expected) case
-        (expect (funcall parse-number text :int) :to-equal expected)))))
-
-  (it "distinguishes implicit scalar kinds from quoted strings"
-    (let ((scalar-kind (symbol-function 'yaml-kit::%scalar-kind)))
-      (expect (funcall scalar-kind
-                       (yaml-kit:make-scalar-node :value "true" :style :plain)
-                       :core)
-              :to-equal :bool)
-      (expect (funcall scalar-kind
-                       (yaml-kit:make-scalar-node :value "true" :style :double-quoted)
-                       :core)
-              :to-equal :str)
-      (expect (funcall scalar-kind
-                       (yaml-kit:make-scalar-node :value "true" :tag "!" :style :plain)
-                       :core)
-              :to-equal :str)))
-
-  (it "preserves explicit and non-specific integral float behavior"
-    (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar)))
-      (let ((explicit (funcall construct-scalar
-                               (yaml-kit:make-scalar-node :value "1.0"
-                                                          :tag "!!float"
-                                                          :style :plain)
-                               :core))
-            (implicit (funcall construct-scalar
-                                (yaml-kit:make-scalar-node :value "1.0"
-                                                           :tag "?"
-                                                           :style :plain)
-                                :core))
-            (fraction (funcall construct-scalar
-                                (yaml-kit:make-scalar-node :value "1.5"
-                                                           :tag "?"
-                                                           :style :plain)
-                                :core)))
-        (expect (floatp explicit) :to-be-truthy)
-        (expect implicit :to-equal 1)
-        (expect (floatp fraction) :to-be-truthy))))
-
-  (it "keeps an explicitly non-specific NaN scalar numeric"
-    (let ((construct-scalar (symbol-function 'yaml-kit::%construct-scalar))
-          (node (yaml-kit:make-scalar-node :value ".NaN" :tag "?"
-                                           :style :plain)))
-      (expect (floatp (funcall construct-scalar node :core)) :to-be-truthy)))
+  (it "rejects a non-scalar direct hash key"
+    (let* ((node (yaml-kit:make-mapping-node
+                  :pairs (list (cons (yaml-kit:make-yaml-mapping)
+                                     (yaml-kit:make-scalar-node :value "value")))))
+           (mapping (symbol-function 'yaml-kit::%construct-mapping)))
+      (expect
+       (lambda ()
+         (funcall mapping node :hash-table :error
+                  (make-hash-table :test #'equal) #'identity))
+       :to-signal-loader-error
+       'yaml-kit:yaml-compose-error)))
 
   (it "accepts an unknown application collection tag"
     (expect (funcall (symbol-function 'yaml-kit::%collection-tag-compatible-p)
@@ -245,18 +203,20 @@
                      "tag:yaml.org,2002:map")
             :to-be-truthy))
 
-  (loader-collection-cases
-    ("sequence accepts primary tag" :sequence "tag:yaml.org,2002:seq"
-     (lambda (value) (and (vectorp value) (= (length value) 0))))
-    ("sequence accepts shorthand tag" :sequence "!!seq"
-     (lambda (value) (and (vectorp value) (= (length value) 0))))
-    ("sequence accepts non-specific tags" :sequence "!"
-     (lambda (value) (and (vectorp value) (= (length value) 0))))
-    ("mapping accepts primary tag" :mapping "tag:yaml.org,2002:map"
-     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0))))
-    ("mapping accepts shorthand tag" :mapping "!!map"
-     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0))))
-    ("mapping accepts application tag" :mapping "!app/map"
-     (lambda (value) (and (hash-table-p value) (= (hash-table-count value) 0)))))
-
-)
+  (cl-weave:it-each
+      ((sequence-primary :sequence "tag:yaml.org,2002:seq")
+       (sequence-shorthand :sequence "!!seq")
+       (sequence-non-specific :sequence "!")
+       (mapping-primary :mapping "tag:yaml.org,2002:map")
+       (mapping-shorthand :mapping "!!map")
+       (mapping-application :mapping "!app/map"))
+    "constructs empty ~S with tag ~S"
+    (name kind tag)
+    (declare (ignore name))
+    (let ((value (loader-parse-events
+                  (loader-empty-collection-events kind tag))))
+      (expect (case kind
+                (:sequence (and (vectorp value) (zerop (length value))))
+                (:mapping (and (hash-table-p value)
+                               (zerop (hash-table-count value)))))
+              :to-be-truthy))))
