@@ -1,8 +1,7 @@
 (in-package #:yaml-kit)
 
-(defun parser-resource-error (parser name limit actual span)
-  (declare (ignore parser))
-  (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual :diagnostic (cl-parser-kit:make-diagnostic :message (format nil "~A limit ~S exceeded (actual ~S)" name limit actual) :span span)))
+(defun parser-resource-error (name limit actual span)
+  (%signal-yaml-resource-limit name limit actual :span span :context "YAML"))
 
 (defun append-tag-directive (parser handle prefix allow-duplicates span)
   (when (and (not allow-duplicates)
@@ -22,11 +21,6 @@
                (:version-directive
                 (when (parser-version parser)
                   (parser-error token "found duplicate %YAML directive"))
-                ;; Section 5.3 makes only the major version fatal: a higher minor inside
-                ;; the same family is processed with a warning, so "%YAML 1.3" is a
-                ;; document this reader can handle.
-                (unless (= (token-major token) 1)
-                  (parser-error token "found incompatible YAML document"))
                 (setf (parser-version parser)
                       (cons (token-major token) (token-minor token))))
                (:tag-directive
@@ -40,15 +34,12 @@
 
 (defun parser-tag-token (parser token)
   (let ((handle (token-handle token)) (suffix (token-suffix token)))
-    (cond ((or (null handle) (zerop (length handle))) suffix)
-          ((and (string= handle "!") (> (length suffix) 1)
-                (char= (char suffix 0) #\<)
-                (char= (char suffix (1- (length suffix))) #\>))
-           (subseq suffix 1 (1- (length suffix))))
-          (t (let ((prefix (cdr (find handle (parser-directives parser)
-                                   :key #'car :test #'string= :from-end t))))
-               (unless prefix (parser-error token "found undefined tag handle"))
-               (concatenate 'simple-string prefix suffix))))))
+    (if (or (null handle) (zerop (length handle)))
+        suffix
+        (let ((prefix (cdr (find handle (parser-directives parser)
+                                 :key #'car :test #'string= :from-end t))))
+          (unless prefix (parser-error token "found undefined tag handle"))
+          (concatenate 'simple-string prefix suffix)))))
 
 (declaim (inline parser-implicit-tag-p))
 (defun parser-implicit-tag-p (tag)
@@ -93,9 +84,13 @@
 
 (define-parser-state yaml-parser-parse-document-content (parser)
   (let ((token (parser-peek parser)))
-    (if (member (token-kind token) '(:document-start :document-end :stream-end :block-end))
-        (progn (parser-empty-scalar parser (token-start-span token)) #'yaml-parser-parse-document-end)
-        (progn (parser-push parser #'yaml-parser-parse-document-end) #'yaml-parser-parse-node-block))))
+    (if (member (token-kind token)
+                '(:document-start :document-end :stream-end :block-end))
+        (parser-empty-scalar-state parser (token-start-span token)
+                                   #'yaml-parser-parse-document-end)
+        (parser-push-node-state parser
+                                (#'yaml-parser-parse-document-end)
+                                #'yaml-parser-parse-node-block))))
 
 (define-parser-state yaml-parser-parse-document-end (parser)
   (let ((token (parser-peek parser)) (explicit nil))

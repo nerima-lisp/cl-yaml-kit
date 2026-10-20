@@ -15,6 +15,20 @@
                                      :probe))
     (let ((state (find-symbol "PROBE-PARSER-STATE-EVAL" :cl-yaml-kit/test)))
       (expect (funcall (symbol-function state) nil) :to-equal :probe)))
+(it "expands parser continuations as successive pushes"
+  (let ((body
+          (cddr
+           (macroexpand-1
+            '(yaml-kit::parser-push-node-state parser
+              (#'first-state #'second-state)
+              #'next-state)))))
+    (expect (mapcar #'car (subseq body 0 2))
+            :to-equal
+            '(yaml-kit::parser-push yaml-kit::parser-push))
+    (expect (mapcar #'third (subseq body 0 2))
+            :to-equal
+            '((function first-state) (function second-state)))
+    (expect (car (last body)) :to-equal '(function next-state))))
 (it "uses scanner input for parser peek and next"
     (let* ((scanner (yaml-kit::make-scanner "x"))
            (parser (yaml-kit::make-parser% :scanner scanner :states nil)))
