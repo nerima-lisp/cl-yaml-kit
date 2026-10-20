@@ -1,9 +1,9 @@
 (unless (find-package "ASDF") (require :asdf))
 (load (merge-pathnames "../coverage-gate.lisp" *load-truename*))
 
-(let* ((script-directory (uiop:pathname-directory-pathname *load-truename*))
-       (root (uiop:pathname-parent-directory-pathname
-              (uiop:pathname-parent-directory-pathname script-directory)))
+(load (merge-pathnames "project-root.lisp" *load-truename*))
+
+(let* ((root (coverage-reproduction-project-root *load-truename*))
        (pathname (merge-pathnames "scripts/coverage-gate.lisp" root))
        (statistics
          (list (list :pathname pathname

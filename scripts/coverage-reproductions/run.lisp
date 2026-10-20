@@ -3,9 +3,9 @@
 (unless (find-package "SB-COVER") (require :sb-cover))
 (load (merge-pathnames "../coverage-gate.lisp" *load-truename*))
 
-(let* ((script-directory (uiop:pathname-directory-pathname *load-truename*))
-       (root (uiop:pathname-parent-directory-pathname
-              (uiop:pathname-parent-directory-pathname script-directory)))
+(load (merge-pathnames "project-root.lisp" *load-truename*))
+
+(let* ((root (coverage-reproduction-project-root *load-truename*))
        (fixture-directory (merge-pathnames "scripts/coverage-reproductions/" root))
        (fixture-name "nested-runtime-expressions.lisp"))
   (unless (find-package "CL-WEAVE") (asdf:load-system "cl-weave"))
@@ -38,7 +38,7 @@
                     (find (file-namestring fixture) statistics
                           :key (lambda (item)
                                  (file-namestring (getf item :pathname)))
-                          :test (function string=))))
+                          :test #'string=)))
              (unless file-statistics
                (error "SB-COVER recorded no statistics for the nested runtime fixture."))
              (let* ((nested-expression
@@ -63,10 +63,10 @@
                         test-statistics source (list rule))))
                  (unless (find "defparameter" (getf verdict :excluded)
                                :key (lambda (item) (getf item :head))
-                               :test (function equal))
+                               :test #'equal)
                    (error "The gate did not recognize the synthetic whole-form exclusion."))
                  (unless (member nested-expression (getf verdict :unexcused)
-                                 :test (function equal))
+                                 :test #'equal)
                    (error "The gate hid a nested runtime expression in the excluded form."))
                  (format t "synthetic whole-form exclusion leaves nested runtime expressions uncovered: PASS~%")))))
       (when (probe-file fasl)
