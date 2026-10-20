@@ -42,7 +42,7 @@ Parse errors also moved their location from separate condition slots to a diagno
 
 ## Scanner functions are no longer public
 
-The exported `make-scanner`, `scanner-peek-token`, and `scanner-next-token` functions were removed. The v0.3.0 package still exports event-level `map-events` and `parse-events`, but these expose events rather than the scanner's token-by-token interface. Use them only when event-level processing meets the caller's needs; v0.3.0 has no exported token-scanning replacement.
+The v0.2.1 exports `make-scanner`, `scanner-peek-token`, and `scanner-next-token` are no longer public in v0.3.0. The v0.3.0 package still exports event-level `map-events` and `parse-events`, but these expose events rather than the scanner's token-by-token interface. Use them only when event-level processing meets the caller's needs; v0.3.0 has no exported token-scanning replacement.
 
 ```lisp
 ;; v0.2.1
@@ -53,7 +53,7 @@ The exported `make-scanner`, `scanner-peek-token`, and `scanner-next-token` func
 (yaml-kit:map-events #'handle-event input)
 ```
 
-The removed exports are listed in the v0.2.1 package definition. The v0.3.0 package exports `map-events` and `parse-events` as event APIs. [v0.2.1 `src/package.lisp:13-23`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/package.lisp#L13-L23), [v0.3.0 `src/package.lisp:5-10`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/package.lisp#L5-L10), [v0.3.0 `src/parser-entry.lisp:49-62`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/parser-entry.lisp#L49-L62)
+The removed exports are listed in the v0.2.1 package definition. The v0.3.0 package exports `map-events` and `parse-events` as event APIs. [v0.2.1 `src/package.lisp:18`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/package.lisp#L18), [v0.3.0 `src/package.lisp:5-10`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/package.lisp#L5-L10), [v0.3.0 `src/parser-entry.lisp:49-62`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/parser-entry.lisp#L49-L62)
 
 ## Implicit flow-sequence mappings emit corrected events
 
@@ -198,10 +198,9 @@ Validate or normalize replacement strings before editing if they may contain the
 | --- | --- | --- | --- |
 | Invalid YAML byte input | The decoder detail is stored as the parse error message under context `invalid YAML input`. | The diagnostic message starts with `invalid YAML input: ` followed by the decoder detail. | Match the condition type or inspect the diagnostic instead of matching the full rendered text. |
 | Invalid source encoding during `edit-source` | The decoder or encoder detail is stored as the parse error message under context `invalid source encoding`. | The diagnostic message starts with `invalid source encoding: ` followed by the detail. | Apply the same diagnostic-based handling as invalid YAML byte input. |
-| Incompatible YAML major version | The scanner reports `found incompatible YAML document`. | The scanner reports `found incompatible YAML major version`. | Update exact-message assertions and use the diagnostic message for display. |
 | Duplicate key in alist construction | The compose error cause says `non-scalar mapping key`. | The diagnostic and cause say `duplicate mapping key`. | Update exact-message assertions; the new message names the duplicate-key failure. |
 
-These messages are constructed at the cited error paths. [v0.2.1 `src/parser-entry.lisp:30-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/parser-entry.lisp#L30-L39), [v0.3.0 `src/parser-entry.lisp:30-47`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/parser-entry.lisp#L30-L47); [v0.2.1 `src/format-preserving-edit-source.lisp:63-69`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/format-preserving-edit-source.lisp#L63-L69), [v0.3.0 `src/format-preserving-edit-source.lisp:73-83`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/format-preserving-edit-source.lisp#L73-L83); [v0.2.1 `src/parser.lisp:24-34`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/parser.lisp#L24-L34), [v0.3.0 `src/scanner-directives.lisp:40-46`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/scanner-directives.lisp#L40-L46); [v0.2.1 `src/constructor-collections.lisp:24-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/constructor-collections.lisp#L24-L39), [v0.3.0 `src/constructor-collections.lisp:24-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/constructor-collections.lisp#L24-L39)
+These messages are constructed at the cited error paths. [v0.2.1 `src/parser-entry.lisp:30-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/parser-entry.lisp#L30-L39), [v0.3.0 `src/parser-entry.lisp:30-47`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/parser-entry.lisp#L30-L47); [v0.2.1 `src/format-preserving-edit-source.lisp:63-69`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/format-preserving-edit-source.lisp#L63-L69), [v0.3.0 `src/format-preserving-edit-source.lisp:73-83`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/format-preserving-edit-source.lisp#L73-L83); [v0.2.1 `src/constructor-collections.lisp:24-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/91ea1ea94de590eb6521e9c2d4ccd6b2619ba57e/src/constructor-collections.lisp#L24-L39), [v0.3.0 `src/constructor-collections.lisp:24-39`](https://github.com/nerima-lisp/cl-yaml-kit/blob/v0.3.0/src/constructor-collections.lisp#L24-L39)
 
 ## Complete public export difference
 
