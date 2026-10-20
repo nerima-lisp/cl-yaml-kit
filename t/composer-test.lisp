@@ -16,8 +16,13 @@
                   (yaml-kit:make-stream-end-event)))))
     (expect (lambda ()
               (yaml-kit:compose-all-events event-source :max-nodes 0))
-            :to-signal-parser-error
-            (list 'yaml-kit:yaml-resource-limit-error nil span))))
+            :to-throw
+            (lambda (condition)
+              (and (typep condition 'yaml-kit:yaml-resource-limit-error)
+                   (let ((diagnostic (yaml-kit:yaml-kit-error-diagnostic condition)))
+                     (and (string= "YAML resource limit \"nodes\" exceeded: limit 0, actual 1"
+                                   (cl-parser-kit:diagnostic-message diagnostic))
+                          (equal span (cl-parser-kit:diagnostic-span diagnostic)))))))))
 
 (it "returns only primary composer continuation values"
   (let ((event-source
@@ -38,6 +43,7 @@
                 (values :primary :secondary))))
             :to-equal
             '(:primary))))
+
 (it "ignores an event source return value without a document"
   (expect (yaml-kit:compose-all-events
            (lambda (handler)
@@ -45,6 +51,7 @@
              :unrelated)
            :first-only t)
           :to-equal nil))
+
 (it "keeps compose-events first-only when options include first-only"
   (let* ((events (yaml-kit:parse-events
                   #.(format nil "first~%---~%second")))
