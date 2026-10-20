@@ -12,8 +12,8 @@ what value it receives.
 ## Reading and composing
 
 An event source is a function that receives a handler and sends events to it.
-The signatures call this function `events` for `compose-events` and
-`compose-all-events`.
+The non-`/k` signatures call this function `events`; the `/k` signatures call it
+`event-source`.
 
 | Symbol and lambda list | Returns | Signals |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ The signatures call this function `events` for `compose-events` and
 | `map-events/k handler input k &key max-input-length max-depth max-scalar-length` | Primary value returned by `k`; calls `k` once with `nil` after all events | Same as `map-events` |
 | `comment-spans input &key max-input-length` | Ordered list of `(start . end)` comment spans | `yaml-parse-error`, `yaml-resource-limit-error` |
 | `comment-spans/k input k &key max-input-length` | Primary value returned by `k`; calls `k` once with the comment-span list | Same as `comment-spans` |
-| `compose-events events &rest keys` | First representation node (root of the graph); `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
+| `compose-events events &rest options` | First representation node (root of the graph); `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose-events/k event-source k &key max-depth max-scalar-length max-nodes max-alias-expansions` | Primary value returned by `k`; calls `k` once with the first node or `nil` | Same as `compose-events` |
 | `compose-all-events events &key max-depth max-scalar-length max-nodes max-alias-expansions first-only document-handler` | Varies with `:first-only` and `:document-handler`; see below. `events` is a function that accepts a handler and sends each event to it | `yaml-compose-error`, `yaml-resource-limit-error` |
 | `compose-all-events/k event-source k &key max-depth max-scalar-length max-nodes max-alias-expansions first-only document-handler` | Primary value returned by `k`; calls `k` once with the result described for `compose-all-events` | Same as `compose-all-events` |
