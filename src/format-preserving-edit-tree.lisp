@@ -23,87 +23,93 @@
       (%format-edit-structure-error nil "event has no source span"))
     (cl-parser-kit:span-start span)))
 
+(defun %format-edit-node-event-p (events index predicate)
+  (and (<= 0 index)
+       (< index (length events))
+       (funcall predicate (aref events index))))
+
+(defun %format-edit-event-node (kind event end-event &optional contents value)
+  (%make-format-edit-node
+   :kind kind
+   :start (%format-edit-event-offset event #'event-start-span)
+   :end (%format-edit-event-offset end-event #'event-end-span)
+   :anchor (%event-attribute event :anchor)
+   :tag (unless (eq kind :alias) (%event-attribute event :tag))
+   :style (unless (eq kind :alias) (%event-attribute event :style))
+   :value value
+   :children (when (eq kind :sequence) contents)
+   :pairs (when (eq kind :mapping) contents)))
+
+(defun %format-edit-parse-container-event-node
+    (events index kind end-predicate)
+  (let ((event (aref events index))
+        (next (1+ index))
+        (contents nil))
+    (loop while (and (< next (length events))
+                     (not (funcall end-predicate (aref events next))))
+          do (multiple-value-bind (child after-child)
+                 (%format-edit-node-from-events-at events next)
+               (if (eq kind :mapping)
+                   (multiple-value-bind (value after-value)
+                       (%format-edit-node-from-events-at events after-child)
+                     (push (%make-format-edit-pair :key child :value value)
+                           contents)
+                     (setf next after-value))
+                   (progn
+                     (push child contents)
+                     (setf next after-child)))))
+    (unless (< next (length events))
+      (%format-edit-structure-error nil "collection has no end event"))
+    (values (%format-edit-event-node
+             kind event (aref events next) (nreverse contents))
+            (1+ next))))
+
+(defun %format-edit-node-from-events-at (events index)
+  (unless (< index (length events))
+    (%format-edit-structure-error nil "unexpected end while building edit tree"))
+  (let ((event (aref events index)))
+    (cond
+      ((scalar-event-p event)
+       (values (%format-edit-event-node
+                :scalar event event nil (scalar-event-value event))
+               (1+ index)))
+      ((alias-event-p event)
+       (values (%format-edit-event-node :alias event event) (1+ index)))
+      ((sequence-start-event-p event)
+       (%format-edit-parse-container-event-node
+        events index :sequence #'sequence-end-event-p))
+      ((mapping-start-event-p event)
+       (%format-edit-parse-container-event-node
+        events index :mapping #'mapping-end-event-p))
+      (t
+       (%format-edit-structure-error
+        nil "unexpected event while building edit tree")))))
+
 (defun %format-edit-node-from-events (events)
-  (let ((events (coerce events 'vector)))
-    (labels ((parse-node (index)
-               (let ((event (aref events index)))
-                 (cond
-                   ((scalar-event-p event)
-                    (values (%make-format-edit-node
-                             :kind :scalar
-                             :start (%format-edit-event-offset event #'event-start-span)
-                             :end (%format-edit-event-offset event #'event-end-span)
-                             :anchor (scalar-event-anchor event)
-                             :tag (scalar-event-tag event)
-                             :style (scalar-event-style event)
-                             :value (scalar-event-value event))
-                            (1+ index)))
-                   ((alias-event-p event)
-                    (values (%make-format-edit-node
-                             :kind :alias
-                             :start (%format-edit-event-offset event #'event-start-span)
-                             :end (%format-edit-event-offset event #'event-end-span)
-                             :anchor (alias-event-anchor event))
-                            (1+ index)))
-                   ((sequence-start-event-p event)
-                    (let ((children nil)
-                          (next (1+ index)))
-                      (loop until (sequence-end-event-p (aref events next))
-                            do (multiple-value-bind (child new-next) (parse-node next)
-                                 (push child children)
-                                 (setf next new-next)))
-                      (let ((end-event (aref events next)))
-                        (values (%make-format-edit-node
-                                 :kind :sequence
-                                 :start (%format-edit-event-offset event #'event-start-span)
-                                 :end (%format-edit-event-offset end-event #'event-end-span)
-                                 :anchor (sequence-start-event-anchor event)
-                                 :tag (sequence-start-event-tag event)
-                                 :style (sequence-start-event-style event)
-                                 :children (nreverse children))
-                                (1+ next)))))
-                   ((mapping-start-event-p event)
-                    (let ((pairs nil)
-                          (next (1+ index)))
-                      (loop until (mapping-end-event-p (aref events next))
-                            do (multiple-value-bind (key after-key) (parse-node next)
-                                 (multiple-value-bind (value after-value) (parse-node after-key)
-                                   (push (%make-format-edit-pair :key key :value value) pairs)
-                                   (setf next after-value))))
-                      (let ((end-event (aref events next)))
-                        (values (%make-format-edit-node
-                                 :kind :mapping
-                                 :start (%format-edit-event-offset event #'event-start-span)
-                                 :end (%format-edit-event-offset end-event #'event-end-span)
-                                 :anchor (mapping-start-event-anchor event)
-                                 :tag (mapping-start-event-tag event)
-                                 :style (mapping-start-event-style event)
-                                 :pairs (nreverse pairs))
-                                (1+ next)))))
-                   (t
-                    (%format-edit-structure-error nil "unexpected event while building edit tree"))))))
-      (let ((index 0)
-            (roots nil))
-        (unless (and (< index (length events))
-                     (stream-start-event-p (aref events index)))
-          (%format-edit-structure-error nil "event stream has no stream start"))
-        (incf index)
-        (loop until (and (< index (length events))
-                         (stream-end-event-p (aref events index)))
-              do (unless (and (< index (length events))
-                              (document-start-event-p (aref events index)))
-                   (%format-edit-structure-error nil "event stream has an invalid document boundary"))
-                 (incf index)
-                 (multiple-value-bind (root after-root) (parse-node index)
-                   (push root roots)
-                   (setf index after-root))
-                 (unless (and (< index (length events))
-                              (document-end-event-p (aref events index)))
-                   (%format-edit-structure-error nil "document has no end event"))
-                 (incf index))
-        (unless (< index (length events))
-          (%format-edit-structure-error nil "event stream has no stream end"))
-        (nreverse roots)))))
+  (let* ((events (coerce events 'vector))
+         (event-count (length events)))
+    (unless (%format-edit-node-event-p events 0 #'stream-start-event-p)
+      (%format-edit-structure-error nil "event stream has no stream start"))
+    (loop with index = 1
+          with roots = nil
+          while (and (< index event-count)
+                     (not (stream-end-event-p (aref events index))))
+          do (unless (%format-edit-node-event-p
+                      events index #'document-start-event-p)
+               (%format-edit-structure-error
+                nil "event stream has an invalid document boundary"))
+             (multiple-value-bind (root after-root)
+                 (%format-edit-node-from-events-at events (1+ index))
+               (push root roots)
+               (setf index after-root))
+             (unless (%format-edit-node-event-p
+                      events index #'document-end-event-p)
+               (%format-edit-structure-error nil "document has no end event"))
+             (incf index)
+          finally
+             (unless (< index event-count)
+               (%format-edit-structure-error nil "event stream has no stream end"))
+             (return (nreverse roots)))))
 
 (defun %format-edit-map-pair (node key)
   (unless (stringp key)
@@ -139,11 +145,10 @@
     (let* ((start (format-edit-node-start node))
            (line-start (%format-edit-line-start text start))
            (prefix (subseq text line-start start))
-           (dash (position #\- prefix :from-end t)))
+           (dash (position *format-edit-sequence-indicator-character*
+                           prefix :from-end t)))
       (and dash
-           (every (lambda (character)
-                    (member character '(#\Space #\Tab)))
-                   (subseq prefix (1+ dash)))))))
+           (every #'yaml-whitespace-p (subseq prefix (1+ dash)))))))
 
 (defun %format-edit-only-child-p (node)
   (case (format-edit-node-kind node)
@@ -155,9 +160,7 @@
   (let ((start (format-edit-node-start node))
         (end (format-edit-node-end node)))
     (and (< start end)
-         (not (find-if (lambda (character)
-                         (member character '(#\Return #\Newline)))
-                       (subseq text start end))))))
+         (not (find-if #'yaml-line-break-p (subseq text start end))))))
 
 (defun %format-edit-check-set-node (text node path)
   (unless (eq (format-edit-node-kind node) :scalar)
@@ -183,42 +186,43 @@
     (%format-edit-anchor-error path (format-edit-node-anchor node)
                                "anchor or alias is involved")))
 
+(defun %format-edit-find-map-child (node part path document operation)
+  (unless (stringp part)
+    (%format-edit-path-error path document operation
+                             "mapping path components must be strings"))
+  (when (%format-edit-map-duplicate-key-p node)
+    (%format-edit-structure-error path "duplicate mapping keys are not supported"))
+  (when (%format-edit-map-merge-key-p node)
+    (%format-edit-structure-error path "merge-key mappings are not supported"))
+  (let ((pair (%format-edit-map-pair node part)))
+    (when pair
+      (let ((key (format-edit-pair-key pair)))
+        (when (%format-edit-node-anchored-p key)
+          (%format-edit-anchor-error path (format-edit-node-anchor key)
+                                     "mapping key has an anchor or alias")))
+      (values (format-edit-pair-value pair) t))))
+
 (defun %format-edit-find (root path document operation)
   (let ((node root) (parent nil) (component nil))
     (dolist (part path)
       (when (format-edit-node-tag node)
-        (%format-edit-structure-error path
-                                      "edits through tagged nodes are not supported"))
+        (%format-edit-structure-error
+         path "edits through tagged nodes are not supported"))
       (when (%format-edit-node-anchored-p node)
         (%format-edit-anchor-error path (format-edit-node-anchor node)
                                    "path crosses an anchor or alias"))
       (case (format-edit-node-kind node)
         (:mapping
-         (unless (stringp part)
-           (%format-edit-path-error path document operation
-                               "mapping path components must be strings"))
-         (when (%format-edit-map-duplicate-key-p node)
-           (%format-edit-structure-error path "duplicate mapping keys are not supported"))
-         (when (%format-edit-map-merge-key-p node)
-           (%format-edit-structure-error path "merge-key mappings are not supported"))
-         (let ((pair (%format-edit-map-pair node part)))
-           (unless pair (return-from %format-edit-find
-                          (values nil node part)))
-           (let ((key (format-edit-pair-key pair)))
-             (when (%format-edit-node-anchored-p key)
-               (%format-edit-anchor-error path (format-edit-node-anchor key)
-                                          "mapping key has an anchor or alias")))
-           (setf parent node
-                 component part
-                 node (format-edit-pair-value pair))))
+         (multiple-value-bind (child presentp)
+             (%format-edit-find-map-child node part path document operation)
+           (unless presentp
+             (return-from %format-edit-find (values nil node part)))
+           (setf parent node component part node child)))
         (:sequence
-         (unless (and (integerp part) (<= 0 part)
-                      (< part (length (format-edit-node-children node))))
-           (return-from %format-edit-find
-             (values nil node part)))
-         (setf parent node
-               component part
-               node (nth part (format-edit-node-children node))))
+         (let ((children (format-edit-node-children node)))
+           (unless (%format-edit-sequence-index-p part (length children))
+             (return-from %format-edit-find (values nil node part)))
+           (setf parent node component part node (nth part children))))
         (otherwise
          (return-from %format-edit-find
            (values nil node component)))))

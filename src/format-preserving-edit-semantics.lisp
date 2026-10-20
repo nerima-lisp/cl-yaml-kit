@@ -1,169 +1,193 @@
 (in-package #:yaml-kit)
 
+(defun %format-edit-semantic-sequence-child (container component)
+  (if (%format-edit-sequence-index-p component (length container))
+      (values (elt container component) t)
+      (values nil nil)))
+
 (defun %format-edit-semantic-child (container component)
-  (cond
-    ((hash-table-p container)
-     (gethash component container))
-    ((yaml-mapping-p container)
-     (let ((entry (assoc component (yaml-mapping-entries container) :test #'equal)))
+  (%format-edit-container-case (container kind) container
+    (:hash-table (gethash component container))
+    (:yaml-mapping
+     (let ((entry (assoc component (yaml-mapping-entries container)
+                         :test #'equal)))
        (if entry (values (cdr entry) t) (values nil nil))))
-    ((vectorp container)
-     (if (and (integerp component) (<= 0 component)
-              (< component (length container)))
-         (values (aref container component) t)
-         (values nil nil)))
-    ((listp container)
-     (if (and (integerp component) (<= 0 component)
-              (< component (length container)))
-         (values (nth component container) t)
-         (values nil nil)))
-    (t (values nil nil))))
+    ((:vector :list)
+     (%format-edit-semantic-sequence-child container component))
+    (otherwise (values nil nil))))
 
 (defun %format-edit-semantic-copy (value)
-  (cond
-    ((hash-table-p value)
+  (%format-edit-container-case (value kind) value
+    (:hash-table
      (let ((copy (make-hash-table :test (hash-table-test value))))
        (maphash (lambda (key item)
                   (setf (gethash key copy)
                         (%format-edit-semantic-copy item)))
                 value)
        copy))
-    ((yaml-mapping-p value)
+    (:yaml-mapping
      (make-yaml-mapping
       (mapcar (lambda (entry)
                 (cons (car entry) (%format-edit-semantic-copy (cdr entry))))
               (yaml-mapping-entries value))))
-    ((stringp value) value)
-    ((vectorp value)
-     (map 'vector #'%format-edit-semantic-copy value))
-    ((consp value)
-     (mapcar #'%format-edit-semantic-copy value))
-    (t value)))
+    (:vector
+     (if (stringp value)
+         value
+         (map 'vector #'%format-edit-semantic-copy value)))
+    (:list
+     (if (consp value)
+         (mapcar #'%format-edit-semantic-copy value)
+         value))
+    (otherwise value)))
+
+(defun %format-edit-semantic-sequence-replace-child
+    (container component child path)
+  (unless (%format-edit-sequence-index-p component (length container))
+    (%format-edit-structure-error path "semantic edit index is out of range"))
+  (let ((copy (copy-seq container)))
+    (setf (elt copy component) child)
+    copy))
 
 (defun %format-edit-semantic-replace-child (container component child path)
-  (cond
-    ((hash-table-p container)
+  (%format-edit-container-case (container kind) container
+    (:hash-table
      (let ((copy (%format-edit-semantic-copy container)))
        (setf (gethash component copy) child)
        copy))
-    ((yaml-mapping-p container)
-     (let ((entries
-             (mapcar (lambda (entry)
-                       (if (equal (car entry) component)
-                           (cons (car entry) child)
-                           entry))
-                     (yaml-mapping-entries container))))
-       (make-yaml-mapping entries)))
-    ((vectorp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (< component (length container)))
-       (%format-edit-structure-error path "semantic edit index is out of range"))
-     (let ((copy (copy-seq container)))
-       (setf (aref copy component) child)
-       copy))
-    ((listp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (< component (length container)))
-       (%format-edit-structure-error path "semantic edit index is out of range"))
-     (let ((copy (copy-list container)))
-       (setf (nth component copy) child)
-       copy))
-    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+    (:yaml-mapping
+     (make-yaml-mapping
+      (mapcar (lambda (entry)
+                (if (equal (car entry) component)
+                    (cons (car entry) child)
+                    entry))
+              (yaml-mapping-entries container))))
+    ((:vector :list)
+     (%format-edit-semantic-sequence-replace-child
+      container component child path))
+    (otherwise
+     (%format-edit-structure-error path
+                                   "semantic edit parent is not a collection"))))
 
-(defun %format-edit-semantic-set-at (value path replacement error-path)
-  (if (null path)
-      replacement
+(defun %format-edit-semantic-change-child
+    (value component replacement operation error-path)
+  (case operation
+    (:set
+     (unless (nth-value 1 (%format-edit-semantic-child value component))
+       (%format-edit-structure-error
+        error-path "edited path is absent from the original value"))
+     (%format-edit-semantic-replace-child
+      value component replacement error-path))
+    (:add
+     (%format-edit-semantic-add-child value component replacement error-path))
+    (:delete
+     (%format-edit-semantic-delete-child value component error-path))
+    (otherwise
+     (%format-edit-structure-error error-path
+                                   "unknown semantic edit operation"))))
+
+(defun %format-edit-semantic-change-at
+    (value path replacement operation error-path)
+  (when (null path)
+    (return-from %format-edit-semantic-change-at
+      (case operation
+        (:set replacement)
+        (:add
+         (%format-edit-structure-error error-path "cannot add at an empty path"))
+        (:delete
+         (%format-edit-structure-error error-path
+                                       "cannot delete at an empty path"))
+        (otherwise
+         (%format-edit-structure-error error-path
+                                       "unknown semantic edit operation")))))
+  (if (null (cdr path))
+      (%format-edit-semantic-change-child
+       value (car path) replacement operation error-path)
       (multiple-value-bind (child presentp)
           (%format-edit-semantic-child value (car path))
         (unless presentp
-          (%format-edit-structure-error error-path
-                                        "edited path is absent from the original value"))
+          (%format-edit-structure-error
+           error-path
+           (case operation
+             (:set "edited path is absent from the original value")
+             (:add "an intermediate path component is absent")
+             (:delete "deleted path is absent")
+             (otherwise "unknown semantic edit operation"))))
         (%format-edit-semantic-replace-child
          value (car path)
-         (%format-edit-semantic-set-at child (cdr path) replacement error-path)
+         (%format-edit-semantic-change-at
+          child (cdr path) replacement operation error-path)
          error-path))))
 
+(defun %format-edit-semantic-set-at (value path replacement error-path)
+  (%format-edit-semantic-change-at
+   value path replacement :set error-path))
+
+(defun %format-edit-semantic-sequence-add-child
+    (container component child path)
+  (unless (%format-edit-sequence-index-p component (length container) t)
+    (%format-edit-structure-error
+     path "semantic sequence edit is not append-only"))
+  (if (vectorp container)
+      (concatenate 'vector container (vector child))
+      (append container (list child))))
+
 (defun %format-edit-semantic-add-child (container component child path)
-  (cond
-    ((hash-table-p container)
+  (%format-edit-container-case (container kind) container
+    (:hash-table
      (when (nth-value 1 (gethash component container))
        (%format-edit-structure-error path "added path already exists"))
      (let ((copy (%format-edit-semantic-copy container)))
        (setf (gethash component copy) child)
        copy))
-    ((yaml-mapping-p container)
+    (:yaml-mapping
      (when (assoc component (yaml-mapping-entries container) :test #'equal)
        (%format-edit-structure-error path "added path already exists"))
      (make-yaml-mapping
       (append (yaml-mapping-entries container)
               (list (cons component child)))))
-    ((vectorp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (= component (length container)))
-       (%format-edit-structure-error path "semantic sequence edit is not append-only"))
-     (concatenate 'vector container (vector child)))
-    ((listp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (= component (length container)))
-       (%format-edit-structure-error path "semantic sequence edit is not append-only"))
-     (append container (list child)))
-    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+    ((:vector :list)
+     (%format-edit-semantic-sequence-add-child container component child path))
+    (otherwise
+     (%format-edit-structure-error path
+                                   "semantic edit parent is not a collection"))))
 
 (defun %format-edit-semantic-add-at (value path replacement error-path)
-  (when (null path)
-    (%format-edit-structure-error error-path "cannot add at an empty path"))
-  (if (null (cdr path))
-      (%format-edit-semantic-add-child value (car path) replacement error-path)
-      (multiple-value-bind (child presentp)
-          (%format-edit-semantic-child value (car path))
-        (unless presentp
-          (%format-edit-structure-error error-path
-                                        "an intermediate path component is absent"))
-        (%format-edit-semantic-replace-child
-         value (car path)
-         (%format-edit-semantic-add-at child (cdr path) replacement error-path)
-         error-path))))
+  (%format-edit-semantic-change-at
+   value path replacement :add error-path))
+
+(defun %format-edit-semantic-sequence-delete-child
+    (container component path)
+  (unless (%format-edit-sequence-index-p component (length container))
+    (%format-edit-structure-error path "semantic edit index is out of range"))
+  (if (vectorp container)
+      (concatenate 'vector (subseq container 0 component)
+                   (subseq container (1+ component)))
+      (append (subseq container 0 component)
+              (nthcdr (1+ component) container))))
 
 (defun %format-edit-semantic-delete-child (container component path)
-  (cond
-    ((hash-table-p container)
+  (%format-edit-container-case (container kind) container
+    (:hash-table
      (unless (nth-value 1 (gethash component container))
        (%format-edit-structure-error path "deleted path is absent"))
      (let ((copy (%format-edit-semantic-copy container)))
        (remhash component copy)
        copy))
-    ((yaml-mapping-p container)
+    (:yaml-mapping
      (unless (assoc component (yaml-mapping-entries container) :test #'equal)
        (%format-edit-structure-error path "deleted path is absent"))
      (make-yaml-mapping
       (remove component (yaml-mapping-entries container)
               :key #'car :test #'equal)))
-    ((vectorp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (< component (length container)))
-       (%format-edit-structure-error path "semantic edit index is out of range"))
-     (concatenate 'vector (subseq container 0 component)
-                  (subseq container (1+ component))))
-    ((listp container)
-     (unless (and (integerp component) (<= 0 component)
-                  (< component (length container)))
-       (%format-edit-structure-error path "semantic edit index is out of range"))
-     (append (subseq container 0 component) (nthcdr (1+ component) container)))
-    (t (%format-edit-structure-error path "semantic edit parent is not a collection"))))
+    ((:vector :list)
+     (%format-edit-semantic-sequence-delete-child container component path))
+    (otherwise
+     (%format-edit-structure-error path
+                                   "semantic edit parent is not a collection"))))
 
 (defun %format-edit-semantic-delete-at (value path error-path)
-  (when (null path)
-    (%format-edit-structure-error error-path "cannot delete at an empty path"))
-  (if (null (cdr path))
-      (%format-edit-semantic-delete-child value (car path) error-path)
-      (multiple-value-bind (child presentp)
-          (%format-edit-semantic-child value (car path))
-        (unless presentp
-          (%format-edit-structure-error error-path "deleted path is absent"))
-        (%format-edit-semantic-replace-child
-         value (car path)
-         (%format-edit-semantic-delete-at child (cdr path) error-path)
-         error-path))))
+  (%format-edit-semantic-change-at
+   value path nil :delete error-path))
 
 (defun %format-edit-semantic-equal-p (left right)
   (cond
@@ -187,6 +211,8 @@
                            (%format-edit-semantic-equal-p
                             (cdr entry) (cdr other)))))
                    left-entries))))
+    ((or (stringp left) (stringp right))
+     (and (stringp left) (stringp right) (string= left right)))
     ((and (vectorp left) (vectorp right))
      (and (= (length left) (length right))
           (loop for index below (length left)
