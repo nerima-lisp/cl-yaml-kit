@@ -3,7 +3,7 @@
 (defparameter *yaml-escape-table*
   (let ((table (make-hash-table :test 'eql)))
     (setf (gethash #\Null table) "\\0"
-          (gethash #\Bell table) "\\a"
+          (gethash (code-char #x07) table) "\\a"
           (gethash #\Backspace table) "\\b"
           (gethash #\Tab table) "\\t"
           (gethash #\Newline table) "\\n"
