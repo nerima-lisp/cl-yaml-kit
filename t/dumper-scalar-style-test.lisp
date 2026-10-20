@@ -1,72 +1,79 @@
 (in-package #:cl-yaml-kit/test)
 
-(cl-weave:it-each
-    ((tagged "tag:example.org,2026:str> \"value\"" :double-quoted "tag:example.org,2026:str" "value\"")
-     (anchored "anchor :value" :plain nil "value"))
-  "normalizes scalar event prefixes ~S"
-  (name value style tag expected)
-  (declare (ignore name))
-  (let ((event (yaml-kit::%normalize-scalar-event
-                (yaml-kit:make-scalar-event :value value :style :plain))))
-    (expect (yaml-kit::scalar-event-style event) :to-equal style)
-    (expect (yaml-kit::scalar-event-tag event) :to-equal tag)
-    (expect (yaml-kit::scalar-event-value event) :to-equal expected)))
-
 (cl-weave:it
- "covers direct scalar writer branches"
+ "writes scalar styles directly"
  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
    (yaml-kit::%write-block-scalar (format nil "a~%~%b") context nil 2 nil)
    (yaml-kit::%write-single-quoted (format nil "a'b~%~%c") context 2)
    (yaml-kit::%write-plain (format nil "a~%b") context)
    (yaml-kit::%write-double-quoted
     (string (code-char #xfeff)) context)
-   (expect (search "|" (get-output-stream-string
-           (yaml-kit::emitter-context-stream context)))
-           :to-be-truthy)))
+   (expect (get-output-stream-string
+            (yaml-kit::emitter-context-stream context))
+           :to-equal (format nil "|-~%  a~%~%  b~%'a''b~%~%~%  c'a~%~%b\"\\uFEFF\""))))
 
 (cl-weave:it-each
-    ((bang "!")
-     (local "!local")
-     (tag "tag:example.org,2026:type")
-     (plain "custom"))
-  "emits direct tag prefixes ~S"
-  (name tag)
+    ((verbatim-tag nil "!" "! ")
+     (local-tag nil "!local" "!local ")
+     (global-tag nil "tag:example.org,2026:type"
+                 "!<tag:example.org,2026:type> ")
+     (custom-tag nil "custom" "!custom ")
+     (implicit-string nil "tag:yaml.org,2002:str" "")
+     (anchored "node" nil "&node "))
+  "emits tag and anchor prefixes ~S"
+  (name anchor tag expected)
   (declare (ignore name))
   (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
     (yaml-kit::%emit-prefix
-     (yaml-kit:make-scalar-event :tag tag :value "x") context)
-    (expect (not (null (search "!"
-                               (get-output-stream-string
-                                (yaml-kit::emitter-context-stream context)))))
-            :to-equal t)))
+     (yaml-kit:make-scalar-event :anchor anchor :tag tag :value "x") context)
+    (expect (get-output-stream-string
+             (yaml-kit::emitter-context-stream context))
+            :to-equal expected)))
 
 (cl-weave:it
- "covers blank-line and character state helpers"
- (expect (yaml-kit::%blank-line-p "" 0) :to-be-truthy)
- (expect (yaml-kit::%blank-line-p "  " 0) :to-be-truthy)
- (expect (yaml-kit::%blank-line-p #.(format nil "x~%") 0) :to-equal nil)
- (expect (yaml-kit::%blank-line-p #.(format nil " ~%") 0) :to-be-truthy)
- (expect (yaml-kit::%blank-line-p "x" 0) :to-be-truthy)
+ "tracks emitter character state"
  (let ((context (yaml-kit::make-emitter-context (make-string-output-stream) 2)))
    (yaml-kit::%emit-char context #\A)
    (expect (yaml-kit::emitter-context-column context) :to-equal 1)
    (yaml-kit::%emit-char context #\Newline)
+   (expect (yaml-kit::emitter-context-column context) :to-equal 0)
    (expect (yaml-kit::emitter-context-line-start context) :to-equal t)))
 
 (cl-weave:it-each
-    ((document-start "---")
-     (document-end "...")
-     (flow-colon "a: b")
-     (plain-colon "a:b")
-     (hash-start "#x")
-     (hash-middle "a #x")
-     (dash "- x")
-     (dash-word "-x")
-     (space-break "a \nb"))
-  "covers scalar analysis boundaries ~S"
-  (name value)
+    ((document-start "---"
+                     (:multiline nil :flow-plain nil :block-plain nil
+                       :single-quoted t :block t))
+     (document-end "..."
+                   (:multiline nil :flow-plain nil :block-plain nil
+                     :single-quoted t :block t))
+     (flow-colon "a: b"
+                 (:multiline nil :flow-plain nil :block-plain nil
+                   :single-quoted t :block t))
+     (plain-colon "a:b"
+                  (:multiline nil :flow-plain nil :block-plain t
+                    :single-quoted t :block t))
+     (flow-question "a?b"
+                    (:multiline nil :flow-plain nil :block-plain t
+                      :single-quoted t :block t))
+     (hash-start "#x"
+                 (:multiline nil :flow-plain nil :block-plain nil
+                   :single-quoted t :block t))
+     (hash-middle "a #x"
+                  (:multiline nil :flow-plain nil :block-plain nil
+                    :single-quoted t :block t))
+     (dash "- x"
+           (:multiline nil :flow-plain nil :block-plain nil
+             :single-quoted t :block t))
+     (dash-word "-x"
+                (:multiline nil :flow-plain nil :block-plain nil
+                  :single-quoted t :block t))
+     (space-break #.(format nil "a ~%b")
+                  (:multiline t :flow-plain nil :block-plain nil
+                    :single-quoted nil :block t)))
+  "analyzes scalar boundaries ~S"
+  (name value expected)
   (declare (ignore name))
-  (expect (yaml-kit::%scalar-analysis value) :to-be-truthy))
+  (expect (yaml-kit::%scalar-analysis value) :to-equal expected))
 
 (cl-weave:it
  "covers scalar safety and block-style fallback branches"
@@ -88,10 +95,9 @@
          (yaml-kit::emitter-frame-state-last-key-style state) :double-quoted)
    (yaml-kit::%frame-start-value
     state (yaml-kit:make-sequence-start-event :style :block))
-   (expect (not (null (search ":"
-                              (get-output-stream-string
-                               (yaml-kit::emitter-context-stream context)))))
-           :to-equal t)))
+   (expect (get-output-stream-string
+            (yaml-kit::emitter-context-stream context))
+           :to-equal ":")))
 
 (cl-weave:it
  "covers explicit mapping sequence frame separators"
@@ -127,6 +133,6 @@
    (yaml-kit::%emit-text context "x")
    (yaml-kit::%emit-mapping-start-frame
     state (yaml-kit:make-mapping-start-event :style :block :tag "tag:x") nil)
-   (expect (plusp (length (get-output-stream-string
-                           (yaml-kit::emitter-context-stream context))))
-           :to-equal t)))
+   (expect (get-output-stream-string
+            (yaml-kit::emitter-context-stream context))
+           :to-equal (format nil ": x: !<tag:x> ~%"))))

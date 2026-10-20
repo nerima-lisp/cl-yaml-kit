@@ -1,21 +1,21 @@
 (in-package #:yaml-kit)
 
-(defparameter *emitter-event-handlers*
-  '((stream-start-event-p . %emit-stream-start-event)
-    (stream-end-event-p . %emit-stream-end-event)
-    (document-start-event-p . %emit-document-start-event)
-    (document-end-event-p . %emit-document-end-event)
-    (scalar-event-p . %emit-scalar-event) (alias-event-p . %emit-alias-event)
-    (sequence-start-event-p . %emit-sequence-start-event)
-    (sequence-end-event-p . %emit-sequence-end-event)
-    (mapping-start-event-p . %emit-mapping-start-event)
-    (mapping-end-event-p . %emit-mapping-end-event)))
 (defun %emit-dispatch (event state lookahead)
-  (let ((handler (cdr (find-if (lambda (entry) (funcall (car entry) event))
-                               *emitter-event-handlers*))))
-    (unless handler (signal-yaml-emit-error :context "unknown event"
-                                             :cause "unknown event"))
-    (funcall handler event state lookahead)))
+  (typecase event
+    (stream-start-event (%emit-stream-start-event event state lookahead))
+    (stream-end-event (%emit-stream-end-event event state lookahead))
+    (document-start-event (%emit-document-start-event event state lookahead))
+    (document-end-event (%emit-document-end-event event state lookahead))
+    (scalar-event (%emit-scalar-event event state lookahead))
+    (alias-event (%emit-alias-event event state lookahead))
+    (sequence-start-event
+     (%emit-sequence-start-frame state event (car lookahead)))
+    (sequence-end-event (%emit-sequence-end-frame state))
+    (mapping-start-event
+     (%emit-mapping-start-frame state event (car lookahead)))
+    (mapping-end-event (%emit-mapping-end-frame state))
+    (t (signal-yaml-emit-error :context "unknown event"
+                               :cause "unknown event"))))
 (defun emit-event-stream (events stream &key (indent 2)
                                       (explicit-document-start nil)
                                       (suppress-empty-document-marker nil))

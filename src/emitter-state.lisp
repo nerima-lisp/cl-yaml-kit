@@ -31,9 +31,3 @@
 
 (defun %emit-newline (context)
   (%emit-text context (string #\Newline)))
-
-(defun %emit-indent (context level)
-  (unless (emitter-context-line-start context)
-    (%emit-newline context))
-  (%emit-text context (make-string (* level (emitter-context-indent context))
-                                   :initial-element #\Space)))

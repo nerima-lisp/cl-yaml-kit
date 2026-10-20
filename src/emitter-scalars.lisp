@@ -1,36 +1,11 @@
 ;;;; src/emitter-scalars.lisp
 (in-package #:yaml-kit)
 
-(defparameter +yaml-indicator-characters+ "-?:,[]{}#&*!|>'\"%@`")
-(defparameter +implicit-scalar-tags+
-  '("tag:yaml.org,2002:int" "tag:yaml.org,2002:float"
-    "tag:yaml.org,2002:bool" "tag:yaml.org,2002:null"
-    "tag:yaml.org,2002:str"))
-
-(defun %yaml-line-break-p (character)
-  (case (char-code character)
-    ((#x0a #x0d #x85 #x2028 #x2029) t)
-    (otherwise nil)))
-
-(defun %yaml-printable-character-p (character)
-  (let ((code (char-code character)))
-    (or (= code #x09) (= code #x0a) (= code #x0d)
-        (<= #x20 code #x7e) (= code #x85)
-        (<= #xa0 code #xd7ff) (<= #xe000 code #xfffd)
-        (<= #x10000 code #x10ffff))))
-
-(defun %yaml-blank-p (character)
-  (or (char= character #\Space) (char= character #\Tab)))
-
-(defparameter +scalar-character-predicates+
-  '((:blank . %yaml-blank-p)
-    (:line-break . %yaml-line-break-p)
-    (:printable . %yaml-printable-character-p)))
-
-(defun %scalar-character-properties (character)
-  (loop for (property . predicate) in +scalar-character-predicates+
-        when (funcall predicate character)
-          collect property))
+(defun %yaml-scalar-line-break-p (character)
+  (or (yaml-line-break-p character)
+      (case (char-code character)
+        ((#x85 #x2028 #x2029) t)
+        (otherwise nil))))
 
 (defun %scalar-style-candidates
     (line-breaks flow-indicators block-indicators leading-space leading-break
@@ -62,83 +37,105 @@
                                   trailing-break break-space space-break
                                   special-characters))))
 
-(defun %scalar-analysis-flags (value)
-  "Collect scalar restrictions from VALUE's characters."
-  (declare (optimize (speed 3) (safety 1)) (type simple-string value))
+(defun %scalar-analysis-indicator-flags (value)
   (let ((length (length value))
-        (block-indicators nil) (flow-indicators nil)
+        (block-indicators nil)
+        (flow-indicators nil))
+    (when (and (>= length 3)
+               (or (string= value "---" :end1 3)
+                   (string= value "..." :end1 3)))
+      (setf block-indicators t flow-indicators t))
+    (loop for index from 0 below length
+          for character = (char value index)
+          for preceded-by-whitespace =
+            (or (zerop index)
+                (yaml-whitespace-p (char value (1- index)))
+                (%yaml-scalar-line-break-p (char value (1- index))))
+          for followed-by-whitespace =
+            (or (= index (1- length))
+                (yaml-whitespace-p (char value (1+ index)))
+                (%yaml-scalar-line-break-p (char value (1+ index))))
+          do (if (zerop index)
+                 (when (yaml-indicator-p character)
+                   (setf flow-indicators t block-indicators t))
+                 (progn
+                   (when (or (yaml-flow-indicator-p character)
+                             (char= character #\?))
+                     (setf flow-indicators t))
+                   (when (char= character #\:)
+                     (setf flow-indicators t)
+                     (when followed-by-whitespace
+                       (setf block-indicators t)))
+                   (when (and (char= character #\#)
+                              preceded-by-whitespace)
+                     (setf flow-indicators t block-indicators t)))))
+    (values block-indicators flow-indicators)))
+
+(defun %scalar-analysis-content-flags (value)
+  (let ((length (length value))
         (line-breaks nil) (special-characters nil)
         (leading-space nil) (leading-break nil)
         (trailing-space nil) (trailing-break nil)
         (break-space nil) (space-break nil)
         (previous-space nil) (previous-break nil))
-    (when (or (and (>= length 3) (string= value "---" :end1 3))
-              (and (>= length 3) (string= value "..." :end1 3)))
-      (setf block-indicators t flow-indicators t))
     (loop for index from 0 below length
           for character = (char value index)
-          for properties = (%scalar-character-properties character)
-          for preceded-by-whitespace = (or (zerop index)
-                                           (member :blank (%scalar-character-properties
-                                                           (char value (1- index))))
-                                           (member :line-break (%scalar-character-properties
-                                                                (char value (1- index)))))
-          for followed-by-whitespace = (or (= index (1- length))
-                                           (member :blank (%scalar-character-properties
-                                                           (char value (1+ index))))
-                                           (member :line-break (%scalar-character-properties
-                                                                (char value (1+ index)))))
-          do
-             (if (zerop index)
-                 (cond
-                   ((find character +yaml-indicator-characters+)
-                    (setf flow-indicators t block-indicators t))
-                   )
-                 (progn
-                   (when (find character ",?[]{}") (setf flow-indicators t))
-                   (when (char= character #\:)
-                     (setf flow-indicators t)
-                     (when followed-by-whitespace (setf block-indicators t)))
-                   (when (and (char= character #\#) preceded-by-whitespace)
-                     (setf flow-indicators t block-indicators t))))
-             (unless (member :printable properties)
+          for blank = (yaml-whitespace-p character)
+          for line-break = (%yaml-scalar-line-break-p character)
+          do (unless (yaml-printable-p character)
                (setf special-characters t))
-             (when (member :line-break properties) (setf line-breaks t))
+             (when line-break (setf line-breaks t))
              (cond
-               ((member :blank properties)
+               (blank
                 (when (zerop index) (setf leading-space t))
                 (when (= index (1- length)) (setf trailing-space t))
                 (when previous-break (setf break-space t))
                 (setf previous-space t previous-break nil))
-               ((member :line-break properties)
+               (line-break
                 (when (zerop index) (setf leading-break t))
                 (when (= index (1- length)) (setf trailing-break t))
                 (when previous-space (setf space-break t))
                 (setf previous-space nil previous-break t))
                (t (setf previous-space nil previous-break nil))))
-    (values block-indicators flow-indicators line-breaks special-characters
-            leading-space leading-break trailing-space trailing-break
-            break-space space-break)))
+    (values line-breaks special-characters leading-space leading-break
+            trailing-space trailing-break break-space space-break)))
 
-(defun %plain-safe-p (value &key flow tag analysis)
-  (let ((analysis (or analysis (%scalar-analysis value))))
-    (and (or (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
-             (and tag
-                  (member tag '("tag:yaml.org,2002:int"
-                                "tag:yaml.org,2002:float") :test #'string=)
-                  (> (length value) 1)
-                  (char= (char value 0) #\-)
-                  (not (%yaml-blank-p (char value 1)))))
-         (or (and tag
-                  (string= tag "tag:yaml.org,2002:str")
-                  (string= (resolve-plain-scalar-tag value :core)
-                           "tag:yaml.org,2002:str"))
-             (and tag
-                  (not (string= tag "tag:yaml.org,2002:str"))
-                  (member tag +implicit-scalar-tags+ :test #'string=))
-             (or (null tag)
-                 (string= (resolve-plain-scalar-tag value :core)
-                          "tag:yaml.org,2002:str"))))))
+(defun %scalar-analysis-flags (value)
+  "Collect scalar restrictions from VALUE's characters."
+  (declare (optimize (speed 3) (safety 1)) (type simple-string value))
+  (multiple-value-bind (block-indicators flow-indicators)
+      (%scalar-analysis-indicator-flags value)
+    (multiple-value-bind (line-breaks special-characters leading-space
+                          leading-break trailing-space trailing-break
+                          break-space space-break)
+        (%scalar-analysis-content-flags value)
+      (values block-indicators flow-indicators line-breaks special-characters
+              leading-space leading-break trailing-space trailing-break
+              break-space space-break))))
+
+(progn
+  (defun %yaml-tag-suffix-p (tag suffix)
+    (and tag
+         (= (length tag) (+ (length +yaml-tag-prefix+) (length suffix)))
+         (string= tag +yaml-tag-prefix+ :end1 (length +yaml-tag-prefix+))
+         (string= tag suffix :start1 (length +yaml-tag-prefix+))))
+
+  (defun %plain-safe-p (value &key flow tag analysis)
+    (let ((analysis (or analysis (%scalar-analysis value))))
+      (and (or (if flow (getf analysis :flow-plain) (getf analysis :block-plain))
+               (and (or (%yaml-tag-suffix-p tag "int")
+                        (%yaml-tag-suffix-p tag "float"))
+                    (> (length value) 1)
+                    (char= (char value 0) #\-)
+                    (not (yaml-whitespace-p (char value 1)))))
+           (or (and (%yaml-tag-suffix-p tag "str")
+                    (%yaml-tag-suffix-p (resolve-plain-scalar-tag value :core) "str"))
+               (and tag
+                    (not (%yaml-tag-suffix-p tag "str"))
+                    (member tag *implicit-scalar-tags* :test #'string=))
+               (or (null tag)
+                   (%yaml-tag-suffix-p
+                    (resolve-plain-scalar-tag value :core) "str")))))))
 
 (defun %scalar-style (value requested flow &optional tag)
   (let* ((analysis (%scalar-analysis value))
