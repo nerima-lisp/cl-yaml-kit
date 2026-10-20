@@ -1,8 +1,6 @@
 ;;;; src/scanner.lisp
 (in-package #:yaml-kit)
 
-(defconstant +max-simple-key-length+ 1024)
-
 (declaim (inline scanner-queue-nonempty-p))
 (defun scanner-queue-nonempty-p (s)
   (< (scanner-tokens-head s) (fill-pointer (scanner-tokens s))))

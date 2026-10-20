@@ -1,6 +1,9 @@
 ;;;; src/scanner-data.lisp
 (in-package #:yaml-kit)
 
+(defconstant +max-simple-key-length+ 1024)
+(defconstant +max-version-number-length+ 9)
+
 (defconstant +scanner-document-start-indicator+ #\-)
 (defconstant +scanner-document-end-indicator+ #\.)
 (defconstant +scanner-key-indicator+ #\?)

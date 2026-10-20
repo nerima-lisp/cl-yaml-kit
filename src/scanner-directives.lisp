@@ -1,7 +1,5 @@
 (in-package #:yaml-kit)
 (declaim (optimize (speed 3) (safety 1)))
-(defconstant +max-version-number-length+ 9)
-
 (defun %skip-reserved-directive-line (s &optional comment-at-start-p)
   (let ((comment-allowed comment-at-start-p))
     (loop until (sc-breakz-p s)
