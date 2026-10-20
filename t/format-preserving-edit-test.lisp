@@ -1,14 +1,12 @@
 (in-package #:cl-yaml-kit/test)
 
 (defun format-edit-octets (text encoding &optional bom)
-  "Encode TEXT using ENCODING, optionally prefixed by BOM."
   (let ((body (cl-codec-kit:string-to-octets text :encoding encoding)))
     (if bom
         (concatenate '(vector (unsigned-byte 8)) bom body)
         body)))
 
 (defun format-edit-lines (newline trailing-p &rest lines)
-  "Join LINES with NEWLINE and optionally end with a newline."
   (with-output-to-string (out)
     (loop for line in lines
           for first-p = t then nil
@@ -17,11 +15,9 @@
           finally (when trailing-p (write-string newline out)))))
 
 (defun format-edit-lf (&rest lines)
-  "Build an LF-terminated YAML source from LINES."
   (apply #'format-edit-lines (string #\Newline) t lines))
 
 (defun format-edit-value-at (source document path)
-  "Return the value at PATH in document DOCUMENT of SOURCE."
   (let ((value (nth document (yaml-kit:parse-all source))))
     (dolist (component path value)
       (setf value
@@ -32,7 +28,6 @@
               (t (error "cannot descend through ~S" value)))))))
 
 (defun format-edit-present-at (source document path)
-  "Return whether PATH is present in document DOCUMENT of SOURCE."
   (let ((value (nth document (yaml-kit:parse-all source))))
     (dolist (component path t)
       (cond
@@ -58,7 +53,6 @@
       condition)))
 
 (defun format-edit-condition-type (thunk)
-  "Return the type of the YAML kit condition raised by THUNK."
   (let ((condition (format-edit-condition thunk)))
     (when condition (type-of condition))))
 

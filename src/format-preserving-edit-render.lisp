@@ -44,29 +44,28 @@
                                   (char= (char value next-index)
                                          *format-edit-question-character*)))))))
 
-(progn
-  (defun %format-edit-layout-whitespace-p (character)
-    (or (yaml-whitespace-p character)
-        (yaml-line-break-p character)))
+(defun %format-edit-layout-whitespace-p (character)
+  (or (yaml-whitespace-p character)
+      (yaml-line-break-p character)))
 
-  (defun %format-edit-trim-layout (text)
-    (let ((start (position-if-not #'%format-edit-layout-whitespace-p text))
-          (end (position-if-not #'%format-edit-layout-whitespace-p
-                                text :from-end t)))
-      (if start
-          (subseq text start (1+ end))
-          "")))
+(defun %format-edit-trim-layout (text)
+  (let ((start (position-if-not #'%format-edit-layout-whitespace-p text))
+        (end (position-if-not #'%format-edit-layout-whitespace-p
+                              text :from-end t)))
+    (if start
+        (subseq text start (1+ end))
+      "")))
 
-  (defun %format-edit-check-printable-value (value path)
-    (when (and (stringp value)
-               (find-if (lambda (character)
-                          (let ((code (char-code character)))
-                            (or (<= #xd800 code #xdfff)
-                                (<= #xfffe code #xffff))))
-                        value))
-      (%format-edit-structure-error
-       path
-       "surrogate code points and U+FFFE/U+FFFF are not allowed in YAML scalar values"))))
+(defun %format-edit-check-printable-value (value path)
+  (when (and (stringp value)
+             (find-if (lambda (character)
+                        (let ((code (char-code character)))
+                          (or (<= #xd800 code #xdfff)
+                              (<= #xfffe code #xffff))))
+                      value))
+    (%format-edit-structure-error
+     path
+     "surrogate code points and U+FFFE/U+FFFF are not allowed in YAML scalar values")))
 
 (defun %format-edit-fragment (value path &optional flow-p)
   (when (or (consp value)

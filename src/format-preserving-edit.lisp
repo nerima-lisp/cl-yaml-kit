@@ -104,11 +104,11 @@
                                   :operation operation)))
 (progn
   (defun edit-source/k
-    (source path value &key (document 0) (operation :set) (k nil))
-  "Return the primary value produced by K; K runs once after a successful edit."
-  (check-type k function)
-  (values (%format-edit-source/cps
-           source path value :document document :operation operation :k k)))
+      (source path value &key (document 0) (operation :set) (k nil))
+    "Return the primary value produced by K; K runs once after a successful edit."
+    (check-type k function)
+    (values (%format-edit-source/cps
+             source path value :document document :operation operation :k k)))
 
   (defun edit-source (source path value &key (document 0) (operation :set))
     "Return the source with the requested scalar edit and its surrounding format preserved."
