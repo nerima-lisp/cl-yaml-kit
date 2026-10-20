@@ -2,7 +2,7 @@
 (defparameter *invalid-token-slot-value* -1)
 
 (describe "scanner token errors"
-  (cl-weave:it-each
+  (it-each
       ((required-key-crosses-line #.(format nil "a~%b: c"))
        (flow-entry-before-comment "[item,#]"))
     "signals a YAML parse error for scanner input ~S"
@@ -53,7 +53,7 @@
       (setf (yaml-kit::scanner-stream-end-produced scanner) t)
       (expect (yaml-kit::fetch-more-tokens scanner) :to-equal nil)))
 
-  (cl-weave:it-each
+  (it-each
       ((stale-line 0 0 1 0 nil)
        (stale-offset 0 0 0 1025 nil)
        (current-position 0 0 0 0 t))
@@ -80,7 +80,7 @@
       (expect (yaml-kit::simple-key-possible key) :to-be-falsy))))
 
 (describe "token payload validation"
-  (cl-weave:it-each
+  (it-each
       ((single-quoted-scalar :scalar :single-quoted t)
        (double-quoted-scalar :scalar :double-quoted t)
        (flow-sequence-end :flow-sequence-end nil t)
@@ -95,7 +95,7 @@
                (yaml-kit:make-token kind span span :style style))
               :to-equal expected)))
 
-  (cl-weave:it-each
+  (it-each
       ((scalar-value :scalar-value)
        (tag-handle :tag-handle)
        (tag-suffix :tag-suffix)
@@ -134,7 +134,7 @@
         :to-throw
         'type-error)))
 
-  (cl-weave:it-each
+  (it-each
       ((invalid-kind)
        (invalid-start-span)
        (invalid-end-span)

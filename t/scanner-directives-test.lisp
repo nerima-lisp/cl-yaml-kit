@@ -8,7 +8,7 @@
           do (push token out))
     (nreverse out)))
 
-(cl-weave:it-each
+(it-each
     ((yaml-version #.(format nil "%YAML 1.2~%")
        ((:version-directive nil nil nil 1 2)))
      (reserved-directive-6lvf
@@ -83,7 +83,7 @@
                          tokens)))
     (expect actual :to-equal expected)))
 
-(cl-weave:it-each
+(it-each
     ((invalid-version #.(format nil "%YAML 2.0~%"))
      (incomplete-version #.(format nil "%YAML 1.~%"))
      (version-missing-separator #.(format nil "%YAML 1x2~%"))
@@ -122,7 +122,7 @@
     :to-throw
     'yaml-kit:yaml-parse-error))
 
-(cl-weave:it-each
+(it-each
     ((overlong-utf8 "%E0%80%80")
      (surrogate-utf8 "%ED%A0%80")
      (out-of-range-utf8 "%F4%90%80%80")

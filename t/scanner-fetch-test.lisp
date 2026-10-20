@@ -1,6 +1,6 @@
 (in-package #:cl-yaml-kit/test)
 
-(cl-weave:it-each
+(it-each
     ((block-sequence "- a"
        (:stream-start :block-sequence-start :block-entry :scalar :block-end :stream-end))
      (nested-block-sequence "- - a"
@@ -53,7 +53,7 @@
             do (push (yaml-kit:token-value token) values))
     (expect (nreverse values) :to-equal '("a ..."))))
 
-(cl-weave:it-each
+(it-each
     ((block-entry-after-value "a: -")
      (block-key-after-value "a: ?")
      (block-value-after-value "a: :"))

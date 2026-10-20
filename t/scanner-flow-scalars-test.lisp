@@ -1,6 +1,6 @@
 (in-package #:cl-yaml-kit/test)
 
-(cl-weave:it-each
+(it-each
     ((single-quote-escape "'it''s'" (("it's" :single-quoted)))
      (double-quote-escapes "\"\\n\\t\\\\\""
        ((#.(format nil "~C~C~C" #\Newline #\Tab #\\) :double-quoted)))
@@ -52,7 +52,7 @@
                      actual))
     (expect (nreverse actual) :to-equal expected)))
 
-(cl-weave:it-each
+(it-each
     ((unknown-escape "\"\\q\"")
      (surrogate-escape "\"\\uD800\"")
      (invalid-hexadecimal-escape "\"\\x0G\"")
@@ -68,7 +68,7 @@
     :to-throw
     'yaml-kit:yaml-parse-error))
 
-(cl-weave:it-each
+(it-each
     ((plain-word "word" ("word"))
      (plain-colon-in-word "a:b" ("a:b"))
      (mapping-key-and-value "key: value" ("key" "value"))

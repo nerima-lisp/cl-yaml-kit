@@ -2,7 +2,7 @@
 (in-package #:cl-yaml-kit/test)
 
 (defun scanner-source (text)
-  (make-array (length text) :element-type 'character :initial-contents text))
+  (coerce text 'simple-string))
 
 (defun scanner-token-kinds (text)
   (let ((scanner (yaml-kit::make-scanner (scanner-source text)))
@@ -14,7 +14,7 @@
 
 (describe "scanner character classes"
 
-  (cl-weave:it-each
+  (it-each
       ((digit-accepts-ascii yaml-kit::sc-digit-p "7" t)
        (digit-rejects-fullwidth yaml-kit::sc-digit-p "７" nil)
        (hex-accepts-ascii yaml-kit::sc-hex-p "F" t)
@@ -29,7 +29,7 @@
     (let ((scanner (yaml-kit::make-scanner (scanner-source text))))
       (expect (funcall predicate scanner) :to-equal expected)))
 
-  (cl-weave:it-each
+  (it-each
       ((space-accepts-space yaml-kit::sc-space-p " " t)
        (space-rejects-tab yaml-kit::sc-space-p #.(string #\Tab) nil)
        (tab-accepts-tab yaml-kit::sc-tab-p #.(string #\Tab) t)
@@ -70,7 +70,7 @@
                   (yaml-kit::scanner-column scanner))
             :to-equal '(1 1))))
 
-(cl-weave:it-each
+(it-each
     ((crlf #.(format nil "~C~C" #\Return #\Newline))
      (line-feed #.(string #\Newline))
      (carriage-return #.(string #\Return))
@@ -90,7 +90,7 @@
     (expect (funcall (symbol-function 'yaml-kit::sc-read-line) scanner buffer) :to-be buffer)
     (expect (yaml-kit::scan-buffer-string buffer) :to-equal (format nil "~%"))))
 
-(cl-weave:it-each
+(it-each
     ((zero 0 0)
      (upper-hex 1 10)
      (lower-hex 2 15))
@@ -120,7 +120,7 @@
             :to-equal '(0 0))))
 
 (describe "scanner token kinds"
-  (cl-weave:it-each
+  (it-each
       ((plain-mapping-and-simple-key "a: 1"
          (:stream-start :block-mapping-start :key :scalar :value :scalar
           :block-end :stream-end))

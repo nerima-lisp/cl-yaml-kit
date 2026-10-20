@@ -3,7 +3,7 @@
 (in-package #:cl-yaml-kit/test)
 
 (defun block-scalar-source (text)
-  (make-array (length text) :element-type 'character :initial-contents text))
+  (coerce text 'simple-string))
 
 (defun scanned-scalars (text)
   (let ((scanner (yaml-kit::make-scanner (block-scalar-source text)))
@@ -16,7 +16,7 @@
                      scalars))
     (nreverse scalars)))
 
-(cl-weave:it-each
+(it-each
     (("Example 8.1 header indicators"
       #.(format nil
                 (concatenate 'string
@@ -66,7 +66,7 @@
   (declare (ignore name))
   (expect (scanned-scalars input) :to-equal expected))
 
-(cl-weave:it-each
+(it-each
     (("Example 8.3 indicator zero" #.(format nil "|0~%  value~%"))
      ("invalid block scalar header" #.(format nil "|x~%  value~%"))
      ("leading content line is not indented" #.(format nil "- |~%text~%"))
