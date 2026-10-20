@@ -12,6 +12,7 @@
   (unless (scanner-token-available s) (fetch-more-tokens s))
   (when (scanner-queue-nonempty-p s)
     (aref (scanner-tokens s) (scanner-tokens-head s))))
+(defun scanner-peek-token (s) (%scanner-peek-token s))
 
 (defun %scanner-next-token (s)
   (let ((token (%scanner-peek-token s)))
@@ -34,6 +35,7 @@
           (setf (fill-pointer tokens) remaining
                 (scanner-tokens-head s) 0)))
       token)))
+(defun scanner-next-token (s) (%scanner-next-token s))
 
 (defun scanner-token-limit (s)
   "Upper bound on tokens this scanner may produce for its input.
@@ -48,21 +50,10 @@ input, so the bound is a multiple of the input length rather than the length."
   t)
 
 (defun scanner-resource-error (s name limit actual)
-  (error 'yaml-resource-limit-error
-         :limit-name name
-         :limit limit
-         :actual actual
-         :context "YAML"
-         :diagnostic
-         (cl-parser-kit:make-diagnostic
-          :message
-          (format nil "YAML resource limit ~S exceeded: limit ~S, actual ~S"
-                  name limit actual)
-          :span (sc-position-span s (sc-position s))
-          :data (list :limit-name name
-                      :limit limit
-                      :actual actual
-                      :context "YAML"))))
+  (%signal-yaml-resource-limit
+   name limit actual
+   :span (sc-position-span s (sc-position s))
+   :context "YAML"))
 
 (defun fetch-more-tokens (s)
   (when (scanner-stream-end-produced s) (return-from fetch-more-tokens nil))
@@ -75,20 +66,84 @@ input, so the bound is a multiple of the input length rather than the length."
             (when (and (simple-key-possible key)
                        (= (simple-key-token-number key)
                           (scanner-tokens-parsed s)))
-              (setf need-more t) (return))))
-        (unless need-more (return (setf (scanner-token-available s) t)))
+              (setf need-more t)
+              (return))))
+        (unless need-more
+          (return (setf (scanner-token-available s) t)))
         (fetch-next-token s)
-        ;; A fetch that stops advancing the position would otherwise enqueue
-        ;; tokens until the heap dies, so bound the queue by the input size.
         (let ((produced (fill-pointer (scanner-tokens s))))
           (when (> produced limit)
-            (scanner-resource-error s "tokens" limit produced)))))))
+            (%signal-yaml-resource-limit
+             "tokens" limit produced
+             :span (sc-position-span s (sc-position s))
+             :context "YAML")))))))
 
-(defun scanner-peek-token (s)
-  (%scanner-peek-token s))
+(defun %fetch-structural-token (s character)
+  (cond
+    ((sc-z-p s) (fetch-stream-end s))
+    ((and (zerop (scanner-column s)) (char= character #\%))
+     (fetch-directive s))
+    ((and (zerop (scanner-column s))
+          (%scanner-document-indicator-p s +scanner-document-start-indicator+))
+     (fetch-document-indicator s :document-start))
+    ((and (zerop (scanner-column s))
+          (%scanner-document-indicator-p s +scanner-document-end-indicator+))
+     (fetch-document-indicator s :document-end))
+    ((char= character #\[) (fetch-flow-collection-start s :flow-sequence-start))
+    ((char= character #\{) (fetch-flow-collection-start s :flow-mapping-start))
+    ((and (plusp (scanner-flow-level s)) (char= character #\]))
+     (fetch-flow-collection-end s :flow-sequence-end))
+    ((and (plusp (scanner-flow-level s)) (char= character #\}))
+     (fetch-flow-collection-end s :flow-mapping-end))
+    ((and (plusp (scanner-flow-level s)) (char= character #\,))
+     (fetch-flow-entry s))
+    (t nil)))
 
-(defun scanner-next-token (s)
-  (%scanner-next-token s))
+(defun %fetch-indicator-token (s character next-character)
+  (cond
+    ((and (char= character +scanner-document-start-indicator+)
+          (or (sc-blankz-p s 1)
+              (and (plusp (scanner-flow-level s))
+                   (member next-character +scanner-flow-block-entry-terminators+))))
+     (fetch-block-entry s))
+    ((and (char= character +scanner-key-indicator+)
+          (or (sc-blankz-p s 1)
+              (and (plusp (scanner-flow-level s))
+                   (yaml-flow-indicator-p next-character))))
+     (fetch-key s))
+    ;; YAML 1.2.2 has two value indicators in flow context.
+    ;; c-ns-flow-map-separate-value needs separation after ":", and
+    ;; c-ns-flow-map-adjacent-value follows a c-flow-json-node whose closing
+    ;; indicator makes the ":" unambiguous. libyaml only tests flow_level
+    ;; against the next character, which rejects every adjacent JSON key.
+    ((and (char= character +scanner-value-indicator+)
+          (or (sc-blankz-p s 1)
+              (and (plusp (scanner-flow-level s))
+                   (or (member next-character +scanner-flow-value-terminators+)
+                       (scanner-json-like-node-end s)))))
+     (fetch-value s))
+    ((char= character #\*) (fetch-anchor s :alias))
+    ((char= character #\&) (fetch-anchor s :anchor))
+    ((char= character #\!) (fetch-tag s))
+    ((and (char= character #\|) (zerop (scanner-flow-level s)))
+     (fetch-block-scalar s t))
+    ((and (char= character #\>) (zerop (scanner-flow-level s)))
+     (fetch-block-scalar s nil))
+    ((char= character #\') (fetch-flow-scalar s t))
+    ((char= character #\") (fetch-flow-scalar s nil))
+    (t nil)))
+
+(defun %fetch-plain-scalar-or-error (s character)
+  (if (or (not (or (sc-blankz-p s) (yaml-indicator-p character)))
+          (and (zerop (scanner-flow-level s))
+               (yaml-flow-indicator-p character))
+          (and (char= character +scanner-document-start-indicator+)
+               (not (sc-blank-p s 1)))
+          (and (member character +scanner-key-value-indicators+)
+               (not (sc-blankz-p s 1))))
+      (fetch-plain-scalar s)
+      (sc-error s "while scanning for the next token" (sc-position s)
+                "found character that cannot start any token")))
 
 (defun fetch-next-token (s)
   (unless (scanner-stream-start-produced s)
@@ -96,61 +151,12 @@ input, so the bound is a multiple of the input length rather than the length."
   (scan-to-next-token s)
   (stale-simple-keys s)
   (unroll-indent s (scanner-column s))
-  (let ((c (sc-char s)) (c1 (sc-char s 1)) (c2 (sc-char s 2)))
-    (cond
-      ((sc-z-p s) (fetch-stream-end s))
-      ((and (zerop (scanner-column s)) (char= c #\%)) (fetch-directive s))
-      ((and (zerop (scanner-column s)) (char= c #\-) (char= c1 #\-)
-            (char= c2 #\-) (sc-blankz-p s 3))
-       (fetch-document-indicator s :document-start))
-      ((and (zerop (scanner-column s)) (char= c #\.) (char= c1 #\.)
-            (char= c2 #\.) (sc-blankz-p s 3))
-       (fetch-document-indicator s :document-end))
-      ((char= c #\[) (fetch-flow-collection-start s :flow-sequence-start))
-      ((char= c #\{) (fetch-flow-collection-start s :flow-mapping-start))
-      ((and (plusp (scanner-flow-level s)) (char= c #\]))
-       (fetch-flow-collection-end s :flow-sequence-end))
-      ((and (plusp (scanner-flow-level s)) (char= c #\}))
-       (fetch-flow-collection-end s :flow-mapping-end))
-      ((and (plusp (scanner-flow-level s)) (char= c #\,)) (fetch-flow-entry s))
-      ((and (char= c #\-)
-            (or (sc-blankz-p s 1)
-                (and (plusp (scanner-flow-level s))
-                     (member c1 '(#\, #\] #\})))))
-       (fetch-block-entry s))
-      ((and (char= c #\?)
-            (or (sc-blankz-p s 1)
-                (and (plusp (scanner-flow-level s))
-                     (yaml-flow-indicator-p c1))))
-       (fetch-key s))
-      ;; YAML 1.2.2 has two value indicators in flow context.
-      ;; c-ns-flow-map-separate-value needs separation after ":", and
-      ;; c-ns-flow-map-adjacent-value follows a c-flow-json-node whose closing
-      ;; indicator makes the ":" unambiguous.  libyaml only tests flow_level
-      ;; against the next character, which rejects every adjacent JSON key.
-      ((and (char= c #\:)
-            (or (sc-blankz-p s 1)
-                (and (plusp (scanner-flow-level s))
-                     (or (member c1 '(#\, #\? #\[ #\] #\{ #\}))
-                         (scanner-json-like-node-end s)))))
-       (fetch-value s))
-      ((char= c #\*) (fetch-anchor s :alias))
-      ((char= c #\&) (fetch-anchor s :anchor))
-      ((char= c #\!) (fetch-tag s))
-      ((and (char= c #\|) (zerop (scanner-flow-level s))) (fetch-block-scalar s t))
-      ((and (char= c #\>) (zerop (scanner-flow-level s))) (fetch-block-scalar s nil))
-      ((char= c #\') (fetch-flow-scalar s t))
-      ((char= c #\") (fetch-flow-scalar s nil))
-      ((or (not (or (sc-blankz-p s) (yaml-indicator-p c)))
-           (and (zerop (scanner-flow-level s))
-                (member c '(#\, #\[ #\] #\{ #\})))
-           (and (char= c #\-) (not (sc-blank-p s 1)))
-           (and (member c '(#\? #\:))
-                (not (sc-blankz-p s 1))))
-       (fetch-plain-scalar s))
-      (t (sc-error s "while scanning for the next token" (sc-position s)
-                   "found character that cannot start any token")))))
+  (let ((character (sc-char s))
+        (next-character (sc-char s 1)))
+    (or (%fetch-structural-token s character)
+        (%fetch-indicator-token s character next-character)
+        (%fetch-plain-scalar-or-error s character))))
 (defun %scanner-next-token/cps (scanner k)
   (unless (functionp k)
     (error 'type-error :datum k :expected-type 'function))
-  (funcall k (%scanner-next-token scanner)))
+  (values (funcall k (%scanner-next-token scanner))))
