@@ -63,8 +63,6 @@
 
 (define-parser-state yaml-parser-parse-stream-start (parser)
   (let ((token (parser-next parser)))
-    (unless (and token (eq (token-kind token) :stream-start))
-      (parser-error token "expected stream-start token"))
     (parser-emit parser (make-stream-start-event :start-span (token-start-span token)
                                                  :end-span (token-end-span token))))
   #'yaml-parser-parse-document-start)
@@ -128,7 +126,6 @@
 
 (define-parser-state yaml-parser-parse-stream-end (parser)
   (let ((token (parser-next parser)))
-    (unless (eq (token-kind token) :stream-end) (parser-error token "expected stream-end token"))
     (parser-emit parser (make-stream-end-event :start-span (token-start-span token)
                                                :end-span (token-end-span token))))
   nil)

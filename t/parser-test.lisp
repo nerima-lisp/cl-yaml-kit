@@ -1,32 +1,5 @@
 (in-package #:cl-yaml-kit/test)
 
-(defstruct parser-test-scanner tokens)
-
-(defun parser-test-peek (scanner)
-  (car (parser-test-scanner-tokens scanner)))
-
-(defun parser-test-next (scanner)
-  (pop (parser-test-scanner-tokens scanner)))
-
-(defun parse-parser-token-events (specs)
-  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 2 :start-column 2 :end-line 2 :end-column 2))
-         (scanner (make-parser-test-scanner
-                   :tokens (mapcar (lambda (spec)
-                                     (apply #'yaml-kit:make-token
-                                            (first spec) span span (rest spec)))
-                                   specs)))
-         (events nil)
-         (parser (yaml-kit::make-parser%
-                  :scanner scanner
-                  :state #'yaml-kit::yaml-parser-parse-stream-start
-                  :handler (lambda (event) (push event events))
-                  :depth 0 :max-depth 256 :max-scalar-length 1000
-                  :peek-function #'parser-test-peek
-                  :next-function #'parser-test-next)))
-    (loop for state = (yaml-kit::parser-state parser) while state do
-      (setf (yaml-kit::parser-state parser) (funcall state parser)))
-    (nreverse events)))
-
 (defun parser-event-signature (event)
   (cond
     ((yaml-kit:sequence-start-event-p event)
@@ -50,54 +23,63 @@
            (yaml-kit:scalar-event-quoted-implicit-p event)))
     (t (type-of event))))
 
-(defmacro parser-token-cases (&body cases)
-  `(progn
-     ,@(mapcar
-        (lambda (case)
-          `(it ,(first case)
-             (expect (mapcar #'type-of
-                             (parse-parser-token-events ',(second case)))
-                     :to-equal ',(third case))))
-        cases)))
+(cl-weave:defmatcher :to-signal-parser-error (actual expected)
+  (let ((condition
+          (handler-case
+              (progn (funcall actual) nil)
+            (yaml-kit:yaml-kit-error (condition) condition))))
+    (multiple-value-bind (expected-value expected-valid-p)
+        (%yaml-single-matcher-value expected)
+      (let* ((expected-spec (if (consp expected-value)
+                                expected-value
+                                (list expected-value)))
+             (expected-type (first expected-spec))
+             (expected-message (second expected-spec))
+             (expected-span (third expected-spec)))
+        (values (and condition expected-valid-p
+                     (typep condition expected-type)
+                     (or (null expected-message)
+                         (string= expected-message
+                                  (cl-parser-kit:diagnostic-message
+                                   (yaml-kit:yaml-kit-error-diagnostic condition))))
+                     (or (null expected-span)
+                         (equal expected-span
+                                (cl-parser-kit:diagnostic-span
+                                 (yaml-kit:yaml-kit-error-diagnostic condition)))))
+                condition
+                expected-spec)))))
 
-(parser-token-cases
-  ("parses a scalar token stream"
-   ((:stream-start) (:scalar :value "hello" :style :plain) (:stream-end))
-   (yaml-kit:stream-start-event yaml-kit:document-start-event
-    yaml-kit:scalar-event yaml-kit:document-end-event yaml-kit:stream-end-event))
-  ("parses an indentless sequence as a mapping value"
-   ((:stream-start) (:block-mapping-start) (:key) (:scalar :value "a" :style :plain)
-    (:value) (:block-entry) (:scalar :value "b" :style :plain) (:block-end)
-    (:stream-end))
-   (yaml-kit:stream-start-event yaml-kit:document-start-event
-    yaml-kit:mapping-start-event yaml-kit:scalar-event
-    yaml-kit:sequence-start-event yaml-kit:scalar-event
-    yaml-kit:sequence-end-event yaml-kit:mapping-end-event
-    yaml-kit:document-end-event yaml-kit:stream-end-event))
-  ("PARSER-FLOW-SEQUENCE-PAIR-NO-EXTRA-MAPPING-END"
-   ((:stream-start) (:flow-sequence-start) (:key) (:scalar :value "a" :style :plain)
-    (:value) (:scalar :value "b" :style :plain) (:flow-sequence-end) (:stream-end))
-   (yaml-kit:stream-start-event yaml-kit:document-start-event
-    yaml-kit:sequence-start-event yaml-kit:mapping-start-event
-    yaml-kit:scalar-event yaml-kit:scalar-event yaml-kit:mapping-end-event
-    yaml-kit:sequence-end-event yaml-kit:document-end-event
-    yaml-kit:stream-end-event))
-  ("PARSER-INDENTLESS-SEQUENCE-EMPTY-ELEMENTS"
-   ((:stream-start) (:block-mapping-start) (:key) (:scalar :value "a" :style :plain)
-    (:value) (:block-entry) (:block-entry) (:block-end) (:stream-end))
-   (yaml-kit:stream-start-event yaml-kit:document-start-event
-    yaml-kit:mapping-start-event yaml-kit:scalar-event
-    yaml-kit:sequence-start-event yaml-kit:scalar-event yaml-kit:scalar-event
-    yaml-kit:sequence-end-event yaml-kit:mapping-end-event
-    yaml-kit:document-end-event yaml-kit:stream-end-event)))
+(cl-weave:it-each
+    (("parses a scalar token stream" "hello"
+      (yaml-kit:stream-start-event yaml-kit:document-start-event
+        yaml-kit:scalar-event yaml-kit:document-end-event yaml-kit:stream-end-event))
+     ("parses an indentless sequence as a mapping value"
+      #.(format nil "a:~%- b")
+      (yaml-kit:stream-start-event yaml-kit:document-start-event
+        yaml-kit:mapping-start-event yaml-kit:scalar-event
+        yaml-kit:sequence-start-event yaml-kit:scalar-event
+        yaml-kit:sequence-end-event yaml-kit:mapping-end-event
+        yaml-kit:document-end-event yaml-kit:stream-end-event))
+     ("PARSER-FLOW-SEQUENCE-PAIR-NO-EXTRA-MAPPING-END" "[a: b]"
+      (yaml-kit:stream-start-event yaml-kit:document-start-event
+        yaml-kit:sequence-start-event yaml-kit:mapping-start-event
+        yaml-kit:scalar-event yaml-kit:scalar-event yaml-kit:mapping-end-event
+        yaml-kit:sequence-end-event yaml-kit:document-end-event
+        yaml-kit:stream-end-event))
+     ("PARSER-INDENTLESS-SEQUENCE-EMPTY-ELEMENTS" #.(format nil "a:~%-~%-")
+      (yaml-kit:stream-start-event yaml-kit:document-start-event
+        yaml-kit:mapping-start-event yaml-kit:scalar-event
+        yaml-kit:sequence-start-event yaml-kit:scalar-event yaml-kit:scalar-event
+        yaml-kit:sequence-end-event yaml-kit:mapping-end-event
+        yaml-kit:document-end-event yaml-kit:stream-end-event)))
+  "parses YAML event types for case ~S"
+  (name input expected)
+  (declare (ignore name))
+  (expect (mapcar #'type-of (yaml-kit:parse-events input))
+          :to-equal expected))
 
 (it "parses a flow sequence mapping key after a node"
-  (expect (mapcar #'type-of
-                  (parse-parser-token-events
-                   '((:stream-start) (:flow-sequence-start)
-                     (:scalar :value "a" :style :plain) (:key)
-                     (:scalar :value "b" :style :plain)
-                     (:flow-sequence-end) (:stream-end))))
+  (expect (mapcar #'type-of (yaml-kit:parse-events "[a, ? b]"))
           :to-equal
           '(yaml-kit:stream-start-event yaml-kit:document-start-event
             yaml-kit:sequence-start-event yaml-kit:scalar-event
@@ -115,88 +97,70 @@
                 (yaml-kit:yaml-resource-limit-error () t))
               :to-be-truthy))))
 
-(it "covers parser tag token forms and implicit tag checks"
-  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) nil) :to-be-truthy)
-  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "") :to-be-truthy)
-  (expect (funcall (symbol-function 'yaml-kit::parser-implicit-tag-p) "tag") :to-equal nil)
-  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 1 :start-column 1 :end-line 1 :end-column 1))
-         (parser (yaml-kit::make-parser%
-                  :directives '(("!" . "!") ("!!" . "tag:yaml.org,2002:")
-                                ("!e!" . "tag:example:")))))
-    (dolist (case '((nil "plain") ("!" "suffix") ("!" "<tag>") ("!e!" "value")))
-      (destructuring-bind (handle suffix) case
-        (expect (funcall (symbol-function 'yaml-kit::parser-tag-token)
-                         parser (yaml-kit:make-token :tag span span :handle handle :suffix suffix))
-                :to-be-truthy)))))
+(it "recognizes implicit parser tags"
+  (expect (yaml-kit::parser-implicit-tag-p nil) :to-be-truthy)
+  (expect (yaml-kit::parser-implicit-tag-p "") :to-be-truthy)
+  (expect (yaml-kit::parser-implicit-tag-p "tag") :to-equal nil))
+(cl-weave:it-each
+    (("plain local tag" "!foo value" "!foo")
+     ("empty local tag" "! value" "!")
+     ("verbatim tag" "!<tag> value" "tag")
+     ("default handle" "!!str value" "tag:yaml.org,2002:str")
+     ("directive handle"
+      #.(format nil "%TAG !e! tag:example:~%---~%!e!value")
+      "tag:example:value"))
+  "resolves parser tag input ~S"
+  (name input expected)
+  (declare (ignore name))
+  (let* ((events (yaml-kit:parse-events input))
+         (scalar (find-if #'yaml-kit:scalar-event-p events)))
+    (expect (yaml-kit:scalar-event-tag scalar) :to-equal expected)))
 
 (it "reports missing parser nodes and invalid mapping keys"
-  (progn
-    (expect (handler-case
-                (yaml-kit::parser-node
-                 (yaml-kit::make-parser%
-                  :scanner (yaml-kit::make-scanner ""))
-                 t nil)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)
-    (expect (handler-case
-                (parse-parser-token-events
-                 '((:stream-start) (:block-mapping-start) (:block-entry) (:stream-end)))
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)
-    (expect (mapcar #'type-of
-                    (parse-parser-token-events
-                     '((:stream-start) (:block-mapping-start) (:key)
-                       (:block-end) (:stream-end))))
-            :to-equal
-            '(yaml-kit:stream-start-event yaml-kit:document-start-event
-              yaml-kit:mapping-start-event yaml-kit:scalar-event
-              yaml-kit:scalar-event yaml-kit:mapping-end-event
-              yaml-kit:document-end-event yaml-kit:stream-end-event))))
+  (expect "[a" :to-signal-yaml-error 'yaml-kit:yaml-parse-error)
+  (expect "a: -" :to-signal-yaml-error 'yaml-kit:yaml-parse-error)
+  (expect (mapcar #'type-of (yaml-kit:parse-events ":"))
+          :to-equal
+          '(yaml-kit:stream-start-event yaml-kit:document-start-event
+            yaml-kit:mapping-start-event yaml-kit:scalar-event
+            yaml-kit:scalar-event yaml-kit:mapping-end-event
+            yaml-kit:document-end-event yaml-kit:stream-end-event)))
 
-(it "reports missing stream-start and node tokens directly"
-  (let ((parser (yaml-kit::make-parser%
-                 :peek-function (lambda (scanner) (declare (ignore scanner)) nil)
-                 :next-function (lambda (scanner) (declare (ignore scanner)) nil))))
-    (expect (handler-case
-                (funcall (symbol-function 'yaml-kit::yaml-parser-parse-stream-start)
-                         parser)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)
-    (expect (handler-case (yaml-kit::parser-node parser nil nil)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)))
+(it "emits stream boundaries and rejects missing node content"
+  (expect (mapcar #'type-of (yaml-kit:parse-events "value"))
+          :to-equal
+          '(yaml-kit:stream-start-event yaml-kit:document-start-event
+            yaml-kit:scalar-event yaml-kit:document-end-event
+            yaml-kit:stream-end-event))
+  (expect "a: -" :to-signal-yaml-error 'yaml-kit:yaml-parse-error))
 
-(it "rejects duplicate node tags and invalid stream-end tokens"
-  (expect (handler-case
-              (parse-parser-token-events
-               '((:stream-start) (:tag :handle "!" :suffix "one")
-                 (:tag :handle "!" :suffix "two")
-                 (:scalar :value "value" :style :plain) (:stream-end)))
-            (yaml-kit:yaml-parse-error () t))
-          :to-be-truthy)
-  (let* ((span (cl-parser-kit:make-span :source nil :start 0 :end 0 :start-line 1 :start-column 1 :end-line 1 :end-column 1))
-         (token (yaml-kit:make-token :scalar span span :value "wrong" :style :plain))
-         (parser (yaml-kit::make-parser%
-                  :next-function (lambda (scanner) (declare (ignore scanner)) token)
-                  :handler (lambda (event) (declare (ignore event))))))
-    (expect (handler-case
-                (funcall (symbol-function 'yaml-kit::yaml-parser-parse-stream-end) parser)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)))
+(it "rejects duplicate node tags and emits the stream-end event"
+  (expect "!one !two value" :to-signal-yaml-error 'yaml-kit:yaml-parse-error)
+  (expect (type-of (car (last (yaml-kit:parse-events "value"))))
+          :to-equal 'yaml-kit:stream-end-event))
 
-(it "rejects incompatible and duplicate parser directives"
-  (dolist (tokens '((( :stream-start) (:version-directive :major 2 :minor 0)
-                     (:document-start) (:stream-end))
-                    ((:stream-start) (:version-directive :major 1 :minor 2)
-                     (:version-directive :major 1 :minor 2) (:document-start)
-                     (:stream-end))
-                    ((:stream-start) (:tag-directive :handle "!e!" :value "tag:one:")
-                     (:tag-directive :handle "!e!" :value "tag:two:")
-                     (:document-start) (:stream-end))))
-    (expect (handler-case (parse-parser-token-events tokens)
-              (yaml-kit:yaml-parse-error () t))
-            :to-be-truthy)))
-(it "parses adjustable strings and enforces string input length limits"
+(it "reports exact parser errors for malformed flow and block inputs"
+  (expect (lambda () (yaml-kit:parse-events "[a"))
+          :to-signal-parser-error
+          (list 'yaml-kit:yaml-parse-error
+                "did not find expected ',' or ']'"))
+  (expect (lambda () (yaml-kit:parse-events #.(format nil "a: b~%- c")))
+          :to-signal-parser-error
+          (list 'yaml-kit:yaml-parse-error
+                "did not find expected mapping key")))
+
+(cl-weave:it-each
+    (("incompatible version directive"
+      #.(format nil "%YAML 2.0~%---~%value"))
+     ("duplicate version directive"
+      #.(format nil "%YAML 1.2~%%YAML 1.2~%---~%value"))
+     ("duplicate tag directive"
+      #.(format nil "%TAG !e! tag:one:~%%TAG !e! tag:two:~%---~%!e!value")))
+  "rejects parser directive case ~S"
+  (name input)
+  (declare (ignore name))
+  (expect input :to-signal-yaml-error 'yaml-kit:yaml-parse-error))
+(it "parses adjustable strings"
   (let ((input (make-array 4 :element-type 'character :adjustable t
                            :initial-contents "a: 1")))
     (expect (gethash "a" (yaml-kit:parse input)) :to-equal 1))
