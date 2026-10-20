@@ -96,15 +96,19 @@
               (%format-edit-edit-missing-node
                text parent component path value operation original-values
                document encoder)))))))
+(defun %format-edit-source/cps
+    (source path value &key (document 0) (operation :set) (k nil))
+  (check-type k function)
+  (funcall k (%format-edit-source source path value
+                                  :document document
+                                  :operation operation)))
 (progn
   (defun edit-source/k
-      (source path value &key (document 0) (operation :set) (k nil))
-    "Return the primary value produced by K; K runs once after a successful edit."
-    (check-type k function)
-    (let ((result (%format-edit-source
-                   source path value :document document :operation operation)))
-      (let ((continuation-result (funcall k result)))
-        continuation-result)))
+    (source path value &key (document 0) (operation :set) (k nil))
+  "Return the primary value produced by K; K runs once after a successful edit."
+  (check-type k function)
+  (values (%format-edit-source/cps
+           source path value :document document :operation operation :k k)))
 
   (defun edit-source (source path value &key (document 0) (operation :set))
     "Return the source with the requested scalar edit and its surrounding format preserved."
