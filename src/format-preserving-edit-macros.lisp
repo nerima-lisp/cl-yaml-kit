@@ -1,17 +1,6 @@
 (in-package #:yaml-kit)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (defmacro %define-format-edit-error (name condition parameters initargs)
-    (let ((replacements
-            (mapcar (lambda (parameter)
-                      (cons parameter (gensym "ARGUMENT-")))
-                    parameters)))
-      `(defun ,name ,parameters
-         (let* ,(mapcar (lambda (replacement)
-                          `(,(cdr replacement) ,(car replacement)))
-                        replacements)
-           (error ',condition ,@(sublis replacements initargs))))))
-
   (defmacro %format-edit-container-case
       ((container kind) expression &body clauses)
     (let ((container-value (gensym "CONTAINER-"))

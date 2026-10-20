@@ -1,28 +1,22 @@
 (in-package #:yaml-kit)
 
-(%define-format-edit-error
-  %format-edit-path-error
-  yaml-format-edit-path-error
-  (path document operation message)
-  (:path path
-   :document document
-   :operation operation
-   :diagnostic (cl-parser-kit:make-diagnostic :message message)))
+(defun %format-edit-path-error (path document operation message)
+  (error 'yaml-format-edit-path-error
+         :path path
+         :document document
+         :operation operation
+         :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
-(%define-format-edit-error
-  %format-edit-structure-error
-  yaml-format-edit-structure-error
-  (path message)
-  (:path path
-   :diagnostic (cl-parser-kit:make-diagnostic :message message)))
+(defun %format-edit-structure-error (path message)
+  (error 'yaml-format-edit-structure-error
+         :path path
+         :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
-(%define-format-edit-error
-  %format-edit-anchor-error
-  yaml-format-edit-anchor-error
-  (path anchor message)
-  (:path path
-   :anchor anchor
-   :diagnostic (cl-parser-kit:make-diagnostic :message message)))
+(defun %format-edit-anchor-error (path anchor message)
+  (error 'yaml-format-edit-anchor-error
+         :path path
+         :anchor anchor
+         :diagnostic (cl-parser-kit:make-diagnostic :message message)))
 
 (defun %format-edit-octet-p (object)
   (typep object '(vector (unsigned-byte 8))))
