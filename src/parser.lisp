@@ -11,28 +11,32 @@
   (push (cons handle prefix) (parser-directives parser)))
 
 (defun process-directives (parser)
-  (setf (parser-directives parser) nil (parser-version parser) nil)
+  (setf (parser-directives parser) nil
+        (parser-version parser) nil)
   (let ((saw-directive nil))
-  (loop for token = (parser-peek parser)
-        while (member (token-kind token) '(:version-directive :tag-directive)) do
-    (setf saw-directive t)
-    (parser-next parser)
-    (case (token-kind token)
-      (:version-directive
-       (when (parser-version parser) (parser-error token "found duplicate %YAML directive"))
-       ;; Section 5.3 makes only the major version fatal: a higher minor inside
-       ;; the same family is processed with a warning, so "%YAML 1.3" is a
-       ;; document this reader can handle.
-       (unless (= (token-major token) 1)
-         (parser-error token "found incompatible YAML document"))
-       (setf (parser-version parser) (cons (token-major token) (token-minor token))))
-      (:tag-directive
-       (append-tag-directive parser (token-handle token) (token-value token)
-                             nil (token-start-span token)))))
-  (let ((span (token-start-span (parser-peek parser))))
-    (dolist (directive *default-tag-directives*)
-      (append-tag-directive parser (car directive) (cdr directive) t span))
-    saw-directive)))
+    (loop for token = (parser-peek parser)
+          while (member (token-kind token) '(:version-directive :tag-directive))
+          do (setf saw-directive t)
+             (parser-next parser)
+             (case (token-kind token)
+               (:version-directive
+                (when (parser-version parser)
+                  (parser-error token "found duplicate %YAML directive"))
+                ;; Section 5.3 makes only the major version fatal: a higher minor inside
+                ;; the same family is processed with a warning, so "%YAML 1.3" is a
+                ;; document this reader can handle.
+                (unless (= (token-major token) 1)
+                  (parser-error token "found incompatible YAML document"))
+                (setf (parser-version parser)
+                      (cons (token-major token) (token-minor token))))
+               (:tag-directive
+                (append-tag-directive parser (token-handle token)
+                                      (token-value token) nil
+                                      (token-start-span token)))))
+    (let ((span (token-start-span (parser-peek parser))))
+      (dolist (directive *default-tag-directives*)
+        (append-tag-directive parser (car directive) (cdr directive) t span))
+      saw-directive)))
 
 (defun parser-tag-token (parser token)
   (let ((handle (token-handle token)) (suffix (token-suffix token)))
@@ -105,7 +109,9 @@
       (when (and explicit next
                  (= (cl-parser-kit:span-start-line (token-end-span token))
                     (cl-parser-kit:span-start-line (token-start-span next)))
-                 (not (member (token-kind next) '(:stream-end :document-start :version-directive :tag-directive))))
+                 (not (member (token-kind next)
+                              '(:stream-end :document-start
+                                :version-directive :tag-directive))))
         (parser-error next "did not find expected document start"))
       (when (and (not explicit) next
                  (member (token-kind next) '(:version-directive :tag-directive)))
