@@ -103,8 +103,14 @@
 
 (it "signals a YAML parse error for an invalid hexadecimal digit"
   (let ((scanner (yaml-kit::make-scanner (scanner-source "g"))))
-    (expect (nth-value 1 (ignore-errors (yaml-kit::sc-hex-value scanner 0)))
-            :to-be-type-of 'yaml-kit:yaml-parse-error)))
+    (expect
+      (lambda () (yaml-kit::sc-hex-value scanner 0))
+      :to-throw
+      (lambda (condition)
+        (and (typep condition 'yaml-kit:yaml-parse-error)
+             (string= (cl-parser-kit:diagnostic-message
+                       (yaml-kit:yaml-kit-error-diagnostic condition))
+                      "expected a hexadecimal digit"))))))
 
 (it "does not advance past the end of scanner input"
   (let ((scanner (yaml-kit::make-scanner (scanner-source ""))))

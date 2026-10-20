@@ -23,8 +23,8 @@
                     (list (cl-parser-kit:span-start-line (yaml-kit:token-end-span stream-start))
                           (cl-parser-kit:span-start-column (yaml-kit:token-end-span stream-start))
                           (cl-parser-kit:span-start (yaml-kit:token-end-span stream-start))))
-              :to-equal (quote (t :stream-start nil nil nil nil nil nil
-                                  (1 1 0) (1 1 0))))
+              :to-equal '(t :stream-start nil nil nil nil nil nil
+                                  (1 1 0) (1 1 0)))
       (yaml-kit::recycle-scanner-token scanner)
       (expect (eq (first (yaml-kit::scanner-token-pool scanner)) stream-start)
               :to-be-truthy)
@@ -44,26 +44,57 @@
                             (cl-parser-kit:span-start-column (yaml-kit:token-end-span scalar))
                             (cl-parser-kit:span-start (yaml-kit:token-end-span scalar)))
                       (yaml-kit::scanner-previous-token-kind scanner))
-                :to-equal (quote (t :scalar "payload" nil nil :plain nil nil
-                                  (1 1 0) (1 8 7) :scalar)))))))
+                :to-equal '(t :scalar "payload" nil nil :plain nil nil
+                                  (1 1 0) (1 8 7) :scalar))))))
 
 (it "rejects invalid scanner state slot values"
   (let ((scanner (yaml-kit::make-scanner (scanner-source ""))))
-    (expect (nth-value 1
-                       (ignore-errors
-                         (setf (yaml-kit::scanner-recyclable-token scanner)
-                               *invalid-scanner-state-slot-value*)))
-            :to-be-type-of 'type-error)
-    (expect (nth-value 1
-                       (ignore-errors
-                         (setf (yaml-kit::scanner-previous-token-kind scanner)
-                               *invalid-scanner-state-slot-value*)))
-            :to-be-type-of 'type-error)))
+    (expect
+      (lambda ()
+        (setf (yaml-kit::scanner-recyclable-token scanner)
+              *invalid-scanner-state-slot-value*))
+      :to-throw
+      'type-error)
+    (expect
+      (lambda ()
+        (setf (yaml-kit::scanner-previous-token-kind scanner)
+              *invalid-scanner-state-slot-value*))
+      :to-throw
+      'type-error)))
 
-(it "preserves a long token sequence across queue compaction"
-  (let* ((values (loop for index below 40 collect (format nil "item-~D" index)))
-         (scanner (yaml-kit::make-scanner
-                   (scanner-source (format nil "[~{~A~^,~}]" values))))
+(it "compacts a long token queue"
+  (multiple-value-bind (expected-values kinds scalars compacted-p)
+      (scanner-queue-compaction-observation)
+    (declare (ignore expected-values scalars))
+    (expect (> (length kinds) 64) :to-be-truthy)
+    (expect compacted-p :to-be-truthy)))
+
+(it "preserves token kinds across queue compaction"
+  (multiple-value-bind (expected-values kinds scalars compacted-p)
+      (scanner-queue-compaction-observation)
+    (declare (ignore scalars compacted-p))
+    (expect
+     kinds
+     :to-equal
+     (append '(:stream-start :flow-sequence-start)
+             (loop for index below (length expected-values)
+                   append (if (< index (1- (length expected-values)))
+                              '(:scalar :flow-entry)
+                              '(:scalar)))
+             '(:flow-sequence-end :stream-end)))))
+
+(it "preserves scalar values across queue compaction"
+  (multiple-value-bind (expected-values kinds scalars compacted-p)
+      (scanner-queue-compaction-observation)
+    (declare (ignore kinds compacted-p))
+    (expect scalars :to-equal expected-values)))
+
+(defun scanner-queue-compaction-observation ()
+  (let* ((expected-values
+           (loop for index below 40 collect (format nil "item-~D" index)))
+         (scanner
+           (yaml-kit::make-scanner
+            (scanner-source (format nil "[~{~A~^,~}]" expected-values))))
          (kinds nil)
          (scalars nil)
          (previous-head 0)
@@ -77,14 +108,4 @@
              (push (yaml-kit:token-kind token) kinds)
              (when (eq (yaml-kit:token-kind token) :scalar)
                (push (yaml-kit:token-value token) scalars)))
-    (expect (list (> (length kinds) 64) compacted-p)
-            :to-equal (quote (t t)))
-    (expect (nreverse kinds)
-            :to-equal
-            (append (quote (:stream-start :flow-sequence-start))
-                    (loop for index below (length values)
-                          append (if (< index (1- (length values)))
-                                     (quote (:scalar :flow-entry))
-                                     (quote (:scalar))))
-                    (quote (:flow-sequence-end :stream-end))))
-    (expect (nreverse scalars) :to-equal values)))
+    (values expected-values (nreverse kinds) (nreverse scalars) compacted-p)))

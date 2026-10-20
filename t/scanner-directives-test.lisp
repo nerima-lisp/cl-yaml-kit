@@ -118,9 +118,10 @@
   "signals a YAML parse error for directive case ~S"
   (name text)
   (declare (ignore name))
-  (expect (nth-value 1
-                   (ignore-errors (scanner-token-kinds text)))
-        :to-be-type-of 'yaml-kit:yaml-parse-error))
+  (expect
+    (lambda () (scanner-token-kinds text))
+    :to-throw
+    'yaml-kit:yaml-parse-error))
 
 (cl-weave:it-each
     ((overlong-utf8 "%E0%80%80")
@@ -134,11 +135,15 @@
   (declare (ignore name))
   (let* ((scanner (yaml-kit::make-scanner (scanner-source text)))
          (buffer (yaml-kit::make-scan-buffer)))
-    (expect (nth-value 1
-                       (ignore-errors
-                         (yaml-kit::scan-uri-escapes
-                          scanner nil (yaml-kit::sc-position scanner) buffer)))
-            :to-be-type-of 'yaml-kit:yaml-parse-error)))
+    (expect
+      (lambda ()
+        (yaml-kit::scan-uri-escapes
+         scanner
+         nil
+         (yaml-kit::sc-position scanner)
+         buffer))
+      :to-throw
+      'yaml-kit:yaml-parse-error)))
 
 (it "stops anchor names before a byte order mark"
   (let* ((scanner (yaml-kit::make-scanner (format nil "&a~C" #\UFEFF)))

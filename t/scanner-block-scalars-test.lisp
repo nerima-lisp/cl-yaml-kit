@@ -81,6 +81,7 @@
   "rejects invalid block scalar case ~S"
   (name input)
   (declare (ignore name))
-  (expect (nth-value 1
-                   (ignore-errors (scanner-token-kinds input)))
-        :to-be-type-of 'yaml-kit:yaml-parse-error))
+  (expect
+    (lambda () (scanner-token-kinds input))
+    :to-throw
+    'yaml-kit:yaml-parse-error))

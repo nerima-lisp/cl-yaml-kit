@@ -63,9 +63,10 @@
   "signals a YAML parse error for flow scalar case ~S"
   (name text)
   (declare (ignore name))
-  (expect (nth-value 1
-                   (ignore-errors (scanner-token-kinds text)))
-        :to-be-type-of 'yaml-kit:yaml-parse-error))
+  (expect
+    (lambda () (scanner-token-kinds text))
+    :to-throw
+    'yaml-kit:yaml-parse-error))
 
 (cl-weave:it-each
     ((plain-word "word" ("word"))
@@ -95,11 +96,12 @@
          (trailing (yaml-kit::make-scan-buffer))
          (spaces (yaml-kit::make-scan-buffer)))
     (setf (yaml-kit::scanner-indent scanner) 3)
-    (expect (nth-value 1
-                       (ignore-errors
-                         (yaml-kit::%scan-plain-scalar-body
-                          scanner start out end leading trailing spaces nil 3)))
-            :to-be-type-of 'yaml-kit:yaml-parse-error)))
+    (expect
+      (lambda ()
+        (yaml-kit::%scan-plain-scalar-body
+         scanner start out end leading trailing spaces nil 3))
+      :to-throw
+      'yaml-kit:yaml-parse-error)))
 
 (it "handles an escaped line break directly"
   (let* ((text (format nil "\\~%"))

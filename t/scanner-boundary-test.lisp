@@ -8,14 +8,17 @@
     "signals a YAML parse error for scanner input ~S"
     (name text)
     (declare (ignore name))
-    (expect (nth-value 1
-                   (ignore-errors (scanner-token-kinds text)))
-        :to-be-type-of 'yaml-kit:yaml-parse-error))
+    (expect
+      (lambda () (scanner-token-kinds text))
+      :to-throw
+      'yaml-kit:yaml-parse-error))
 
   (it "rejects a flow entry when called outside flow context"
     (let ((scanner (yaml-kit::make-scanner (scanner-source ","))))
-      (expect (nth-value 1 (ignore-errors (yaml-kit::fetch-flow-entry scanner)))
-              :to-be-type-of 'yaml-kit:yaml-parse-error)))
+      (expect
+        (lambda () (yaml-kit::fetch-flow-entry scanner))
+        :to-throw
+        'yaml-kit:yaml-parse-error)))
 
   (it "rejects a required simple key when it is removed"
     (let* ((scanner (yaml-kit::make-scanner (scanner-source "key")))
@@ -23,16 +26,23 @@
       (setf (yaml-kit::simple-key-possible key) t
             (yaml-kit::simple-key-required key) t
             (yaml-kit::simple-key-position key) (yaml-kit::sc-position-at 0 0 0))
-      (expect (nth-value 1 (ignore-errors (yaml-kit::remove-simple-key scanner)))
-              :to-be-type-of 'yaml-kit:yaml-parse-error)))
+      (expect
+        (lambda () (yaml-kit::remove-simple-key scanner))
+        :to-throw
+        'yaml-kit:yaml-parse-error)))
 
   (it "reports a token queue resource limit"
     (let ((scanner (yaml-kit::make-scanner (scanner-source ""))))
-      (dotimes (i 65) (vector-push-extend nil (yaml-kit::scanner-tokens scanner)))
-      (setf (yaml-kit::scanner-tokens-head scanner) 65
-            (yaml-kit::scanner-tokens-parsed scanner) 65)
-      (expect (nth-value 1 (ignore-errors (yaml-kit::fetch-more-tokens scanner)))
-              :to-be-type-of 'yaml-kit:yaml-resource-limit-error)))
+      (dotimes (i 64) (vector-push-extend nil (yaml-kit::scanner-tokens scanner)))
+      (setf (yaml-kit::scanner-tokens-head scanner) 64
+            (yaml-kit::scanner-tokens-parsed scanner) 64)
+      (expect (lambda () (yaml-kit::fetch-more-tokens scanner))
+        :to-throw
+        (lambda (condition)
+          (and (typep condition 'yaml-kit:yaml-resource-limit-error)
+               (string= (cl-parser-kit:diagnostic-message
+                         (yaml-kit:yaml-kit-error-diagnostic condition))
+                        "YAML resource limit \"tokens\" exceeded: limit 64, actual 65"))))))
 
   (it "skips a BOM before the first token"
     (expect (scanner-token-kinds (format nil "~Cvalue" #\UFEFF))
@@ -97,33 +107,32 @@
     "rejects invalid token payload ~S"
     (name operation)
     (declare (ignore name))
-    (let* ((span (test-point-span 0 0 0))
-           (condition
-             (nth-value
-              1
-              (ignore-errors
-                (ecase operation
-                  (:scalar-value
-                   (yaml-kit:make-token :scalar span span :value 1))
-                  (:tag-handle
-                   (yaml-kit:make-token :tag span span :handle 1))
-                  (:tag-suffix
-                   (yaml-kit:make-token :tag span span :suffix 1))
-                  (:scalar-style
-                   (yaml-kit:make-token :scalar span span :style :invalid))
-                  (:private-scalar-value
-                   (yaml-kit::%make-token :scalar span span
-                                          :value *invalid-token-slot-value*))
-                  (:private-tag-handle
-                   (yaml-kit::%make-token :tag span span
-                                          :handle *invalid-token-slot-value*))
-                  (:private-tag-suffix
-                   (yaml-kit::%make-token :tag span span
-                                          :suffix *invalid-token-slot-value*))
-                  (:private-scalar-style
-                   (yaml-kit::%make-token :scalar span span
-                                          :style *invalid-token-slot-value*)))))))
-      (expect condition :to-be-type-of 'type-error)))
+    (let ((span (test-point-span 0 0 0)))
+      (expect
+        (lambda ()
+          (ecase operation
+            (:scalar-value
+             (yaml-kit:make-token :scalar span span :value 1))
+            (:tag-handle
+             (yaml-kit:make-token :tag span span :handle 1))
+            (:tag-suffix
+             (yaml-kit:make-token :tag span span :suffix 1))
+            (:scalar-style
+             (yaml-kit:make-token :scalar span span :style :invalid))
+            (:private-scalar-value
+             (yaml-kit::%make-token :scalar span span
+                                    :value *invalid-token-slot-value*))
+            (:private-tag-handle
+             (yaml-kit::%make-token :tag span span
+                                    :handle *invalid-token-slot-value*))
+            (:private-tag-suffix
+             (yaml-kit::%make-token :tag span span
+                                    :suffix *invalid-token-slot-value*))
+            (:private-scalar-style
+             (yaml-kit::%make-token :scalar span span
+                                    :style *invalid-token-slot-value*))))
+        :to-throw
+        'type-error)))
 
   (cl-weave:it-each
       ((invalid-kind)
@@ -133,20 +142,19 @@
        (invalid-minor))
     "rejects invalid token metadata ~S"
     (operation)
-    (let* ((span (test-point-span 0 0 0))
-           (condition
-             (nth-value
-              1
-              (ignore-errors
-                (ecase operation
-                  (invalid-kind (yaml-kit:make-token 1 span span))
-                  (invalid-start-span (yaml-kit:make-token :scalar 1 span))
-                  (invalid-end-span (yaml-kit:make-token :scalar span 1))
-                  (invalid-major
-                   (yaml-kit:make-token :version-directive span span :major t))
-                  (invalid-minor
-                   (yaml-kit:make-token :version-directive span span :minor t)))))))
-      (expect condition :to-be-type-of 'type-error)))
+    (expect
+      (lambda ()
+        (let ((span (test-point-span 0 0 0)))
+          (ecase operation
+            (invalid-kind (yaml-kit:make-token 1 span span))
+            (invalid-start-span (yaml-kit:make-token :scalar 1 span))
+            (invalid-end-span (yaml-kit:make-token :scalar span 1))
+            (invalid-major
+             (yaml-kit:make-token :version-directive span span :major t))
+            (invalid-minor
+             (yaml-kit:make-token :version-directive span span :minor t)))))
+      :to-throw
+      'type-error))
 
   (it "constructs tokens with each valid payload variant"
     (let* ((start-span (test-point-span 1 2 3))

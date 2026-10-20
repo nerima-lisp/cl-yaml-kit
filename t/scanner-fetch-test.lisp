@@ -46,9 +46,10 @@
   "signals a YAML parse error when scanning ~S"
   (name text)
   (declare (ignore name))
-  (expect (nth-value 1
-                   (ignore-errors (scanner-token-kinds text)))
-        :to-be-type-of 'yaml-kit:yaml-parse-error))
+  (expect
+    (lambda () (scanner-token-kinds text))
+    :to-throw
+    'yaml-kit:yaml-parse-error))
 
 (defun scanner-token-offsets (text)
   (let ((scanner (yaml-kit::make-scanner (scanner-source text))))
@@ -69,12 +70,6 @@
              do (setf previous-end end))
        (= (second (car (last offsets))) text-length)))
 
-(defun scanner-token-outcome (text)
-  (handler-case
-      (cons :tokens (scanner-token-offsets text))
-    (yaml-kit:yaml-parse-error (condition)
-      (cons :parse-error condition))))
-
 (cl-weave:it-property
  "preserves generated plain scalar values and endpoint offsets"
  ((text (cl-weave:gen-string :min-length 1 :max-length 32
@@ -93,10 +88,22 @@
   ((text (cl-weave:gen-string :min-length 0 :max-length 64
                               :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))
   (:trials 100 :timeout-per-trial 5)
-  (let ((outcome (scanner-token-outcome text)))
+  (let ((outcome
+          (handler-case
+              (cons :tokens (scanner-token-offsets text))
+            (error (condition)
+              (cons :condition condition)))))
     (ecase (car outcome)
       (:tokens
        (expect (scanner-token-offsets-valid-p (cdr outcome) (length text))
                :to-be-truthy))
-      (:parse-error
-       (expect (cdr outcome) :to-be-type-of 'yaml-kit:yaml-parse-error)))))
+      (:condition
+       (expect
+         (lambda () (error (cdr outcome)))
+         :to-throw
+         (lambda (condition)
+           (and (typep condition 'yaml-kit:yaml-parse-error)
+                (plusp
+                 (length
+                  (cl-parser-kit:diagnostic-message
+                   (yaml-kit:yaml-kit-error-diagnostic condition)))))))))))
