@@ -33,6 +33,17 @@
                    (yaml-kit::max-alias-expansions
                     yaml-kit::+default-max-alias-expansions+))
                  (funcall k input)))))
+  (it "calls a generated resource function with named keyword defaults and supplied values"
+    (let* ((name (gensym "RESOURCE/"))
+           (form `(yaml-kit::define-yaml-resource-function ,name (input)
+                    (:group :input :keywords (((:limit limit) 10 supplied-p)))
+                    (list input limit supplied-p))))
+      (eval form)
+      (let ((function (symbol-function name)))
+        (expect (funcall function :input)
+                :to-equal (list :input 10 nil))
+        (expect (funcall function :input :limit 7)
+                :to-equal (list :input 7 t)))))
   (it "rejects duplicate resource keywords during macroexpansion"
     (let ((condition
             (handler-case
