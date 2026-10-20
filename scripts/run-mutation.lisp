@@ -51,12 +51,6 @@
 (defparameter *equivalent-mutations*
   '((scan-block-scalar-breaks (3 3 2 3 1 1)
      "The alternate comparison is unreachable after indentation normalization.")
-    (stale-simple-keys (4)
-     "Called for side effects; its return value is ignored.")
-    (save-simple-key (4)
-     "Called for side effects; its return value is ignored.")
-    (remove-simple-key (4)
-     "Called for side effects; its return value is ignored.")
     (scan-block-scalar-breaks (3 5)
      "The helper's return value is ignored; the caller consumes its mutated cells.")
     (scan-plain-scalar (3 2 2 2 2)
