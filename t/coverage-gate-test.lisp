@@ -213,34 +213,31 @@
   (it "fails when an expected source file was not measured"
     (let* ((pathname (asdf:system-relative-pathname
                       "cl-yaml-kit" "t/coverage-gate-test.lisp"))
-           (statistics (gate-statistics 9 10 9 10))
-           (message
-             (handler-case
-                 (progn
-                   (setf (getf statistics :pathname) pathname)
-                   (cl-yaml-kit/coverage-gate:gate-verdicts
-                    (list statistics) nil
-                    :expected-pathnames (list pathname #p"/virtual/missing.lisp"))
-                   "")
-               (error (condition) (princ-to-string condition)))))
-      (expect message :to-contain "missing:")))
+           (statistics (gate-statistics 9 10 9 10)))
+      (setf (getf statistics :pathname) pathname)
+      (expect (lambda ()
+                (cl-yaml-kit/coverage-gate:gate-verdicts
+                 (list statistics) nil
+                 :expected-pathnames (list pathname #p"/virtual/missing.lisp")))
+              :to-throw
+              (lambda (condition)
+                (search "missing:" (princ-to-string condition))))))
 
   (it "fails when a source file was measured more than once"
     (let* ((pathname (asdf:system-relative-pathname
                       "cl-yaml-kit" "t/coverage-gate-test.lisp"))
            (statistics (gate-statistics 9 10 9 10))
-           (duplicate (copy-list statistics))
-           (message
-             (handler-case
-                 (progn
-                   (setf (getf statistics :pathname) pathname
-                         (getf duplicate :pathname) pathname)
-                   (cl-yaml-kit/coverage-gate:gate-verdicts
-                    (list statistics duplicate) nil
-                    :expected-pathnames (list pathname))
-                   "")
-               (error (condition) (princ-to-string condition)))))
-      (expect message :to-contain "Duplicate measured source files:")))
+           (duplicate (copy-list statistics)))
+      (setf (getf statistics :pathname) pathname
+            (getf duplicate :pathname) pathname)
+      (expect (lambda ()
+                (cl-yaml-kit/coverage-gate:gate-verdicts
+                 (list statistics duplicate) nil
+                 :expected-pathnames (list pathname)))
+              :to-throw
+              (lambda (condition)
+                (search "Duplicate measured source files:"
+                        (princ-to-string condition))))))
 
   (it "rejects fake 50 percent expression and 10 percent branch coverage"
     (multiple-value-bind (output exit-code status)
@@ -286,49 +283,37 @@
                 (finish-output *error-output*)
                 (sleep 30))))
       (unwind-protect
-           (let ((outcome
-                   (handler-case
-                       (list :returned
-                             (multiple-value-list
-                              (run-coverage-reproduction-process
-                               "inline timeout form" :timeout 5.0
-                               :form child-form :systems nil)))
-                     (error (condition)
-                       (list :condition condition)))))
-             (case (first outcome)
-               (:condition
-                (let* ((message (princ-to-string (second outcome)))
-                       (stdout-start (search "stdout:" message))
-                       (stderr-start (search "stderr:" message))
-                       (stdout-marker
-                         (and stdout-start stderr-start
-                              (search "coverage-timeout-stdout" message
-                                      :start2 (+ stdout-start (length "stdout:"))
-                                      :end2 stderr-start)))
-                       (stderr-marker
-                         (and stderr-start
-                              (search "coverage-timeout-stderr" message
-                                      :start2 (+ stderr-start (length "stderr:"))))))
-                  (expect
-                    (list (not (null (search "timed out after" message)))
-                          (not (null stdout-marker))
-                          (not (null stderr-marker)))
-                    :to-equal (list t t t))))
-               (:returned
-                (destructuring-bind (output exit-code status) (second outcome)
-                  (error "Expected default timeout handling to signal an error, but returned status ~S and exit code ~S.~%Captured stdout/stderr:~%~A"
-                         status exit-code output))))
+           (progn
+             (expect (lambda ()
+                       (run-coverage-reproduction-process
+                        "inline timeout form" :timeout 5.0
+                        :form child-form :systems nil))
+                     :to-throw
+                     (lambda (condition)
+                       (let* ((message (princ-to-string condition))
+                              (stdout-start (search "stdout:" message))
+                              (stderr-start (search "stderr:" message))
+                              (stdout-marker
+                                (and stdout-start stderr-start
+                                     (search "coverage-timeout-stdout" message
+                                             :start2 (+ stdout-start (length "stdout:"))
+                                             :end2 stderr-start)))
+                              (stderr-marker
+                                (and stderr-start
+                                     (search "coverage-timeout-stderr" message
+                                             :start2 (+ stderr-start (length "stderr:"))))))
+                         (and (search "timed out after" message)
+                              stdout-marker
+                              stderr-marker))))
              (let ((pid
                      (with-open-file (stream pid-file)
                        (parse-integer (read-line stream)))))
-               (expect
-                (handler-case
-                    (progn (sb-posix:kill pid 0) t)
-                  (sb-posix:syscall-error (condition)
-                    (if (= (sb-posix:syscall-errno condition) sb-posix:esrch)
-                        nil
-                        (error condition))))
-                :to-equal nil)))
+               (expect (lambda () (sb-posix:kill pid 0))
+                       :to-throw
+                       (lambda (condition)
+                         (and (typep condition 'sb-posix:syscall-error)
+                              (= (sb-posix:syscall-errno condition)
+                                 sb-posix:esrch))))))
         (when (probe-file pid-file)
           (delete-file pid-file)))))
 

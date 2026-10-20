@@ -26,6 +26,11 @@
 (defun %source-key (pathname)
   (enough-namestring (pathname pathname) (uiop:getcwd)))
 
+(defun %block-comment-start-p (char source position)
+  (and (char= char #\#)
+       (< (1+ position) (length source))
+       (char= (char source (1+ position)) #\|)))
+
 (defun %form-start (source position)
   (loop
     (when (>= position (length source))
@@ -35,9 +40,7 @@
             ((char= char #\;)
              (setf position (or (position #\Newline source :start position)
                                 (length source))))
-            ((and (char= char #\#)
-                  (< (1+ position) (length source))
-                  (char= (char source (1+ position)) #\|))
+            ((%block-comment-start-p char source position)
              (error "Block comments are not supported by the coverage gate (offset ~D)."
                     position))
             (t (return position))))))
@@ -46,24 +49,69 @@
   (and (consp form) (symbolp (car form))
        (string-downcase (symbol-name (car form)))))
 
+(defun %read-top-level-form (source start)
+  (multiple-value-bind (form end)
+      (read-from-string source t nil :start start :preserve-whitespace t)
+    (let ((head (%form-head form)))
+      (when (equal head "in-package")
+        (setf *package* (or (find-package (second form)) *package*)))
+      (values (list :head head :start start :end end) end))))
+
 (defun top-level-forms (source)
   "Return (:head :start :end) for each top-level form of SOURCE, tracking IN-PACKAGE."
   (let ((*package* (find-package '#:cl-user))
         (forms nil))
-    (do ((start (%form-start source 0)))
-        ((null start) (nreverse forms))
-      (multiple-value-bind (form end)
-          (read-from-string source t nil :start start :preserve-whitespace t)
-        (let ((head (%form-head form)))
-          (when (equal head "in-package")
-            (setf *package* (or (find-package (second form)) *package*)))
-          (push (list :head head :start start :end end) forms))
-        (setf start (%form-start source end))))))
+    (loop with position = (%form-start source 0)
+          while position
+          do (multiple-value-bind (form end)
+                 (%read-top-level-form source position)
+               (push form forms)
+               (setf position (%form-start source end)))
+          finally (return (nreverse forms)))))
 
 (defun %spans-form-p (location form)
   (and (eq (getf location :kind) :expression)
        (= (getf location :start) (getf form :start))
        (= (getf location :end) (getf form :end))))
+
+(defun %valid-file-statistics-p (statistics)
+  (let ((pathname (getf statistics :pathname))
+        (expression-covered (getf statistics :expression-covered))
+        (expression-total (getf statistics :expression-total))
+        (branch-covered (getf statistics :branch-covered))
+        (branch-total (getf statistics :branch-total))
+        (locations (getf statistics :uncovered-forms)))
+    (and pathname
+         (typep expression-covered '(integer 0))
+         (typep expression-total '(integer 1))
+         (<= expression-covered expression-total)
+         (typep branch-covered '(integer 0))
+         (typep branch-total '(integer 0))
+         (<= branch-covered branch-total)
+         (or (plusp branch-total) (zerop branch-covered))
+         (listp locations))))
+
+(defun %unexcused-forms (locations excluded)
+  (remove-if (lambda (location)
+               (some (lambda (form)
+                       (%spans-form-p location form))
+                     excluded))
+             locations))
+
+(defun %excluded-form-reports (source excluded)
+  (mapcar (lambda (form)
+            (list :head (getf form :head)
+                  :line (1+ (count #\Newline source
+                                   :end (getf form :start)))))
+          excluded))
+
+(defun %excluded-forms (forms heads locations)
+  (remove-if-not
+   (lambda (form)
+     (and (member (getf form :head) heads :test #'equal)
+          (find-if (lambda (location) (%spans-form-p location form))
+                   locations)))
+   forms))
 
 (defun file-verdict (statistics source rules)
   "Classify one cl-weave COVERAGE-FILE-STATISTICS entry against RULES.
@@ -76,29 +124,13 @@ excused; nested expressions and every branch remain uncovered."
          (branch-total (getf statistics :branch-total))
          (locations (getf statistics :uncovered-forms))
          (heads (mapcar (lambda (rule) (getf rule :head)) rules)))
-    (unless (and pathname
-                 (typep expression-covered '(integer 0))
-                 (typep expression-total '(integer 1))
-                 (<= expression-covered expression-total)
-                 (typep branch-covered '(integer 0))
-                 (typep branch-total '(integer 0))
-                 (<= branch-covered branch-total)
-                 (or (plusp branch-total) (zerop branch-covered))
-                 (listp locations))
+    (unless (%valid-file-statistics-p statistics)
       (error "Malformed or empty cl-weave coverage statistics for ~S." pathname))
     (let* ((forms (top-level-forms source))
            (excluded
-             (remove-if-not
-              (lambda (form)
-                (and (member (getf form :head) heads :test #'equal)
-                     (find-if (lambda (location) (%spans-form-p location form))
-                              locations)))
-              forms))
+             (%excluded-forms forms heads locations))
            (unexcused
-             (remove-if (lambda (location)
-                          (some (lambda (form) (%spans-form-p location form))
-                                excluded))
-                        locations))
+             (%unexcused-forms locations excluded))
            (scored-expression-total (- expression-total (length excluded))))
       (when (> (length excluded) (- expression-total expression-covered))
         (error "Excluded expression count exceeds uncovered expressions for ~S."
@@ -111,11 +143,7 @@ excused; nested expressions and every branch remain uncovered."
             :branch-total branch-total
             :expression-shortfall (- scored-expression-total expression-covered)
             :branch-shortfall (- branch-total branch-covered)
-            :excluded (mapcar (lambda (form)
-                                (list :head (getf form :head)
-                                      :line (1+ (count #\Newline source
-                                                       :end (getf form :start)))))
-                              excluded)
+            :excluded (%excluded-form-reports source excluded)
             :unexcused unexcused))))
 
 (defun %duplicate-keys (keys)
