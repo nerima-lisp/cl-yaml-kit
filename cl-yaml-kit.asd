@@ -95,6 +95,7 @@
                (:file "loader-schema-test")
                (:file "loader-float-test")
                (:file "loader-construction-test")
+               (:file "loader-scalar-construction-test")
                (:file "loader-construction-errors-test")
                (:file "loader-resource-test")
                (:file "loader-integration-test")

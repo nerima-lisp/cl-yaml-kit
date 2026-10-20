@@ -72,6 +72,50 @@
         (string= (%canonical-tag tag) expected)
         (and (not (%tag-info tag)) (not (%collection-tag-p tag))))))
 
+(defun %construct-scalar-with-context (node schema)
+  (handler-case
+      (%construct-scalar node schema)
+    (yaml-compose-error (condition)
+      (error condition))
+    (error (condition)
+      (signal-yaml-compose-error
+       :diagnostic
+       (cl-parser-kit:make-diagnostic
+        :message (princ-to-string condition)
+        :span (node-start-span node))
+       :cause "invalid scalar value"))))
+
+(defun %validate-collection-tag (node expected message)
+  (unless (%collection-tag-compatible-p node expected)
+    (signal-yaml-compose-error
+     :diagnostic
+     (cl-parser-kit:make-diagnostic
+      :message message
+      :span (node-start-span node))
+     :cause message)))
+
+(defun %construct-node (node schema mapping-type sequence-type
+                        duplicate-key-policy)
+  (declare (optimize (speed 3) (safety 1)))
+  (let ((memo (make-hash-table :test #'eq)))
+    (labels ((walk (object)
+               (cond
+                 ((scalar-node-p object)
+                  (%construct-scalar-with-context object schema))
+                 ((sequence-node-p object)
+                  (%validate-collection-tag
+                   object +yaml-schema-sequence-tag+
+                   "incompatible sequence tag")
+                  (%construct-sequence object sequence-type memo #'walk))
+                 ((mapping-node-p object)
+                  (%validate-collection-tag
+                   object +yaml-schema-mapping-tag+
+                   "incompatible mapping tag")
+                  (%construct-mapping object mapping-type duplicate-key-policy
+                                      memo #'walk))
+                 (t (signal-yaml-compose-error :cause "unsupported node type")))))
+      (walk node))))
+
 (defun construct (node &key (schema :core) (mapping-type :hash-table)
                               (sequence-type :vector)
                               (duplicate-key-policy :error))
@@ -84,29 +128,9 @@
     (signal-yaml-compose-error :cause "invalid sequence type"))
   (unless (member duplicate-key-policy '(:error :first :last))
     (signal-yaml-compose-error :cause "invalid duplicate-key policy"))
-  (let ((memo (make-hash-table :test #'eq)))
-    (labels ((walk (object)
-               (cond
-                 ((scalar-node-p object)
-                  (handler-case
-                      (%construct-scalar object schema)
-                    (yaml-compose-error (condition)
-                      (error condition))
-                    (error (condition)
-                      (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message (princ-to-string condition) :span (node-start-span object)) :cause "invalid scalar value"))))
-                 ((sequence-node-p object)
-                  (unless (%collection-tag-compatible-p object
-                                                         "tag:yaml.org,2002:seq")
-                    (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "incompatible sequence tag" :span (node-start-span object)) :cause "incompatible sequence tag"))
-                  (%construct-sequence object sequence-type memo #'walk))
-                 ((mapping-node-p object)
-                  (unless (%collection-tag-compatible-p object
-                                                         "tag:yaml.org,2002:map")
-                    (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "incompatible mapping tag" :span (node-start-span object)) :cause "incompatible mapping tag"))
-                  (%construct-mapping object mapping-type duplicate-key-policy
-                                       memo #'walk))
-                 (t (signal-yaml-compose-error :cause "unsupported node type")))))
-      (walk node))))
+  (%construct-node node schema mapping-type sequence-type
+                   duplicate-key-policy))
+
 (defun %constructor-construct/cps
     (node k &key (schema :core) (mapping-type :hash-table)
                (sequence-type :vector) (duplicate-key-policy :error))
