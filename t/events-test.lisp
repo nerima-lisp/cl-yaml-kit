@@ -174,8 +174,26 @@
   (:start-span (test-point-span 9 0 19) :end-span (test-point-span 9 1 20)
    :anchor "a" :tag "t" :value "value" :plain-implicit-p t
    :quoted-implicit-p t :style :double-quoted))
-(define-event-contract-tests yaml-kit:alias-event yaml-kit:make-alias-event
-  yaml-kit:alias-event-p
-  (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:alias-event-anchor)
-  (:start-span (test-point-span 10 0 21) :end-span (test-point-span 10 1 22)
-   :anchor "a"))
+(progn
+  (define-event-contract-tests yaml-kit:alias-event yaml-kit:make-alias-event
+    yaml-kit:alias-event-p
+    (yaml-kit:event-start-span yaml-kit:event-end-span yaml-kit:alias-event-anchor)
+    (:start-span (test-point-span 10 0 21) :end-span (test-point-span 10 1 22)
+     :anchor "a"))
+  (it "returns anchor, tag, and style from events"
+    (let ((event (yaml-kit:make-scalar-event
+                  :anchor "a" :tag "tag:example" :style :double-quoted)))
+      (expect (yaml-kit::%event-attribute event :anchor) :to-equal "a")
+      (expect (yaml-kit::%event-attribute event :tag) :to-equal "tag:example")
+      (expect (yaml-kit::%event-attribute event :style) :to-equal :double-quoted)))
+  (it "returns nil for an event without the requested attribute"
+    (expect (yaml-kit::%event-attribute
+             (yaml-kit:make-stream-start-event) :anchor)
+            :to-equal nil))
+  (it "rejects an unsupported event attribute"
+    (expect (handler-case
+                (progn
+                  (yaml-kit::%event-attribute (yaml-kit:make-scalar-event) :unknown)
+                  nil)
+              (type-error () t))
+            :to-be-truthy)))

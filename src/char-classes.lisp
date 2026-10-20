@@ -24,19 +24,44 @@
                   (inline ,predicate-name))
          (defun ,predicate-name (character)
            (and (characterp character) (< (char-code character) 128)
-                (= 1 (aref ,table-name (char-code character))))))))
-
-  (%define-character-production indicator "-?:,[]{}#&*!|>'\"%@`")
-  (%define-character-production flow-indicator "[],{}")
-  (%define-character-production line-break '(#\Return #\Newline))
-  (%define-character-production whitespace '(#\Space #\Tab)))
+                (= 1 (aref ,table-name (char-code character)))))))))
 
 (declaim (inline sc-blank-p sc-break-p sc-blankz-p sc-breakz-p
                  sc-alpha-p sc-digit-p sc-hex-p sc-space-p sc-tab-p
                  sc-z-p sc-bom-p sc-printable-p))
 
-(defun sc-blank-p (s &optional (k 0))
-  (yaml-whitespace-p (sc-char s k)))
+(progn
+  (defun %yaml-character-bit-p (character bits)
+    (and (characterp character)
+         (< (char-code character) (length bits))
+         (= 1 (sbit bits (char-code character)))))
+
+  (defun yaml-indicator-p (character)
+    (%yaml-character-bit-p character *yaml-indicator-bits*))
+
+  (defun yaml-flow-indicator-p (character)
+    (%yaml-character-bit-p character *yaml-flow-indicator-bits*))
+
+  (defun yaml-line-break-p (character)
+    (%yaml-character-bit-p character *yaml-line-break-bits*))
+
+  (defun yaml-whitespace-p (character)
+    (%yaml-character-bit-p character *yaml-whitespace-bits*))
+
+  (defun yaml-printable-p (character)
+    (and (characterp character)
+         (let ((code (char-code character)))
+           (or (= code #x9)
+               (= code #xa)
+               (= code #xd)
+               (<= #x20 code #x7e)
+               (= code #x85)
+               (<= #xa0 code #xd7ff)
+               (<= #xe000 code #xfffd)
+               (<= #x10000 code #x10ffff)))))
+
+  (defun sc-blank-p (s &optional (k 0))
+    (yaml-whitespace-p (sc-char s k))))
 (defun sc-break-p (s &optional (k 0))
   (yaml-line-break-p (sc-char s k)))
 (defun sc-z-p (s &optional (k 0))
@@ -61,12 +86,14 @@
         (char<= #\A character #\F)
         (char<= #\a character #\f))))
 (defun sc-space-p (s &optional (k 0))
-  (char= (sc-char s k) #\Space))
+  (let ((character (sc-char s k)))
+    (and (yaml-whitespace-p character)
+         (char= character #\Space))))
 (defun sc-tab-p (s &optional (k 0))
-  (char= (sc-char s k) #\Tab))
+  (let ((character (sc-char s k)))
+    (and (yaml-whitespace-p character)
+         (char= character #\Tab))))
 (defun sc-bom-p (s &optional (k 0))
   (char= (sc-char s k) (code-char #xfeff)))
 (defun sc-printable-p (s &optional (k 0))
-  (let ((code (char-code (sc-char s k))))
-    (or (= code #x9) (= code #xa) (= code #xd)
-        (<= #x20 code #x7e) (<= #xa0 code #x10ffff))))
+  (yaml-printable-p (sc-char s k)))

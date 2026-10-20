@@ -154,3 +154,28 @@
     (yaml-kit:yaml-format-edit-anchor-error-path
      yaml-kit:yaml-format-edit-anchor-error-anchor)
     ("anchor detail")))
+
+(describe "resource-limit helper"
+  (it "signals structured resource diagnostics"
+    (let* ((span (test-point-span 13 14 15))
+           (condition
+             (handler-case
+                 (yaml-kit::%signal-yaml-resource-limit
+                  "depth" 3 4 :span span :context "parser context")
+               (yaml-kit:yaml-resource-limit-error (condition) condition)))
+           (diagnostic (yaml-kit:yaml-kit-error-diagnostic condition)))
+      (expect (list (yaml-kit::yaml-resource-limit-error-limit-name condition)
+                    (yaml-kit::yaml-resource-limit-error-limit condition)
+                    (yaml-kit::yaml-resource-limit-error-actual condition)
+                    (yaml-kit::yaml-resource-limit-error-context condition))
+              :to-equal (list "depth" 3 4 "parser context"))
+      (expect (list (cl-parser-kit:diagnostic-message diagnostic)
+                    (cl-parser-kit:diagnostic-span diagnostic)
+                    (cl-parser-kit:diagnostic-data diagnostic))
+              :to-equal
+              (list "YAML resource limit \"depth\" exceeded: limit 3, actual 4"
+                    span
+                    (list :limit-name "depth" :limit 3 :actual 4
+                          :context "parser context")))
+      (expect (condition-report condition)
+              :to-equal (cl-parser-kit:diagnostic->string diagnostic)))))

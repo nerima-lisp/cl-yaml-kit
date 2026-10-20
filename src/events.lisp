@@ -43,4 +43,23 @@
   ((anchor nil :type (or null simple-string)) (tag nil :type (or null simple-string))
    (value "" :type simple-string) (plain-implicit-p nil :type boolean)
    (quoted-implicit-p nil :type boolean) (style :plain :type scalar-style)))
-(define-event alias-event ((anchor nil :type (or null simple-string))))
+(progn
+  (define-event alias-event ((anchor nil :type (or null simple-string))))
+  (defun %event-attribute (event attribute)
+    (ecase attribute
+      (:anchor
+       (typecase event
+         (sequence-start-event (sequence-start-event-anchor event))
+         (mapping-start-event (mapping-start-event-anchor event))
+         (scalar-event (scalar-event-anchor event))
+         (alias-event (alias-event-anchor event))))
+      (:tag
+       (typecase event
+         (sequence-start-event (sequence-start-event-tag event))
+         (mapping-start-event (mapping-start-event-tag event))
+         (scalar-event (scalar-event-tag event))))
+      (:style
+       (typecase event
+         (sequence-start-event (sequence-start-event-style event))
+         (mapping-start-event (mapping-start-event-style event))
+         (scalar-event (scalar-event-style event)))))))
