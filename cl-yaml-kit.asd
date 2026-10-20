@@ -30,7 +30,7 @@
                (:file "scanner-navigation")
                (:file "parser-states") (:file "parser") (:file "parser-nodes")
                (:file "parser-flow") (:file "parser-entry")
-               (:file "composer") (:file "schema") (:file "float-values")
+               (:file "composer") (:file "schema-data") (:file "schema") (:file "float-values")
                (:file "constructor") (:file "constructor-collections")
                (:file "loader") (:file "representer") (:file "serializer")
                (:file "emitter-state") (:file "emitter-scalars")

@@ -46,12 +46,11 @@
     (case kind
       (:invalid-collection
        (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "collection tag on scalar" :span (node-start-span node)) :cause "collection tag on scalar"))
-      (:null (unless (member text '("" "~" "null" "Null" "NULL")
-                              :test #'string=)
+      (:null (unless (member text +yaml-core-null-spellings+ :test #'string=)
                 (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid null scalar" :span (node-start-span node)) :cause "invalid null scalar"))
              +yaml-null+)
-      (:bool (cond ((member text '("true" "True" "TRUE") :test #'string=) t)
-                   ((member text '("false" "False" "FALSE") :test #'string=)
+      (:bool (cond ((member text +yaml-core-true-spellings+ :test #'string=) t)
+                   ((member text +yaml-core-false-spellings+ :test #'string=)
                     +yaml-false+)
                    (t (signal-yaml-compose-error :diagnostic (cl-parser-kit:make-diagnostic :message "invalid boolean scalar" :span (node-start-span node)) :cause "invalid boolean scalar"))))
       (:int (%parse-number text kind (node-start-span node)))

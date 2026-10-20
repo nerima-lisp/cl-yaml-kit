@@ -1,29 +1,9 @@
 ;;;; src/schema.lisp
 (in-package #:yaml-kit)
-(defparameter +yaml-schema-names+ '(:failsafe :json :core))
-
 (defun validate-schema (schema)
   (unless (member schema +yaml-schema-names+)
     (signal-yaml-compose-error :cause "unknown YAML schema" :message schema))
   schema)
-
-(defmacro define-tag-table (name &rest rows)
-  `(defparameter ,name
-     (list
-      ,@(mapcar (lambda (row)
-                  (destructuring-bind (short suffix kind category) row
-                    `(list ,short (concatenate 'string +yaml-tag-prefix+ ,suffix)
-                           ,kind ,(eq category :collection))))
-                rows))))
-
-(define-tag-table *yaml-tag-table*
-  ("!!str" "str" :str :scalar)
-  ("!!int" "int" :int :scalar)
-  ("!!float" "float" :float :scalar)
-  ("!!bool" "bool" :bool :scalar)
-  ("!!null" "null" :null :scalar)
-  ("!!seq" "seq" :invalid-collection :collection)
-  ("!!map" "map" :invalid-collection :collection))
 
 (defun %tag-info (tag)
   (find-if (lambda (row) (or (string= tag (first row))
@@ -39,52 +19,14 @@
 (defun %collection-tag-p (tag)
   (let ((row (%tag-info tag))) (and row (fourth row))))
 
-(defun %schema-return-tag (tag value)
-  (declare (ignore value))
-  tag)
-
-;; Each row is (tag regexp conversion-function first-chars).
-;; The regular expressions deliberately omit anchors: FULL-MATCH-P already
-;; expresses whole-string matching.
-(defvar *schema-spec-tables*
-  '((:failsafe
-     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))
-    (:json
-     ("tag:yaml.org,2002:null" "null" %schema-return-tag "n")
-     ("tag:yaml.org,2002:bool" "true|false" %schema-return-tag "tf")
-     ("tag:yaml.org,2002:int" "-?(0|[1-9][0-9]*)" %schema-return-tag "-0123456789")
-     ("tag:yaml.org,2002:float"
-      "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][-+]?[0-9]+)?"
-      %schema-return-tag "-0123456789")
-     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))
-    (:core
-     ("tag:yaml.org,2002:null" "~|null|Null|NULL" %schema-return-tag "~nN")
-     ("tag:yaml.org,2002:null" "" %schema-return-tag "")
-     ("tag:yaml.org,2002:bool"
-      "true|True|TRUE|false|False|FALSE" %schema-return-tag "tTfF")
-     ("tag:yaml.org,2002:int" "[-+]?[0-9]+" %schema-return-tag "-+0123456789")
-     ("tag:yaml.org,2002:int" "[-+]?0o[0-7]+" %schema-return-tag "-+0")
-     ("tag:yaml.org,2002:int" "[-+]?0x[0-9a-fA-F]+" %schema-return-tag "-+0")
-     ("tag:yaml.org,2002:float"
-      "[-+]?((\\.[0-9]+)|([0-9]+(\\.[0-9]*)?))([eE][-+]?[0-9]+)?"
-      %schema-return-tag "-+.0123456789")
-     ("tag:yaml.org,2002:float" "[-+]?\\.(inf|Inf|INF)"
-      %schema-return-tag "-+.")
-     ("tag:yaml.org,2002:float" "\\.(nan|NaN|NAN)"
-      %schema-return-tag ".")
-     ("tag:yaml.org,2002:str" nil %schema-return-tag nil))))
-
 (defun %schema-first-characters (rows)
   (let ((bits (make-array 128 :element-type 'bit :initial-element 0)))
     (dolist (row rows (the simple-bit-vector bits))
-      (let ((characters (fourth row)))
-        (when characters
-          (loop for character across characters
-                do (setf (sbit bits (char-code character)) 1)))))))
+      (loop for character across (third row)
+            do (setf (sbit bits (char-code character)) 1)))))
 
 (defun %schema-row-matches-p (bits value)
-  (or (null bits)
-      (zerop (length value))
+  (or (zerop (length value))
       (let ((code (char-code (char value 0))))
         (and (< code (length bits))
              (plusp (sbit bits code))))))
@@ -92,12 +34,9 @@
 (defun %compile-schema-table (rows)
   (let ((compiled
           (mapcar (lambda (row)
-                    (list (first row)
-                          (and (second row)
-                               (cl-regex-kit:compile-regex (second row)))
-                          (third row)
-                          (and (fourth row)
-                               (%schema-first-characters (list row)))))
+                    (list (concatenate 'string +yaml-tag-prefix+ (first row))
+                          (cl-regex-kit:compile-regex (second row))
+                          (%schema-first-characters (list row))))
                   rows)))
     (cons (%schema-first-characters rows) compiled)))
 
@@ -119,14 +58,18 @@
     (when (and (plusp (length value))
                (< (char-code (char value 0)) (length bits))
                (zerop (sbit bits (char-code (char value 0)))))
-      (return-from %schema-resolve "tag:yaml.org,2002:str"))
-    (dolist (row (cdr table) "tag:yaml.org,2002:str")
+      (return-from %schema-resolve +yaml-schema-string-tag+))
+    (dolist (row (cdr table) +yaml-schema-string-tag+)
       (let ((regexp (second row))
-            (row-bits (fourth row)))
-        (when (and regexp
-                   (%schema-row-matches-p row-bits value)
+            (row-bits (third row)))
+        (when (and (%schema-row-matches-p row-bits value)
                    (cl-regex-kit:full-match-p regexp value))
-          (return (funcall (third row) (first row) value)))))))
+          (return (first row)))))))
+
+(defun %failsafe-kind (value)
+  (declare (optimize (speed 3) (safety 1))
+           (type string value))
+  (%schema-resolve value (load-time-value (%schema-table :failsafe))))
 
 (defmacro define-schema-resolver (name schema)
   `(defun ,name (value)
@@ -152,8 +95,8 @@ a plain scalar. Quoted and block scalars must not call this resolver."
 (defun %implicit-node-tag (node schema)
   (cond ((scalar-node-p node)
          (resolve-plain-scalar-tag (scalar-node-value node) schema))
-        ((sequence-node-p node) "tag:yaml.org,2002:seq")
-        (t "tag:yaml.org,2002:map")))
+        ((sequence-node-p node) +yaml-schema-sequence-tag+)
+        (t +yaml-schema-mapping-tag+)))
 
 (defun resolve-tag (node &key (schema :core))
   "Return NODE's explicit tag or its implicit schema tag."
@@ -161,5 +104,5 @@ a plain scalar. Quoted and block scalars must not call this resolver."
     (if (and tag (not (member tag '("!" "?") :test #'string=)))
         (%canonical-tag tag)
         (if (and tag (scalar-node-p node) (string= tag "!"))
-            "tag:yaml.org,2002:str"
+            +yaml-schema-string-tag+
             (%implicit-node-tag node schema)))))

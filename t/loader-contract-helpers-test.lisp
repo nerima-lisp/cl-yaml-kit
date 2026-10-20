@@ -131,13 +131,78 @@
        (loader-event :sequence-end)
        (loader-event :mapping-end))))
 
-(defmacro loader-collection-cases (&body cases)
-  `(progn
-     ,@(mapcar (lambda (case)
-                 `(it ,(first case)
-                    (expect (funcall ,(fourth case)
-                                     (loader-parse-events
-                                      (loader-empty-collection-events
-                                       ,(second case) ,(third case))))
-                            :to-be-truthy)))
-               cases)))
+(progn
+  (defun loader-case-events (specifications)
+    (mapcar (lambda (specification)
+              (if (consp specification)
+                  (apply #'loader-event specification)
+                  specification))
+            specifications))
+
+  (defun loader-case-call (operation input options)
+    (ecase operation
+      (:compose-events
+       (apply #'loader-compose-events
+              (cons (loader-case-events input) options)))
+      (:compose-all-events
+       (apply #'loader-compose-all-events
+              (cons (loader-case-events input) options)))
+      (:parse-events
+       (apply #'loader-parse-events
+              (cons (loader-case-events input) options)))
+      (:compose-document
+       (apply #'loader-compose-events
+              (cons (apply #'loader-document (loader-case-events input))
+                    options)))
+      (:parse-document
+       (apply #'loader-parse-events
+              (cons (apply #'loader-document (loader-case-events input))
+                    options)))
+      (:parse (apply #'yaml-kit:parse (cons input options)))
+      (:parse-all (apply #'yaml-kit:parse-all (cons input options)))
+      (:schema-table (yaml-kit::%schema-table input))
+      (:construct (apply #'yaml-kit::construct (cons input options)))
+      (:limit!
+       (apply (symbol-function 'yaml-kit::%limit!)
+              (append input options)))))
+
+
+  (cl-weave:defmatcher :to-signal-loader-error (actual expected)
+    (let ((condition (handler-case (funcall actual)
+                       (error (condition) condition))))
+      (multiple-value-bind (expected-type valid-p)
+          (%yaml-single-matcher-value expected)
+        (values (and condition valid-p (typep condition expected-type))
+                condition
+                (if valid-p expected-type expected)))))
+
+  (cl-weave:defmatcher :to-signal-loader-compose-cause (actual expected)
+    (let ((condition (handler-case (funcall actual)
+                       (yaml-kit:yaml-compose-error (condition) condition))))
+      (multiple-value-bind (expected-cause valid-p)
+          (%yaml-single-matcher-value expected)
+        (values (and condition valid-p (stringp expected-cause)
+                     (string= (yaml-kit:yaml-compose-error-cause condition)
+                              expected-cause))
+                condition
+                (if valid-p expected-cause expected)))))
+
+  (cl-weave:defmatcher :to-signal-loader-resource-limit (actual expected)
+    (let ((condition (handler-case (funcall actual)
+                       (yaml-kit:yaml-resource-limit-error (condition) condition))))
+      (multiple-value-bind (limits valid-p)
+          (%yaml-single-matcher-value expected)
+        (let* ((valid-limits-p (and valid-p (listp limits)
+                                    (evenp (length limits))))
+               (expected-name (and valid-limits-p (getf limits :name))))
+          (values (and condition valid-limits-p (stringp expected-name)
+                       (string= (yaml-kit::yaml-resource-limit-error-limit-name condition)
+                                expected-name)
+                       (or (not (member :limit limits))
+                           (equal (yaml-kit::yaml-resource-limit-error-limit condition)
+                                  (getf limits :limit)))
+                       (or (not (member :actual limits))
+                           (equal (yaml-kit::yaml-resource-limit-error-actual condition)
+                                  (getf limits :actual))))
+                  condition
+                  (if valid-p limits expected)))))))
