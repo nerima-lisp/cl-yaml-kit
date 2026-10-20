@@ -1,59 +1,62 @@
 # Conditions
 
-All exported conditions inherit from `yaml-kit-error`, which inherits from
-`error`.
+All exported error subtypes inherit from `yaml-kit-error`, which inherits from
+`error`. Each condition stores a `cl-parser-kit:diagnostic`, available through
+`yaml-kit-error-diagnostic`.
 
-## Hierarchy and slots
+## Condition readers
 
-| Condition | Readers and defaults | When it is signalled |
+| Condition | Exported readers and defaults | When it is signalled |
 | --- | --- | --- |
-| `yaml-parse-error` | `yaml-parse-error-line` `nil`, `yaml-parse-error-column` `nil`, `yaml-parse-error-offset` 0, `yaml-parse-error-context` `"YAML"` | Scanning or parsing invalid input |
-| `yaml-compose-error` | `yaml-compose-error-mark` `nil`, `yaml-compose-error-context` `"YAML composition"`, `yaml-compose-error-cause` `nil` | Invalid event stream, alias, tag, scalar, or mapping graph |
-| `yaml-emit-error` | `yaml-emit-error-mark` `nil`, `yaml-emit-error-context` `"YAML emission"`, `yaml-emit-error-cause` `nil` | Unsupported Lisp value or invalid emission state |
-| `yaml-resource-limit-error` | No detail or mark readers are exported | An input, depth, scalar, node, or alias limit is exceeded |
-| `yaml-format-edit-path-error` | `yaml-format-edit-path-error-path` `nil`, `yaml-format-edit-path-error-document` `0`, `yaml-format-edit-path-error-operation` `nil` | Invalid or missing edit path, document, or operation |
-| `yaml-format-edit-structure-error` | `yaml-format-edit-structure-error-path` `nil` | Unsupported edit to the YAML structure |
-| `yaml-format-edit-anchor-error` | `yaml-format-edit-anchor-error-path` `nil`, `yaml-format-edit-anchor-error-anchor` `nil` | Edit path includes an anchored node, alias, or anchored mapping key |
+| `yaml-kit-error` | `yaml-kit-error-diagnostic`, default diagnostic message `"YAML error"` | Base type for library errors |
+| `yaml-parse-error` | `yaml-parse-error-context`, default `"YAML"` | Invalid input or parse failure |
+| `yaml-compose-error` | `yaml-compose-error-context`, default `"YAML composition"`; `yaml-compose-error-cause`, default `nil` | Invalid event stream or representation graph |
+| `yaml-emit-error` | `yaml-emit-error-context`, default `"YAML emission"`; `yaml-emit-error-cause`, default `nil` | Unsupported output value or emission failure |
+| `yaml-resource-limit-error` | No resource detail readers are exported | An input, depth, scalar, node, or alias limit is exceeded |
+| `yaml-format-edit-path-error` | `yaml-format-edit-path-error-path`, default `nil`; `yaml-format-edit-path-error-document`, default `0`; `yaml-format-edit-path-error-operation`, default `nil` | Invalid edit request, missing document, or path |
+| `yaml-format-edit-structure-error` | `yaml-format-edit-structure-error-path`, default `nil` | Unsupported edit to the YAML structure |
+| `yaml-format-edit-anchor-error` | `yaml-format-edit-anchor-error-path`, default `nil`; `yaml-format-edit-anchor-error-anchor`, default `nil` | Edit involves an anchored node, alias, or anchored mapping key |
 
-The `yaml-compose-error-cause` and `yaml-emit-error-cause` readers return the
-cause value supplied by the failing stage, or `nil` when it supplies none. A
-cause may be an underlying condition or diagnostic text. The condition report
-includes a cause when available.
+`yaml-kit-error-diagnostic` returns a `cl-parser-kit:diagnostic`. Read its text
+with `cl-parser-kit:diagnostic-message` and its optional span with
+`cl-parser-kit:diagnostic-span`. A span provides start and end offsets through
+`cl-parser-kit:span-start` and `cl-parser-kit:span-end`, and line and column
+coordinates through `cl-parser-kit:span-start-line`,
+`cl-parser-kit:span-start-column`, `cl-parser-kit:span-end-line`, and
+`cl-parser-kit:span-end-column`.
 
-`yaml-compose-error-mark` and `yaml-emit-error-mark` return a `mark` or `nil`.
-A mark contains line, column, and offset fields read with `mark-line`,
-`mark-column`, and `mark-offset`. Resource-limit `~A` reports include the limit
-name, configured limit, actual value, context, and mark coordinates when
-available.
+The standard condition report formats the diagnostic with
+`cl-parser-kit:diagnostic->string`. The context and cause readers expose
+separate condition slots; the report does not append them. A compose or emit
+cause is `nil` when the failing stage supplied none.
 
-The table gives slot defaults for conditions created without explicit values.
-Scanner errors set the offending character's mark, with zero-based line,
-column, and offset values. When the parser raises an error without a current
-token, it sets fallback line, column, and offset values to `1`, `1`, and `0`;
-these fallback values are not source coordinates. Scanner marks start at
-`(0, 0, 0)` and advance the offset with each character.
+`yaml-resource-limit-error` has no exported readers for its limit name, bound,
+or actual value. Its diagnostic message describes the exceeded limit. When
+present, `cl-parser-kit:diagnostic-span` returns its source span. Diagnostics
+created for resource-limit errors include the limit name, bound, actual value,
+and context in `cl-parser-kit:diagnostic-data`.
 
-## Resource limits
-
-See the [API reference](api.md) for default limits and their entry points. Set
-a keyword to a numeric value to change the bound. For
-`compose-events` and `compose-all-events`, `:max-depth`, `:max-scalar-length`,
-`:max-nodes`, and `:max-alias-expansions` accept `nil` to disable that limit.
-Raw-input entry points use their numeric defaults when a limit keyword is
-omitted; pass a number when overriding one.
-
-## Handling failures
+## Reading a parse diagnostic
 
 ```lisp
 (handler-case
     (yaml-kit:parse "key: [")
   (yaml-kit:yaml-parse-error (condition)
-    (list (yaml-kit:yaml-parse-error-line condition)
-          (yaml-kit:yaml-parse-error-column condition)
-          (yaml-kit:yaml-parse-error-context condition))))
+    (let* ((diagnostic (yaml-kit:yaml-kit-error-diagnostic condition))
+           (span (cl-parser-kit:diagnostic-span diagnostic)))
+      (list (cl-parser-kit:diagnostic-message diagnostic)
+            (and span (cl-parser-kit:span-start-line span))
+            (and span (cl-parser-kit:span-start-column span)))))
 ```
 
-Catch `yaml-kit-error` when the caller does not need to distinguish parsing,
-composition, emission, and resource failures. Formatting a condition with `~A`
-prints its report, which includes context and, where available, mark
-coordinates. Conditions do not expose a separate input snippet.
+Use the condition subtype when the caller needs to distinguish parsing,
+composition, emission, resource-limit, and format-edit failures. Catch
+`yaml-kit-error` when the diagnostic is sufficient.
+
+## Resource limits
+
+See the [API reference](api.md) for the default limits and the entry points
+that accept each limit keyword. `compose-events` and `compose-all-events` also
+accept `nil` for `:max-depth`, `:max-scalar-length`, `:max-nodes`, and
+`:max-alias-expansions` to disable that limit. Raw-input entry points use their
+numeric defaults when a limit keyword is omitted.
