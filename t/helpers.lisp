@@ -135,6 +135,7 @@
       (values (car expected) t)
       (values nil nil)))
 (cl-weave:defmatcher :to-parse-as (actual expected)
+  "Compares ACTUAL parsed as YAML with one expected value."
   (let ((parsed (yaml-kit:parse actual)))
     (multiple-value-bind (expected-value expected-valid-p)
         (%yaml-single-matcher-value expected)
@@ -143,6 +144,7 @@
               parsed
               (if expected-valid-p expected-value expected)))))
 (cl-weave:defmatcher :to-emit-as (actual expected)
+  "Compares the YAML emitted from ACTUAL with one expected string."
   (let ((emitted (yaml-kit:emit actual)))
     (multiple-value-bind (expected-value expected-valid-p)
         (%yaml-single-matcher-value expected)
@@ -152,12 +154,14 @@
               emitted
               (if expected-valid-p expected-value expected)))))
 (cl-weave:defmatcher :to-round-trip (actual expected)
+  "Checks that an emit/parse round trip preserves an emit-able ACTUAL YAML value."
   (declare (ignore expected))
   (let ((round-tripped (yaml-kit:parse (yaml-kit:emit actual))))
     (values (%yaml-value-equal-p round-tripped actual)
             round-tripped
             actual)))
 (cl-weave:defmatcher :to-signal-yaml-error (actual expected)
+  "Checks that parsing ACTUAL signals the single expected YAML condition type."
   (let ((condition
           (handler-case
               (progn (yaml-kit:parse actual) nil)
@@ -170,6 +174,7 @@
               condition
               (if expected-valid-p expected-type expected)))))
 (defmacro it-each (cases suite-name bindings &body body)
+  "Expands CASES as tests; both lists must be proper and equal-length; SUITE-NAME must contain ~S."
   (labels ((proper-list-length (value)
              (handler-case
                  (values (list-length value) t)
