@@ -7,21 +7,13 @@
 (defun reader-error-predicate (condition-type message-fragment)
   (lambda (condition)
     (and (typep condition condition-type)
-         (let* ((diagnostic (yaml-kit:yaml-kit-error-diagnostic condition))
-                (message (cl-parser-kit:diagnostic-message diagnostic)))
-           (and (stringp message)
-                (plusp (length (string-trim
-                                '(#\Space #\Tab #\Newline #\Return)
-                                message)))
-                (stringp message-fragment)
-                (plusp (length (string-trim
-                                '(#\Space #\Tab #\Newline #\Return)
-                                message-fragment)))
-                (search message-fragment message))))))
+         (search message-fragment
+                 (cl-parser-kit:diagnostic-message
+                  (yaml-kit:yaml-kit-error-diagnostic condition))))))
 
 ;; These are parse-level regression anchors for loader handling of block scalars.
 (describe "loader block scalar regressions"
-  (cl-weave:it-each
+  (it-each
       (("EMPTY-LITERAL: keeps empty scalars empty" "literal: |+~%" "literal" "")
        ("EMPTY-FOLDED: keeps empty scalars empty" "folded: >-~%" "folded" "")
        ("FOLD-CHOMP: folds and chomps independently"
@@ -33,7 +25,7 @@
         "kept: |+~%  value~%~%" "kept" "value~%~%")
        ("EXPLICIT-INDENT: uses the indentation indicator"
         "value: |2~%    indented~%" "value" "  indented~%"))
-    "~A"
+    "~S"
     (name format-control key expected-format)
     (declare (ignore name))
     (let ((value (yaml-kit:parse (block-scalar-input format-control))))
@@ -45,6 +37,7 @@
             :to-throw
             (reader-error-predicate 'yaml-kit:yaml-parse-error "found a tab character"))))
 
+;; Fuzz inputs need classification of arbitrary errors, not an assertion on one throw.
 (defun reader-parse-outcome (text)
   (multiple-value-bind (result condition)
       (ignore-errors (yaml-kit:parse-events text))
@@ -62,18 +55,19 @@
         (expect (mapcar #'yaml-kit:scalar-event-value values)
                 :to-equal '("root" "first" "one" "second" "two"
                             "third" "three")))))
-  (cl-weave:it-each
+  (it-each
       (("ZVH3: rejects a block sequence after a completed sibling mapping"
         "- key: value~% - item1~%"))
-    "~A"
+    "~S"
     (name format-control)
     (expect (lambda ()
               (yaml-kit:parse-events
                (coerce (format nil format-control) 'simple-string)))
             :to-throw
-            (reader-error-predicate
-             'yaml-kit:yaml-parse-error
-             "did not find expected node content")))
+            (lambda (condition)
+              (and (typep condition 'yaml-kit:yaml-parse-error)
+                   (string= (yaml-kit:yaml-parse-error-context condition)
+                            "did not find expected node content")))))
   (cl-weave:it-fuzz "ends generated inputs with a parse result or a declared error"
     ((text (cl-weave:gen-string :min-length 0 :max-length 64
                                 :alphabet "-?:,[]{}#&*!|>'\"%@` abcXYZ012~あé")))
