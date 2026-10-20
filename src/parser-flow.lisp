@@ -50,15 +50,17 @@
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry-mapping-value (parser)
   (let ((token (parser-peek parser)))
-    (if (eq (token-kind token) :value)
-        (progn
-          (parser-next parser)
-          (if (member (token-kind (parser-peek parser))
-                      '(:flow-entry :flow-sequence-end))
-              #'yaml-parser-parse-flow-sequence-entry-mapping-end
-              #'yaml-parser-parse-node-flow))
-        (parser-empty-scalar-state parser (token-start-span token)
-                                   #'yaml-parser-parse-flow-sequence-entry-mapping-end))))
+    (cond
+      ((eq (token-kind token) :value)
+       (parser-next parser)
+       (if (member (token-kind (parser-peek parser))
+                   '(:flow-entry :flow-sequence-end))
+           (parser-empty-scalar-state parser (token-start-span (parser-peek parser))
+                                      (parser-pop parser))
+           #'yaml-parser-parse-node-flow))
+      (t
+       (parser-empty-scalar-state parser (token-start-span token)
+                                  (parser-pop parser))))))
 
 (define-parser-state yaml-parser-parse-flow-sequence-entry-mapping-key-state (parser)
   (let ((token (parser-peek parser)))
