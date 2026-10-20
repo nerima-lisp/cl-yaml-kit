@@ -374,10 +374,11 @@
   (format-edit-expect
    (format nil "root: [old]~%") '("root" 0) value
    (format nil "root: [~A]~%" fragment)))
+  (progn
   (it "escapes controls and Unicode line separators in replacement strings"
-    (let* ((codes '(0 7 8 9 10 11 12 13 27 34 92 133 8232 8233 1 127 65534))
-           (escape-codes '("0" "a" "b" "t" "n" "v" "f" "r" "e" "\"" "\\"
-                           "N" "L" "P" "x01" "x7F" "uFFFE"))
+    (let* ((codes '(0 7 8 9 10 11 12 13 27 34 92 133 8232 8233 1 127))
+           (escape-codes '("0" "a" "b" "t" "n" "v" "f" "r" "e" "\""
+                           "\\" "N" "L" "P" "x01" "x7F"))
            (value (coerce (mapcar #'code-char codes) 'string))
            (fragment
              (with-output-to-string (out)
@@ -391,6 +392,17 @@
       (expect (length codes) :to-equal (length escape-codes))
       (expect (yaml-kit::%format-edit-double-quoted-fragment value) :to-equal fragment)
       (expect (format-edit-value-at edited 0 '("value")) :to-equal value)))
+  (it "rejects YAML noncharacters in replacement strings"
+    (dolist (code '(#xfffe #xffff))
+      (expect (handler-case
+                  (progn
+                    (yaml-kit:edit-source
+                     (format nil "value: old~%")
+                     '("value")
+                     (string (code-char code)))
+                    nil)
+                (yaml-kit:yaml-format-edit-structure-error () t))
+              :to-be-truthy))))
   (it "copies semantic YAML mappings recursively"
     (let* ((mapping (yaml-kit:make-yaml-mapping
                      (list (cons "a" 1) (cons "items" (list 10 20)))))
