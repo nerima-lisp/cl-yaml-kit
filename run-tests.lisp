@@ -8,8 +8,10 @@
           (uiop:temporary-directory)))))
   (ensure-directories-exist cache-directory)
   (let ((asdf:*user-cache* cache-directory))
-    (asdf:clear-output-translations)
-    (asdf:initialize-output-translations)))
+    (asdf:initialize-output-translations
+     (list :output-translations
+           (list t (list :user-cache :implementation))
+           :ignore-inherited-configuration))))
 (defun script-directory ()
   (make-pathname :name nil :type nil
                  :defaults (or *load-truename* *compile-file-truename*

@@ -37,7 +37,10 @@
   (ensure-directories-exist cache-directory)
   (let ((asdf:*user-cache* cache-directory))
     (asdf:clear-output-translations)
-    (asdf:initialize-output-translations)
+    (asdf:initialize-output-translations
+     (list :output-translations
+           (list t (list :user-cache :implementation))
+           :ignore-inherited-configuration))
     (asdf:load-asd (merge-pathnames "cl-yaml-kit.asd" root))
     (asdf:load-system "cl-weave")
     (asdf:load-system "cl-yaml-kit/coverage-gate")
