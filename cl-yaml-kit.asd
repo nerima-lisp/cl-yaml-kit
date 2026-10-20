@@ -27,6 +27,7 @@
                (:file "scanner-directives")
                (:file "scanner-directive-uri")
                (:file "scanner-block-scalars") (:file "scanner-flow-scalars")
+               (:file "scanner-plain-scalars")
                (:file "scanner-fetch") (:file "scanner")
                (:file "scanner-navigation")
                (:file "parser-states")

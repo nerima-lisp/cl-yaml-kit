@@ -28,7 +28,7 @@
      "loader block scalar regressions")
     (:reader "src/scanner-block-scalars.lisp" scan-block-scalar "block scalar")
     (:reader "src/scanner-flow-scalars.lisp" scan-flow-scalar "flow scalar scanner")
-    (:reader "src/scanner-flow-scalars.lisp" scan-plain-scalar "scanner")
+    (:reader "src/scanner-plain-scalars.lisp" scan-plain-scalar "scanner")
     (:reader "src/parser-nodes.lisp" parser-node "parser")
     (:reader "src/parser-nodes.lisp" parser-node-content "parser")
     (:reader "src/parser-nodes.lisp" parser-start-collection "parser")

@@ -3,16 +3,6 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(defparameter *flow-escape-table*
-  ;; YAML 1.2.2 retains libyaml's \/ escape and accepts a literal tab escape.
-  (let ((table (make-array 128 :initial-element nil)))
-    (dolist (entry '((#\0 . 0) (#\a . 7) (#\b . 8) (#\t . 9) (#\Tab . 9)
-                     (#\n . 10) (#\v . 11) (#\f . 12) (#\r . 13) (#\e . 27)
-                     (#\Space . 32) (#\" . 34) (#\/ . 47) (#\\ . 92)
-                     (#\N . #x85) (#\_ . #xa0) (#\L . #x2028) (#\P . #x2029)))
-      (setf (aref table (char-code (car entry))) (cdr entry)))
-    table))
-
 (defun %flow-valid-code-point-p (value)
   (and (< value char-code-limit) (<= value #x10ffff)
        (not (<= #xd800 value #xdfff))))
@@ -65,13 +55,43 @@
     (vector-push-extend (aref spaces i) out))
   (setf (fill-pointer spaces) 0))
 
+(defun %scan-flow-scalar-characters
+    (s single-p quote start out leading trailing leading-blanks)
+  (loop while (not (sc-blankz-p s)) do
+    (when leading-blanks
+      (%flow-fold out leading trailing)
+      (setf leading-blanks nil))
+    (cond ((and single-p (sc-check s #\') (sc-check s #\' 1))
+           (vector-push-extend #\' out) (sc-skip s) (sc-skip s))
+          ((sc-check s quote) (return))
+          ((and (not single-p) (sc-check s #\\) (sc-break-p s 1))
+           (%flow-escaped-break s) (setf leading-blanks t) (return))
+          ((and (not single-p) (sc-check s #\\))
+           (%flow-escape s out start))
+          (t (sc-read s out))))
+  leading-blanks)
+
+(defun %scan-flow-scalar-spaces (s out leading trailing spaces leading-blanks)
+  (loop while (or (sc-blank-p s) (sc-break-p s)) do
+    (if (sc-blank-p s)
+        (if leading-blanks (sc-skip s) (sc-read s spaces))
+        (if leading-blanks
+            (sc-read-line s trailing)
+            (progn (setf (fill-pointer spaces) 0)
+                   (sc-read-line s leading)
+                   (setf leading-blanks t)))))
+  (if leading-blanks (%flow-fold out leading trailing)
+      (%flow-append-spaces out spaces))
+  leading-blanks)
+
 (defun %scan-flow-scalar-body (s single-p start out leading trailing spaces leading-blanks)
   (let ((quote (if single-p #\' #\")))
     (loop
       (when (and (zerop (scanner-column s))
-                 (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
-                     (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
-                 (sc-blankz-p s 3))
+                 (or (%scanner-document-indicator-p
+                      s +scanner-document-start-indicator+)
+                     (%scanner-document-indicator-p
+                      s +scanner-document-end-indicator+)))
         (sc-error s "while scanning a quoted scalar" start
                   "found unexpected document indicator"))
       (when (sc-z-p s)
@@ -81,33 +101,17 @@
                  (< (scanner-column s) (1+ (scanner-indent s))))
         (sc-error s "while scanning a quoted scalar" start
                   "found a line that is not indented enough to continue the quoted scalar"))
-      (loop while (not (sc-blankz-p s)) do
-        (when leading-blanks
-          (%flow-fold out leading trailing)
-          (setf leading-blanks nil))
-        (cond ((and single-p (sc-check s #\') (sc-check s #\' 1))
-               (vector-push-extend #\' out) (sc-skip s) (sc-skip s))
-              ((sc-check s quote) (return))
-              ((and (not single-p) (sc-check s #\\) (sc-break-p s 1))
-               (%flow-escaped-break s) (setf leading-blanks t) (return))
-              ((and (not single-p) (sc-check s #\\))
-               (%flow-escape s out start))
-              (t (sc-read s out))))
+      (setf leading-blanks
+            (%scan-flow-scalar-characters
+             s single-p quote start out leading trailing leading-blanks))
       (when (sc-check s quote)
         (when leading-blanks
           (%flow-fold out leading trailing)
           (setf leading-blanks nil))
         (return))
-      (loop while (or (sc-blank-p s) (sc-break-p s)) do
-        (if (sc-blank-p s)
-            (if leading-blanks (sc-skip s) (sc-read s spaces))
-            (if leading-blanks
-                (sc-read-line s trailing)
-                (progn (setf (fill-pointer spaces) 0)
-                       (sc-read-line s leading)
-                       (setf leading-blanks t)))))
-      (if leading-blanks (%flow-fold out leading trailing)
-          (%flow-append-spaces out spaces)))
+      (setf leading-blanks
+            (%scan-flow-scalar-spaces
+             s out leading trailing spaces leading-blanks)))
     leading-blanks))
 
 (defun scan-flow-scalar (s single-p)
@@ -127,131 +131,3 @@
                 "found unexpected comment indicator"))
     (make-scanner-token s :scalar start (sc-position s) :value (scan-buffer-string out)
                 :style (if single-p :single-quoted :double-quoted))))
-
-(defun %scan-plain-scalar-body
-  (s start out end leading trailing spaces leading-blanks indent)
-  (let ((end-line (sc-position-line end))
-        (end-column (sc-position-column end))
-        (end-offset (sc-position-offset end)))
-    (loop
-      (when (and (zerop (scanner-column s))
-                 (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
-                     (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
-                 (sc-blankz-p s 3))
-        (return))
-      (when (and (zerop (scanner-flow-level s))
-                 (zerop (scanner-column s))
-                 (let ((character (sc-char s)))
-                   (or (char= character #\-)
-                       (char= character #\?)
-                       (char= character #\:)))
-                 (sc-blankz-p s 1))
-        (return))
-      (when (sc-check s #\#) (return))
-      (loop while (not (sc-blankz-p s)) do
-        (cond
-          ((and (plusp (scanner-flow-level s))
-                (sc-check s #\:)
-                (or (sc-check s #\, 1) (sc-check s #\? 1)
-                    (sc-check s #\[ 1) (sc-check s #\] 1)
-                    (sc-check s #\{ 1) (sc-check s #\} 1)))
-           (return))
-          ((or (and (sc-check s #\:) (sc-blankz-p s 1))
-               (and (plusp (scanner-flow-level s))
-                    (or (sc-check s #\,) (sc-check s #\[)
-                        (sc-check s #\]) (sc-check s #\{)
-                        (sc-check s #\}))))
-           (return)))
-        (when (or leading-blanks (plusp (fill-pointer spaces)))
-          (if leading-blanks
-              (%flow-fold out leading trailing)
-              (%flow-append-spaces out spaces))
-          (setf leading-blanks nil))
-        (sc-read s out)
-        (setf end-line (scanner-line s)
-              end-column (scanner-column s)
-              end-offset (scanner-pos s)))
-      (unless (or (sc-blank-p s) (sc-break-p s)) (return))
-      (loop while (or (sc-blank-p s) (sc-break-p s)) do
-        (if (sc-blank-p s)
-            (if leading-blanks
-                (progn
-                  (when (and (zerop (scanner-flow-level s))
-                             (< (scanner-column s) indent)
-                             (sc-tab-p s))
-                    (sc-error s "while scanning a plain scalar" start
-                              "found a tab character that violates indentation"))
-                  (sc-skip s))
-                (sc-read s spaces))
-            (if leading-blanks
-                (sc-read-line s trailing)
-                (progn
-                  (setf (fill-pointer spaces) 0)
-                  (sc-read-line s leading)
-                  (setf leading-blanks t)))))
-      (when (and (zerop (scanner-flow-level s))
-                 (< (scanner-column s) indent))
-        (return)))
-    (values (sc-position-at end-offset end-line end-column) leading-blanks)))
-
-(defun scan-plain-scalar (s)
-  (let ((start (sc-position s))
-        (start-pos (scanner-pos s))
-        (text (scanner-text s))
-        (length (length (scanner-text s)))
-        (indent (1+ (scanner-indent s))))
-    (when (and (zerop (scanner-flow-level s))
-               (not (and (zerop (scanner-column s))
-                         (or (sc-check s #\-) (sc-check s #\?) (sc-check s #\:))
-                         (sc-blankz-p s 1))))
-      (let ((index start-pos) (simple-end nil))
-        (loop while (< index length)
-              for character = (char text index)
-              do (cond
-                   ((and (char= character #\:)
-                         (sc-blankz-p s (1+ (- index start-pos))))
-                    (setf simple-end index)
-                    (return))
-                   ((or (char= character #\Space)
-                        (char= character #\Tab))
-                    (return nil))
-                   ((or (char= character #\Newline)
-                        (char= character #\Return))
-                    (let ((next (1+ index))
-                          (column 0))
-                      (when (char= character #\Return)
-                        (incf next))
-                      (loop while (and (< next length)
-                                       (or (char= (char text next) #\Space)
-                                           (char= (char text next) #\Tab)))
-                            do (incf next)
-                               (incf column))
-                      (when (or (>= next length)
-                                (and (not (char= (char text next) #\Newline))
-                                     (< column indent)))
-                        (progn (setf simple-end index) (return)))
-                      (return nil)))
-                   (t (incf index)))
-              finally (progn (setf simple-end index) (return)))
-        (when (and simple-end (> index start-pos) (sc-printable-p s (- index start-pos))) (loop repeat (- index start-pos) do (sc-skip s))
-          (return-from scan-plain-scalar
-            (make-scanner-token s :scalar start (sc-position s)
-                        :value (subseq text start-pos index)
-                        :style :plain)))))
-    (let ((start start)
-          (end (sc-position s))
-          (out (scanner-scan-buffer s))
-          (leading (scanner-scan-leading s))
-          (trailing (scanner-scan-trailing s))
-          (spaces (scanner-scan-spaces s))
-          (leading-blanks nil))
-      (setf (fill-pointer out) 0
-            (fill-pointer leading) 0
-            (fill-pointer trailing) 0
-            (fill-pointer spaces) 0)
-      (multiple-value-setq (end leading-blanks)
-        (%scan-plain-scalar-body s start out end leading trailing spaces
-                                 leading-blanks indent))
-      (when leading-blanks (setf (scanner-simple-key-allowed s) t))
-      (make-scanner-token s :scalar start end :value (scan-buffer-string out)
-                  :style :plain))))
