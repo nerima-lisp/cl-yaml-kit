@@ -53,14 +53,19 @@ second: value # two" ((0 . 7) (25 . 30) (35 . 43) (62 . 67)))
   (expect (yaml-kit:comment-spans input) :to-equal expected))
 
 (cl-weave:it-each
-    ((simple-base-string #.(coerce "value # tail" (quote simple-base-string)) t)
-     (adjustable-character-string #.(make-array 12 :element-type 'character :adjustable t :fill-pointer 12 :initial-contents "value # tail") nil))
-  "parses and scans ~S input consistently"
+    ((simple-base-string
+       #.(coerce "value # tail" (quote simple-base-string))
+       t)
+     (adjustable-character-string
+       #.(make-array 12 :element-type 'character :adjustable t
+                     :fill-pointer 12 :initial-contents "value # tail")
+       nil))
+  "recognizes string input types"
   (name input simple-base-p)
+  (declare (ignore name))
   (expect (stringp input) :to-be-truthy)
-  (expect (typep input 'simple-base-string) :to-equal simple-base-p)
-  (expect (yaml-kit:parse input) :to-equal "value")
-  (expect (yaml-kit:comment-spans input) :to-equal (list (cons 6 12))))
+  (expect (typep input 'simple-base-string) :to-equal simple-base-p))
+
 
 (cl-weave:it-property
  "adding a legal inline comment preserves generated scalar values"
@@ -71,7 +76,20 @@ second: value # two" ((0 . 7) (25 . 30) (35 . 43) (62 . 67)))
          :to-equal
          (yaml-kit:parse (format nil "~A # legal comment" text))))
 (it "enforces :max-input-length for comment scans"
-  (expect (handler-case
-              (progn (yaml-kit:comment-spans "a" :max-input-length 0) nil)
-            (yaml-kit:yaml-resource-limit-error () t))
-          :to-be-truthy))
+  (expect (lambda () (yaml-kit:comment-spans "a" :max-input-length 0))
+          :to-signal-loader-resource-limit
+          '(:name "input length" :limit 0 :actual 1)))
+
+(cl-weave:it-each
+    ((simple-base-string
+       #.(coerce "value # tail" (quote simple-base-string))
+       ((6 . 12)))
+     (adjustable-character-string
+       #.(make-array 12 :element-type 'character :adjustable t
+                     :fill-pointer 12 :initial-contents "value # tail")
+       ((6 . 12))))
+  "parses and scans ~S input consistently"
+  (name input expected-spans)
+  (declare (ignore name))
+  (expect (yaml-kit:parse input) :to-equal "value")
+  (expect (yaml-kit:comment-spans input) :to-equal expected-spans))

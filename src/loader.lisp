@@ -6,11 +6,8 @@
     (map-events handler input :max-input-length max-input-length
                 :max-depth max-depth :max-scalar-length max-scalar-length)))
 
-(defun compose (input &key (max-input-length +default-max-input-length+)
-                             (max-depth +default-max-depth+)
-                             (max-scalar-length +default-max-scalar-length+)
-                             (max-nodes +default-max-nodes+)
-                             (max-alias-expansions +default-max-alias-expansions+))
+(define-yaml-resource-function compose (input)
+    (:group :reader :keywords ())
   "Return the first representation graph in reader INPUT."
   (compose-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
@@ -18,11 +15,8 @@
    :max-scalar-length max-scalar-length :max-nodes max-nodes
    :max-alias-expansions max-alias-expansions))
 
-(defun compose-all (input &key (max-input-length +default-max-input-length+)
-                                 (max-depth +default-max-depth+)
-                                 (max-scalar-length +default-max-scalar-length+)
-                                 (max-nodes +default-max-nodes+)
-                                 (max-alias-expansions +default-max-alias-expansions+))
+(define-yaml-resource-function compose-all (input)
+    (:group :reader :keywords ())
   "Return all representation graphs in reader INPUT."
   (compose-all-events
    (%loader-event-source input max-input-length max-depth max-scalar-length)
@@ -30,14 +24,12 @@
    :max-scalar-length max-scalar-length :max-nodes max-nodes
    :max-alias-expansions max-alias-expansions))
 
-(defun parse (input &key (schema :core) (mapping-type :hash-table)
-                            (sequence-type :vector)
-                            (duplicate-key-policy :error)
-                            (max-input-length +default-max-input-length+)
-                            (max-depth +default-max-depth+)
-                            (max-scalar-length +default-max-scalar-length+)
-                            (max-nodes +default-max-nodes+)
-                            (max-alias-expansions +default-max-alias-expansions+))
+(define-yaml-resource-function parse (input)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
   "Parse the first YAML document from reader INPUT."
   (construct
    (compose input :max-input-length max-input-length :max-depth max-depth
@@ -45,30 +37,28 @@
                   :max-alias-expansions max-alias-expansions)
    :schema schema :mapping-type mapping-type :sequence-type sequence-type
    :duplicate-key-policy duplicate-key-policy))
-(defun comment-spans (input &key
-                              (max-input-length +default-max-input-length+))
+(define-yaml-resource-function comment-spans (input)
+    (:group :input :keywords ())
   "Return source-ordered (START . END) spans, one for each comment recognized by
 the YAML lexer. Offsets are zero-based character positions in the decoded input.
 START is inclusive and END is exclusive. Spans include the leading # and comment
 text, but exclude the line break."
-  (let ((text (%parser-input-string input max-input-length))
-        (spans nil))
-    (when (> (length text) max-input-length)
-      (%resource-limit "input length" max-input-length (length text)))
+  (let* ((decoded-text (%parser-input-string input max-input-length))
+         (text (with-input-from-string (stream decoded-text)
+                 (%parser-input-string stream max-input-length)))
+         (spans nil))
     (let ((*scanner-comment-sink* (lambda (span) (push span spans)))
           (scanner (make-scanner text)))
       (loop while (scanner-next-token scanner)
             do (recycle-scanner-token scanner)))
     (nreverse spans)))
 
-(defun parse-all (input &key (schema :core) (mapping-type :hash-table)
-                                (sequence-type :vector)
-                                (duplicate-key-policy :error)
-                                (max-input-length +default-max-input-length+)
-                                (max-depth +default-max-depth+)
-                                (max-scalar-length +default-max-scalar-length+)
-                                (max-nodes +default-max-nodes+)
-                                (max-alias-expansions +default-max-alias-expansions+))
+(define-yaml-resource-function parse-all (input)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
   "Parse every YAML document from reader INPUT."
   (let ((values nil))
     (compose-all-events
@@ -84,14 +74,12 @@ text, but exclude the line break."
              values)))
     (nreverse values)))
 
-(defun read-yaml (stream &key (schema :core) (mapping-type :hash-table)
-                              (sequence-type :vector)
-                              (duplicate-key-policy :error)
-                              (max-input-length +default-max-input-length+)
-                              (max-depth +default-max-depth+)
-                              (max-scalar-length +default-max-scalar-length+)
-                              (max-nodes +default-max-nodes+)
-                              (max-alias-expansions +default-max-alias-expansions+))
+(define-yaml-resource-function read-yaml (stream)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
   "Read and parse one YAML document from STREAM."
   (parse stream :schema schema :mapping-type mapping-type
                :sequence-type sequence-type
@@ -99,100 +87,93 @@ text, but exclude the line break."
                :max-input-length max-input-length :max-depth max-depth
                :max-scalar-length max-scalar-length :max-nodes max-nodes
                :max-alias-expansions max-alias-expansions))
-(defun comment-spans/k (input k &key (max-input-length +default-max-input-length+))
+(define-yaml-resource-function comment-spans/k (input k)
+    (:group :input :keywords ())
+  "Call K with the source-ordered comment spans from INPUT."
   (check-type k function)
-  (funcall k (comment-spans input :max-input-length max-input-length)))
-(defun compose/k (input k
-                  &key (max-input-length +default-max-input-length+)
-                       (max-depth +default-max-depth+)
-                       (max-scalar-length +default-max-scalar-length+)
-                       (max-nodes +default-max-nodes+)
-                       (max-alias-expansions +default-max-alias-expansions+))
+  (values
+   (funcall k (comment-spans input :max-input-length max-input-length))))
+(define-yaml-resource-function compose/k (input k)
+    (:group :reader :keywords ())
+  "Call K with the first representation graph from INPUT."
   (check-type k function)
-  (funcall k
-           (compose input
-                    :max-input-length max-input-length
-                    :max-depth max-depth
-                    :max-scalar-length max-scalar-length
-                    :max-nodes max-nodes
-                    :max-alias-expansions max-alias-expansions)))
-(defun compose-all/k (input k
-                      &key (max-input-length +default-max-input-length+)
-                           (max-depth +default-max-depth+)
-                           (max-scalar-length +default-max-scalar-length+)
-                           (max-nodes +default-max-nodes+)
-                           (max-alias-expansions +default-max-alias-expansions+))
+  (values
+   (funcall k
+            (compose input
+                     :max-input-length max-input-length
+                     :max-depth max-depth
+                     :max-scalar-length max-scalar-length
+                     :max-nodes max-nodes
+                     :max-alias-expansions max-alias-expansions))))
+(define-yaml-resource-function compose-all/k (input k)
+    (:group :reader :keywords ())
+  "Call K with all representation graphs from INPUT."
   (check-type k function)
-  (funcall k
-           (compose-all input
-                        :max-input-length max-input-length
-                        :max-depth max-depth
-                        :max-scalar-length max-scalar-length
-                        :max-nodes max-nodes
-                        :max-alias-expansions max-alias-expansions)))
-(defun parse/k (input k
-                &key (schema :core)
-                     (mapping-type :hash-table)
-                     (sequence-type :vector)
-                     (duplicate-key-policy :error)
-                     (max-input-length +default-max-input-length+)
-                     (max-depth +default-max-depth+)
-                     (max-scalar-length +default-max-scalar-length+)
-                     (max-nodes +default-max-nodes+)
-                     (max-alias-expansions +default-max-alias-expansions+))
+  (values
+   (funcall k
+            (compose-all input
+                         :max-input-length max-input-length
+                         :max-depth max-depth
+                         :max-scalar-length max-scalar-length
+                         :max-nodes max-nodes
+                         :max-alias-expansions max-alias-expansions))))
+(define-yaml-resource-function parse/k (input k)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
+  "Call K with the first parsed document from INPUT."
   (check-type k function)
-  (funcall k
-           (parse input
-                  :schema schema
-                  :mapping-type mapping-type
-                  :sequence-type sequence-type
-                  :duplicate-key-policy duplicate-key-policy
-                  :max-input-length max-input-length
-                  :max-depth max-depth
-                  :max-scalar-length max-scalar-length
-                  :max-nodes max-nodes
-                  :max-alias-expansions max-alias-expansions)))
-(defun parse-all/k (input k
-                    &key (schema :core)
-                         (mapping-type :hash-table)
-                         (sequence-type :vector)
-                         (duplicate-key-policy :error)
-                         (max-input-length +default-max-input-length+)
-                         (max-depth +default-max-depth+)
-                         (max-scalar-length +default-max-scalar-length+)
-                         (max-nodes +default-max-nodes+)
-                         (max-alias-expansions +default-max-alias-expansions+))
+  (values
+   (funcall k
+            (parse input
+                   :schema schema
+                   :mapping-type mapping-type
+                   :sequence-type sequence-type
+                   :duplicate-key-policy duplicate-key-policy
+                   :max-input-length max-input-length
+                   :max-depth max-depth
+                   :max-scalar-length max-scalar-length
+                   :max-nodes max-nodes
+                   :max-alias-expansions max-alias-expansions))))
+(define-yaml-resource-function parse-all/k (input k)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
+  "Call K with all parsed documents from INPUT."
   (check-type k function)
-  (funcall k
-           (parse-all input
-                      :schema schema
-                      :mapping-type mapping-type
-                      :sequence-type sequence-type
-                      :duplicate-key-policy duplicate-key-policy
-                      :max-input-length max-input-length
-                      :max-depth max-depth
-                      :max-scalar-length max-scalar-length
-                      :max-nodes max-nodes
-                      :max-alias-expansions max-alias-expansions)))
-(defun read-yaml/k (stream k
-                     &key (schema :core)
-                          (mapping-type :hash-table)
-                          (sequence-type :vector)
-                          (duplicate-key-policy :error)
-                          (max-input-length +default-max-input-length+)
-                          (max-depth +default-max-depth+)
-                          (max-scalar-length +default-max-scalar-length+)
-                          (max-nodes +default-max-nodes+)
-                          (max-alias-expansions +default-max-alias-expansions+))
+  (values
+   (funcall k
+            (parse-all input
+                       :schema schema
+                       :mapping-type mapping-type
+                       :sequence-type sequence-type
+                       :duplicate-key-policy duplicate-key-policy
+                       :max-input-length max-input-length
+                       :max-depth max-depth
+                       :max-scalar-length max-scalar-length
+                       :max-nodes max-nodes
+                       :max-alias-expansions max-alias-expansions))))
+(define-yaml-resource-function read-yaml/k (stream k)
+    (:group :reader
+     :keywords ((schema :core)
+                (mapping-type :hash-table)
+                (sequence-type :vector)
+                (duplicate-key-policy :error)))
+  "Call K with the parsed YAML document read from STREAM."
   (check-type k function)
-  (funcall k
-           (read-yaml stream
-                      :schema schema
-                      :mapping-type mapping-type
-                      :sequence-type sequence-type
-                      :duplicate-key-policy duplicate-key-policy
-                      :max-input-length max-input-length
-                      :max-depth max-depth
-                      :max-scalar-length max-scalar-length
-                      :max-nodes max-nodes
-                      :max-alias-expansions max-alias-expansions)))
+  (values
+   (funcall k
+            (read-yaml stream
+                       :schema schema
+                       :mapping-type mapping-type
+                       :sequence-type sequence-type
+                       :duplicate-key-policy duplicate-key-policy
+                       :max-input-length max-input-length
+                       :max-depth max-depth
+                       :max-scalar-length max-scalar-length
+                       :max-nodes max-nodes
+                       :max-alias-expansions max-alias-expansions))))
