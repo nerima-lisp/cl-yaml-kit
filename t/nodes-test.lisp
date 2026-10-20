@@ -1,5 +1,6 @@
 ;;;; t/nodes-test.lisp
 (in-package #:cl-yaml-kit/test)
+(defparameter *invalid-node-slot-value* -1)
 
 (it "expands define-node into a structure definition"
   (let ((expansion (macroexpand-1
@@ -63,6 +64,39 @@
   (let ((scalar (yaml-kit:make-scalar-node))
         (sequence (yaml-kit:make-sequence-node))
         (mapping (yaml-kit:make-mapping-node)))
-    (expect (yaml-kit:scalar-node-value scalar) :to-equal "")
-    (expect (yaml-kit:sequence-node-items sequence) :to-equal nil)
-    (expect (yaml-kit:mapping-node-pairs mapping) :to-equal nil)))
+    (expect (list (yaml-kit:node-tag scalar)
+                  (yaml-kit:node-anchor scalar)
+                  (yaml-kit:node-style scalar)
+                  (yaml-kit:node-start-mark scalar)
+                  (yaml-kit:node-end-mark scalar)
+                  (yaml-kit:scalar-node-value scalar))
+            :to-equal '(nil nil nil nil nil ""))
+    (expect (list (yaml-kit:node-tag sequence)
+                  (yaml-kit:node-anchor sequence)
+                  (yaml-kit:node-style sequence)
+                  (yaml-kit:node-start-mark sequence)
+                  (yaml-kit:node-end-mark sequence)
+                  (yaml-kit:sequence-node-items sequence))
+            :to-equal '(nil nil nil nil nil nil))
+    (expect (list (yaml-kit:node-tag mapping)
+                  (yaml-kit:node-anchor mapping)
+                  (yaml-kit:node-style mapping)
+                  (yaml-kit:node-start-mark mapping)
+                  (yaml-kit:node-end-mark mapping)
+                  (yaml-kit:mapping-node-pairs mapping))
+            :to-equal '(nil nil nil nil nil nil))))
+(it "rejects invalid node metadata slot values"
+  (expect (every (lambda (thunk)
+                   (handler-case (funcall thunk)
+                     (type-error () t)))
+                 (list (lambda () (yaml-kit:make-scalar-node
+                                  :tag *invalid-node-slot-value*))
+                       (lambda () (yaml-kit:make-scalar-node
+                                  :anchor *invalid-node-slot-value*))
+                       (lambda () (yaml-kit:make-scalar-node
+                                  :style *invalid-node-slot-value*))
+                       (lambda () (yaml-kit:make-scalar-node
+                                  :start-mark *invalid-node-slot-value*))
+                       (lambda () (yaml-kit:make-scalar-node
+                                  :end-mark *invalid-node-slot-value*))))
+          :to-be-truthy))

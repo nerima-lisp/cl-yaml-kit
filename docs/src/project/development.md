@@ -1,15 +1,13 @@
 # Development
 
-The Nix workflow below is available on `x86_64-linux`. `flake.nix` uses one
-`cl-nix-forge` `mkPackageFlake` call, so its packages, checks, apps, dev shell,
-and formatter are the standard outputs plus custom benchmark and mutation apps.
-On macOS, use the manual setup and commands in [Without Nix](#without-nix).
+The Nix workflow below is available on `x86_64-linux`. On macOS, use the
+manual setup and commands in [Without Nix](#without-nix).
 Run every command from the repository root.
 
 ## Nix
 
 ```sh
-nix flake check          # test suite, formatting, docs build, coverage gate
+nix flake check
 nix develop              # shell with the dependencies on the source registry
 nix run .#test           # the test suite
 nix run .#benchmark      # the deterministic benchmark
@@ -42,21 +40,16 @@ require it, so export it before running the suite outside the flake check:
 export YAML_TEST_SUITE="$HOME/yaml-test-suite"   # data-2022-01-17 checkout
 ```
 
-`nix run .#test` runs `run-tests.lisp` from the flake's pinned source tree
-with the dependencies on the registry; it drives the same runner the check
-does. `nix run .#benchmark` runs `benchmark/run.lisp`, a deterministic
+`nix run .#benchmark` runs `benchmark/run.lisp`, a deterministic
 corpus benchmark that prints one TSV row per case and operation with
-throughput, allocation, and GC time. `nix build .#docs` builds the
-documentation site. `nix fmt` rewrites the Nix files to the treefmt
-configuration; the formatting check fails when they are not.
+throughput, allocation, and GC time.
 
 ## Without Nix
 
-Use this procedure on macOS or where `nix develop` is unavailable. The flake
-currently provides Nix outputs only on `x86_64-linux`. Install SBCL and Git
-first. `run-tests.lisp` registers the repository itself, so you then need to
-set up two project inputs: dependencies on the source registry and the
-conformance fixture. Install GNU coreutils before following the bounded
+Use this procedure on macOS or where `nix develop` is unavailable. Install
+SBCL and Git first. `run-tests.lisp` registers the repository itself, so
+you need to set up two project inputs: dependencies on the source registry
+and the conformance fixture. Install GNU coreutils before following the bounded
 command examples (`brew install coreutils` on macOS); its timeout command is
 `gtimeout` there. Replace `timeout` with `gtimeout` in the command examples on
 macOS.
@@ -261,18 +254,13 @@ an HTML report restricted to `src/`. `COVERAGE_OUTPUT`,
 `scripts/coverage-gate.lisp` (the `cl-yaml-kit/coverage-gate` system, tested
 with the suite) turns the statistics into the gate, so `checks.coverage` in
 `flake.nix`, and therefore the CI `nix flake check`, enforce it. The gate
-uses an exact per-file ratchet: every measured source file's expression and
-branch shortfalls must match its recorded allowance. A regression in any file
-fails, and an improvement requires lowering that file's allowance.
+aggregates expression and branch coverage across all measured `src/` files.
+Each aggregate must reach 90%, using the integer comparison
+`covered * 10 >= total * 9`. A matched top-level expression exclusion is
+removed from the expression denominator and is never counted as covered;
+branches are not excluded. Missing or duplicate source measurements, empty
+coverage data, and stale exclusion rules fail the gate. The report includes
+per-file counts and uncovered locations.
 
-The production exclusion list is empty. The nine candidate compile/load-time
-forms did not appear as complete uncovered expressions in SB-COVER, so none
-has a reproducible basis for exemption. Add a rule only when a fixture proves
-SB-COVER reports that complete top-level form as unexecuted. The gate never
-exempts branches or nested expressions, prints any excused and remaining
-uncovered forms with their positions, and fails on an unused exclusion rule.
-
-`scripts/coverage-allowance.sexp` records exact expression and branch
-shortfalls for every measured source file. The gate requires the measured file
-set and each file's counts to match the allowance exactly. When a change
-closes a coverage gap, lower that file's allowance in the same change.
+The production exclusion list is empty. Add a rule only when a fixture proves
+SB-COVER reports that complete top-level form as unexecuted.

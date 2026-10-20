@@ -86,3 +86,20 @@
                                 mapping-type))
                         :to-equal '(:nan :nan :+inf :-inf))))))
      (apply #'sb-int:set-floating-point-modes modes))))
+(cl-weave:it-each
+    ((positive-shortcut-overflow "1e401" :infinity nil)
+     (negative-shortcut-overflow "-1e401" :infinity t)
+     (positive-conversion-overflow "2e308" :infinity nil)
+     (negative-conversion-overflow "-2e308" :infinity t)
+     (positive-shortcut-underflow "!!float 1e-402" :zero nil)
+     (negative-shortcut-underflow "!!float -1e-402" :zero t))
+  "preserves float kind and sign at decimal range boundaries"
+  (name text expected-kind negative)
+  (declare (ignore name))
+  (let ((value (yaml-kit:parse text)))
+    (expect (and (floatp value)
+                 (ecase expected-kind
+                   (:infinity (yaml-kit::%float-infinity-p value))
+                   (:zero (zerop value))))
+            :to-be-truthy)
+    (expect (minusp (float-sign value)) :to-equal negative)))

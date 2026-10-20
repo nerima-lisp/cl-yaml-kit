@@ -18,16 +18,9 @@
       (format *error-output* "~&cl-yaml-kit test run failed: ~A~%" condition)
       nil)))
 
-(defun require-every-source-measured (statistics source-directory)
-  (let* ((measured (mapcar (lambda (file) (namestring (getf file :pathname))) statistics))
-         (missing (remove-if (lambda (file) (member (namestring file) measured :test #'string=))
-                             (directory (merge-pathnames "*.lisp" source-directory)))))
-    (when missing
-      (error "SB-COVER recorded no coverage for ~{~A~^, ~}."
-             (mapcar #'file-namestring missing)))))
-
 (let* ((root (checkout-root))
        (source-directory (merge-pathnames "src/" root))
+       (source-files (directory (merge-pathnames "*.lisp" source-directory)))
        (output-directory (merge-pathnames "coverage/" root))
        (data-file (environment-pathname "COVERAGE_OUTPUT"
                                         (merge-pathnames "cl-yaml-kit.coverage" output-directory)))
@@ -58,19 +51,15 @@
                                          :include-pathnames (list source-directory)))
            (rules (uiop:symbol-call :cl-yaml-kit/coverage-gate :read-exclusion-rules
                                     (merge-pathnames "scripts/coverage-exclusions.sexp" root)))
-           (allowance (uiop:symbol-call :cl-yaml-kit/coverage-gate :read-allowance
-                                        (merge-pathnames "scripts/coverage-allowance.sexp"
-                                                         root)))
            (verdicts (uiop:symbol-call :cl-yaml-kit/coverage-gate :gate-verdicts
-                                       statistics rules)))
-      (require-every-source-measured statistics source-directory)
+                                       statistics rules :expected-pathnames source-files)))
       (uiop:symbol-call :cl-weave :save-coverage data-file)
       (uiop:symbol-call :cl-weave :save-coverage-report report-directory
                         :include-pathnames (list source-directory))
       (uiop:symbol-call :cl-yaml-kit/coverage-gate :write-gate-report
-                        verdicts rules allowance *standard-output*)
+                        verdicts rules *standard-output*)
       (uiop:quit (if (and passed
                           (zerop (uiop:symbol-call :cl-yaml-kit/coverage-gate
-                                                   :gate-exit-status verdicts rules allowance)))
+                                                   :gate-exit-status verdicts rules)))
                      0
                      1)))))

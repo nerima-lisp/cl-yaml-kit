@@ -1,4 +1,5 @@
 (in-package #:cl-yaml-kit/test)
+(defparameter *invalid-token-slot-value* -1)
 
 (describe "scanner token errors"
   (it "rejects a value indicator that would close a key from a previous line"
@@ -77,8 +78,22 @@
       (dolist (thunk (list (lambda () (yaml-kit:make-token :scalar mark mark :value 1))
                            (lambda () (yaml-kit:make-token :tag mark mark :handle 1))
                            (lambda () (yaml-kit:make-token :tag mark mark :suffix 1))
-                           (lambda () (yaml-kit:make-token :scalar mark mark :style :invalid))))
-        (expect (handler-case (funcall thunk) (type-error () t)) :to-be-truthy))))
+                           (lambda () (yaml-kit:make-token :scalar mark mark :style :invalid))
+                           (lambda () (yaml-kit::%make-token
+                                       :scalar mark mark
+                                       :value *invalid-token-slot-value*))
+                           (lambda () (yaml-kit::%make-token
+                                       :tag mark mark
+                                       :handle *invalid-token-slot-value*))
+                           (lambda () (yaml-kit::%make-token
+                                       :tag mark mark
+                                       :suffix *invalid-token-slot-value*))
+                           (lambda () (yaml-kit::%make-token
+                                       :scalar mark mark
+                                       :style *invalid-token-slot-value*))))
+        (expect (handler-case (funcall thunk)
+                  (type-error () t))
+                :to-be-truthy))))
   (it "validates token kind marks and numeric metadata"
     (let ((mark (yaml-kit:make-mark 0 0 0)))
       (dolist (thunk (list (lambda () (yaml-kit:make-token 1 mark mark))
@@ -86,4 +101,43 @@
                            (lambda () (yaml-kit:make-token :scalar mark 1))
                            (lambda () (yaml-kit:make-token :version-directive mark mark :major t))
                            (lambda () (yaml-kit:make-token :version-directive mark mark :minor t))))
-        (expect (handler-case (funcall thunk) (type-error () t)) :to-be-truthy)))))
+        (expect (handler-case (funcall thunk) (type-error () t)) :to-be-truthy))))
+  (it "constructs tokens with each valid payload variant"
+    (let* ((start-mark (yaml-kit:make-mark 1 2 3))
+           (end-mark (yaml-kit:make-mark 1 8 9))
+           (scalar (yaml-kit:make-token :scalar start-mark end-mark
+                                        :value "quoted" :style :double-quoted))
+           (tag (yaml-kit:make-token :tag start-mark end-mark
+                                     :handle "!e!" :suffix "item"))
+           (version (yaml-kit:make-token :version-directive start-mark end-mark
+                                         :major 1 :minor 2)))
+      (expect (list (list (yaml-kit:token-kind scalar)
+                          (yaml-kit:token-value scalar)
+                          (yaml-kit:token-handle scalar)
+                          (yaml-kit:token-suffix scalar)
+                          (yaml-kit:token-style scalar)
+                          (yaml-kit:token-major scalar)
+                          (yaml-kit:token-minor scalar)
+                          (eq (yaml-kit:token-start-mark scalar) start-mark)
+                          (eq (yaml-kit:token-end-mark scalar) end-mark))
+                    (list (yaml-kit:token-kind tag)
+                          (yaml-kit:token-value tag)
+                          (yaml-kit:token-handle tag)
+                          (yaml-kit:token-suffix tag)
+                          (yaml-kit:token-style tag)
+                          (yaml-kit:token-major tag)
+                          (yaml-kit:token-minor tag)
+                          (eq (yaml-kit:token-start-mark tag) start-mark)
+                          (eq (yaml-kit:token-end-mark tag) end-mark))
+                    (list (yaml-kit:token-kind version)
+                          (yaml-kit:token-value version)
+                          (yaml-kit:token-handle version)
+                          (yaml-kit:token-suffix version)
+                          (yaml-kit:token-style version)
+                          (yaml-kit:token-major version)
+                          (yaml-kit:token-minor version)
+                          (eq (yaml-kit:token-start-mark version) start-mark)
+                          (eq (yaml-kit:token-end-mark version) end-mark)))
+              :to-equal (quote ((:scalar "quoted" nil nil :double-quoted nil nil t t)
+                                (:tag nil "!e!" "item" nil nil nil t t)
+                                (:version-directive nil nil nil nil 1 2 t t)))))))

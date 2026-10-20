@@ -186,18 +186,29 @@
                                           t "a: new") :utf-8 bom))
               :to-be-truthy)
       (expect (format-edit-value-at edited 0 '("a")) :to-equal "new")))
-  (it "preserves a UTF-16LE BOM in octet input"
-    (let* ((bom #(255 254))
-           (source (format-edit-octets
-                    (format-edit-lines (format nil "~C~C" #\Return #\Newline)
-                                       t "a: old") :utf-16le bom))
-           (edited (yaml-kit:edit-source source '("a") "new")))
-      (expect (equalp edited
-                      (format-edit-octets
-                       (format-edit-lines (format nil "~C~C" #\Return #\Newline)
-                                          t "a: new") :utf-16le bom))
-              :to-be-truthy)
-      (expect (format-edit-value-at edited 0 '("a")) :to-equal "new")))
+  (it "preserves detected UTF encodings for octet input"
+    (dolist
+        (case (list (list :utf-8 nil)
+                    (list :utf-16be #(254 255))
+                    (list :utf-32le #(255 254 0 0))
+                    (list :utf-32be #(0 0 254 255))
+                    (list :utf-16be nil)
+                    (list :utf-16le nil)
+                    (list :utf-16le #(255 254))))
+      (destructuring-bind (encoding bom) case
+        (let* ((source
+                (format-edit-octets
+                 (format-edit-lines (string (code-char 10)) t "a: old")
+                 encoding
+                 bom))
+               (edited (yaml-kit:edit-source source (list "a") "new"))
+               (expected
+                (format-edit-octets
+                 (format-edit-lines (string (code-char 10)) t "a: new")
+                 encoding
+                 bom)))
+          (expect (equalp edited expected) :to-be-truthy)
+          (expect (format-edit-value-at edited 0 (list "a")) :to-equal "new")))))
   (it "rejects collection, empty, block, multiline, and tagged scalar sets"
     (dolist (case (list
                    (list (format-edit-lines (string #\Newline) t "a:" "  x: 1" "b: 2")
@@ -243,24 +254,45 @@
                       (progn (yaml-kit:edit-source source path value :operation operation) nil)
                     (yaml-kit:yaml-format-edit-structure-error () t))
                   :to-be-truthy)))))
-  (it "rejects tags, duplicate keys, merge keys, and integer map paths"
-    (dolist (case (list
-                   (list (format-edit-lines (string #\Newline) t "a: !!str 5")
-                         '("a") "new")
-                   (list (format-edit-lines (string #\Newline) t "a: 1" "a: 2")
-                         '("a") 3)
-                   (list (format-edit-lines (string #\Newline) t
-                                            "base: &b {x: 1}" "d:" "  <<: *b" "  y: 2")
-                         '("d" "y") 3)
-                   (list (format-edit-lines (string #\Newline) t "a: 1")
-                         '(0) 2)))
-      (destructuring-bind (source path value) case
-        (let ((expected (if (equal path '(0))
-                            'yaml-kit:yaml-format-edit-path-error
-                            'yaml-kit:yaml-format-edit-structure-error)))
-          (expect (format-edit-condition-type
-                   (lambda () (yaml-kit:edit-source source path value)))
-                  :to-equal expected)))))
+  (it "rejects edits through unsafe tagged and anchored nodes"
+    (dolist
+        (case (list
+               (list (format-edit-lines (string #\Newline) t "a: !!str 5")
+                     (list "a")
+                     "YAML-FORMAT-EDIT-STRUCTURE-ERROR")
+               (list (format-edit-lines (string #\Newline) t "a: 1" "a: 2")
+                     (list "a")
+                     "YAML-FORMAT-EDIT-STRUCTURE-ERROR")
+               (list
+                (format-edit-lines (string #\Newline)
+                                   t
+                                   "base: &b {x: 1}"
+                                   "d:"
+                                   "  <<: *b"
+                                   "  y: 2")
+                (list "d" "y")
+                "YAML-FORMAT-EDIT-STRUCTURE-ERROR")
+               (list (format-edit-lines (string #\Newline) t "a: 1")
+                     (list 0)
+                     "YAML-FORMAT-EDIT-PATH-ERROR")
+               (list
+                (format-edit-lines (string #\Newline) t "root: !!map {a: 1}")
+                (list "root" "a")
+                "YAML-FORMAT-EDIT-STRUCTURE-ERROR")
+               (list (format-edit-lines (string #\Newline) t "root: &x {a: 1}")
+                     (list "root" "a")
+                     "YAML-FORMAT-EDIT-ANCHOR-ERROR")
+               (list (format-edit-lines (string #\Newline) t "&key a: 1")
+                     (list "a")
+                     "YAML-FORMAT-EDIT-ANCHOR-ERROR")))
+      (destructuring-bind (source path expected-type) case
+        (expect
+         (symbol-name
+          (format-edit-condition-type
+           (lambda ()
+             (yaml-kit:edit-source source path "new"))))
+         :to-equal
+         expected-type))))
   (it "rejects only-child deletion, flow deletion, and non-tail sequence addition"
     (dolist (case (list
                    (list (format-edit-lines (string #\Newline) t "a: 1")
@@ -328,4 +360,118 @@
             :to-be-truthy)
     (format-edit-expect (format nil "a: old~%b: 2~%") '("a") "new"
                          (format nil "a: new~%b: 2~%")
-                         :unchanged (list '("b") 2))))
+                         :unchanged (list '("b") 2)))
+  (cl-weave:it-each
+    ((apostrophe "O'Brien, Jr" "'O''Brien, Jr'")
+     (colon-space "key: value" "'key: value'")
+     (colon-question "key:?value" "'key:?value'")
+     (empty "" "''")
+     (safe-colon "name:value" "name:value")
+     (closing-bracket "x]y" "'x]y'"))
+  "quotes YAML-dangerous flow value case ~S"
+  (name value fragment)
+  (declare (ignore name))
+  (format-edit-expect
+   (format nil "root: [old]~%") '("root" 0) value
+   (format nil "root: [~A]~%" fragment)))
+  (it "escapes controls and Unicode line separators in replacement strings"
+    (let* ((codes '(0 7 8 9 10 11 12 13 27 34 92 133 8232 8233 1 127 65534))
+           (escape-codes '("0" "a" "b" "t" "n" "v" "f" "r" "e" "\"" "\\"
+                           "N" "L" "P" "x01" "x7F" "uFFFE"))
+           (value (coerce (mapcar #'code-char codes) 'string))
+           (fragment
+             (with-output-to-string (out)
+               (write-char #\" out)
+               (loop for escape in escape-codes
+                     do (write-char #\\ out)
+                        (write-string escape out))
+               (write-char #\" out)))
+           (edited (yaml-kit:edit-source (format nil "value: old~%")
+                                         '("value") value)))
+      (expect (length codes) :to-equal (length escape-codes))
+      (expect (yaml-kit::%format-edit-double-quoted-fragment value) :to-equal fragment)
+      (expect (format-edit-value-at edited 0 '("value")) :to-equal value)))
+  (it "copies semantic YAML mappings recursively"
+    (let* ((mapping (yaml-kit:make-yaml-mapping
+                     (list (cons "a" 1) (cons "items" (list 10 20)))))
+           (copy (yaml-kit::%format-edit-semantic-copy mapping)))
+      (expect (yaml-kit:yaml-mapping-entries copy)
+              :to-equal (yaml-kit:yaml-mapping-entries mapping))
+      (expect (eq copy mapping) :to-be-falsy)
+      (expect (eq (cdr (assoc "items" (yaml-kit:yaml-mapping-entries copy)
+                              :test #'equal))
+                  (cdr (assoc "items" (yaml-kit:yaml-mapping-entries mapping)
+                              :test #'equal)))
+              :to-be-falsy)))
+  (it "replaces, adds, deletes, and validates semantic mapping entries"
+    (let* ((mapping (yaml-kit:make-yaml-mapping
+                     (list (cons "a" 1) (cons "items" (list 10 20)))))
+           (original (yaml-kit:yaml-mapping-entries mapping))
+           (added-entries (append original (list (cons "c" 3))))
+           (replaced (yaml-kit::%format-edit-semantic-replace-child
+                      mapping "a" 9 nil))
+           (added (yaml-kit::%format-edit-semantic-add-child
+                   mapping "c" 3 nil))
+           (deleted (yaml-kit::%format-edit-semantic-delete-child
+                     mapping "a" nil))
+           (expected (yaml-kit::%format-edit-semantic-expected
+                      (list mapping) '("c") 3 :add 0)))
+      (expect (mapcar #'yaml-kit:yaml-mapping-entries
+                      (list replaced added deleted (first expected)))
+              :to-equal
+              (list (list (cons "a" 9) (cons "items" (list 10 20)))
+                    added-entries
+                    (list (cons "items" (list 10 20)))
+                    added-entries))
+      (expect (yaml-kit:yaml-mapping-entries mapping) :to-equal original)))
+  (it "replaces, appends, and deletes semantic list items"
+    (let* ((sequence '(10 20))
+           (replaced (yaml-kit::%format-edit-semantic-replace-child
+                      sequence 1 99 nil))
+           (added (yaml-kit::%format-edit-semantic-add-child sequence 2 30 nil))
+           (deleted (yaml-kit::%format-edit-semantic-delete-child sequence 0 nil)))
+      (expect (list replaced added deleted) :to-equal '((10 99) (10 20 30) (20)))
+      (expect sequence :to-equal '(10 20))))
+  (it "reports presence for semantic mapping and list child lookups"
+    (let ((mapping (yaml-kit:make-yaml-mapping (list (cons "a" 1))))
+          (sequence '(10 20)))
+      (expect (multiple-value-list
+               (yaml-kit::%format-edit-semantic-child mapping "a"))
+              :to-equal '(1 t))
+      (expect (multiple-value-list
+               (yaml-kit::%format-edit-semantic-child sequence 1))
+              :to-equal '(20 t))
+      (expect (multiple-value-list
+               (yaml-kit::%format-edit-semantic-child 10 "a"))
+              :to-equal '(nil nil))))
+  (it "compares semantic YAML mappings by entries"
+    (let* ((mapping (yaml-kit:make-yaml-mapping
+                     (list (cons "a" 1) (cons "b" 2))))
+           (copy (yaml-kit::%format-edit-semantic-copy mapping))
+           (changed (yaml-kit::%format-edit-semantic-add-child
+                     mapping "c" 3 nil)))
+      (expect (yaml-kit::%format-edit-semantic-equal-p mapping copy)
+              :to-be-truthy)
+      (expect (yaml-kit::%format-edit-semantic-equal-p mapping changed)
+              :to-be-falsy)))
+  (it "compares semantic lists and scalar leaves"
+    (let ((sequence '(10 20)))
+      (expect (yaml-kit::%format-edit-semantic-equal-p sequence
+                                                        (copy-list sequence))
+              :to-be-truthy)
+      (expect (yaml-kit::%format-edit-semantic-equal-p sequence #(10 20))
+              :to-be-falsy)
+      (expect (list (yaml-kit::%format-edit-semantic-equal-p 3 3.0)
+                    (yaml-kit::%format-edit-semantic-equal-p 3 4))
+              :to-equal '(t nil))))
+  (cl-weave:it-each
+    ((big-endian :utf-32be)
+     (little-endian :utf-32le))
+  "detects BOM-less ~S input and preserves its bytes"
+  (name encoding)
+  (declare (ignore name))
+  (let* ((source (format-edit-octets (format nil "a: old~%") encoding))
+         (edited (yaml-kit:edit-source source '("a") "new"))
+         (expected (format-edit-octets (format nil "a: new~%") encoding)))
+    (expect (equalp edited expected) :to-be-truthy)
+    (expect (format-edit-value-at edited 0 '("a")) :to-equal "new"))))

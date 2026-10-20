@@ -73,3 +73,62 @@
      (loader-document (loader-event :scalar :tag "!!float" :value "nope")))
      yaml-kit:yaml-compose-error))
 )
+(loader-error-cases
+  ("rejects a duplicate stream start"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :stream-start)))
+   yaml-kit:yaml-compose-error)
+  ("rejects document start before stream start"
+   (loader-compose-all-events (list (loader-event :document-start)))
+   yaml-kit:yaml-compose-error)
+  ("rejects document start after stream end"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :stream-end)
+          (loader-event :document-start)))
+   yaml-kit:yaml-compose-error)
+  ("rejects document start inside an open document"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :document-start)
+          (loader-event :document-start)))
+   yaml-kit:yaml-compose-error)
+  ("rejects stream end before document end"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :document-start)
+          (loader-event :stream-end)))
+   yaml-kit:yaml-compose-error)
+  ("rejects document end outside a document"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :document-end)))
+   yaml-kit:yaml-compose-error)
+  ("rejects document end without a root node"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :document-start)
+          (loader-event :document-end)))
+   yaml-kit:yaml-compose-error)
+  ("rejects a scalar outside a document"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :scalar :value "value")))
+   yaml-kit:yaml-compose-error)
+  ("rejects a scalar before stream start"
+   (loader-compose-all-events (list (loader-event :scalar :value "value")))
+   yaml-kit:yaml-compose-error)
+  ("rejects an event after stream end"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :stream-end)
+          (loader-event :scalar :value "value")))
+   yaml-kit:yaml-compose-error)
+  ("rejects a mismatched collection end"
+   (loader-compose-all-events
+    (list (loader-event :stream-start)
+          (loader-event :document-start)
+          (loader-event :sequence-start)
+          (loader-event :mapping-end)))
+   yaml-kit:yaml-compose-error))

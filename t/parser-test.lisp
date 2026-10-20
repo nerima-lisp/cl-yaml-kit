@@ -196,3 +196,11 @@
     (expect (handler-case (parse-parser-token-events tokens)
               (yaml-kit:yaml-parse-error () t))
             :to-be-truthy)))
+(it "parses adjustable strings and enforces string input length limits"
+  (let ((input (make-array 4 :element-type 'character :adjustable t
+                           :initial-contents "a: 1")))
+    (expect (gethash "a" (yaml-kit:parse input)) :to-equal 1))
+  (expect (handler-case
+              (progn (yaml-kit:parse-events "long" :max-input-length 3) nil)
+            (yaml-kit:yaml-resource-limit-error () t))
+          :to-be-truthy))

@@ -16,42 +16,38 @@
 (defparameter *defun-miss* (gate-location 23 64))
 (defparameter *default-miss* (gate-location 44 49))
 
-(defun gate-statistics (expression-covered branch-covered &rest locations)
+(defun gate-statistics (expression-covered expression-total
+                         branch-covered branch-total &rest locations)
   (list :pathname #p"/virtual/gated.lisp"
-        :expression-covered expression-covered :expression-total 10
-        :branch-covered branch-covered :branch-total 10
+        :expression-covered expression-covered :expression-total expression-total
+        :branch-covered branch-covered :branch-total branch-total
         :uncovered-forms locations))
 
-(defun gate-verdict (statistics)
-  (cl-yaml-kit/coverage-gate:file-verdict statistics *gate-source* *gate-rules*))
+(defun gate-verdict (statistics &optional (rules nil))
+  (cl-yaml-kit/coverage-gate:file-verdict statistics *gate-source* rules))
 
-(defun gate-status (verdicts &key (rules (list (first *gate-rules*)))
-                                  (allowance nil))
-  (cl-yaml-kit/coverage-gate:gate-exit-status verdicts rules allowance))
+(defun gate-status (verdicts &optional (rules nil))
+  (cl-yaml-kit/coverage-gate:gate-exit-status verdicts rules))
 
-(defun gate-report (verdicts &key (rules (list (first *gate-rules*)))
-                                  (allowance nil))
+(defun gate-report (verdicts &optional (rules nil))
   (with-output-to-string (stream)
-    (cl-yaml-kit/coverage-gate:write-gate-report verdicts rules allowance stream)))
+    (cl-yaml-kit/coverage-gate:write-gate-report verdicts rules stream)))
 
 (defun run-coverage-reproduction-process
     (label &key (timeout 180) form systems)
   (let* ((root (asdf:system-source-directory "cl-yaml-kit"))
          (child-form
-           `(progn
-              (uiop:chdir ,root)
-              ,(or form
-                   `(let* ((cl-user::root ,root)
-                           (cl-user::script (merge-pathnames
-                                             (format nil
-                                                     "scripts/coverage-reproductions/~A"
-                                                     ,label)
-                                             cl-user::root)))
-                      (load cl-user::script)))))
+           (if form
+               form
+               `(progn
+                  (uiop:chdir ,root)
+                  (load (merge-pathnames
+                         (format nil "scripts/coverage-reproductions/~A" ,label)
+                         ,root)))))
          (result
            (cl-weave:run-isolated
             child-form
-            :systems (adjoin "sb-posix" systems :test (function string=))
+            :systems systems
             :package "CL-USER"
             :timeout timeout))
          (output (cl-weave:isolated-result-stdout result))
@@ -74,52 +70,74 @@
             :to-equal '((:head "in-package" :start 0 :end 22)
                         (:head "defun" :start 23 :end 64))))
 
-  (it "requires each file to match both exact allowance counts"
-    (let* ((first-verdict
-             (gate-verdict
-              (gate-statistics 9 10 *in-package-miss*)))
-           (second-statistics
-             (gate-statistics 8 9 *in-package-miss*))
-           (second-verdict
+  (it "passes both aggregate thresholds at exactly 90 percent"
+    (let ((verdict (gate-verdict (gate-statistics 9 10 9 10))))
+      (expect (gate-status (list verdict)) :to-equal 0)
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate expression: 9/10 (90% threshold) PASS")
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate branch: 9/10 (90% threshold) PASS")))
+  (it "aggregates separate files before applying coverage thresholds"
+    (let* ((under-covered-statistics (gate-statistics 0 1 0 1))
+           (fully-covered-statistics (gate-statistics 9 9 9 9))
+           (under-covered-verdict (gate-verdict under-covered-statistics))
+           (fully-covered-verdict
              (progn
-               (setf (getf second-statistics :pathname) #p"/virtual/other.lisp")
-               (gate-verdict second-statistics)))
-           (allowance
-             (list (list :file (getf first-verdict :file) :expression 0 :branch 0)
-                   (list :file (getf second-verdict :file) :expression 1 :branch 1)))
-           (swapped
-             (list (list :file (getf first-verdict :file) :expression 1 :branch 1)
-                   (list :file (getf second-verdict :file) :expression 0 :branch 0))))
-      (expect (gate-status (list first-verdict second-verdict)
-                           :allowance allowance)
-              :to-equal 0)
-      (expect (gate-status (list first-verdict second-verdict)
-                           :allowance swapped)
-              :to-equal 1)
-      (expect (gate-report (list first-verdict second-verdict)
-                           :allowance swapped)
-              :to-contain "shortfall changed for")))
+               (setf (getf fully-covered-statistics :pathname)
+                     #p"/virtual/other.lisp")
+               (gate-verdict fully-covered-statistics)))
+           (verdicts (list under-covered-verdict fully-covered-verdict)))
+      (expect (gate-status verdicts) :to-equal 0)
+      (expect (gate-report verdicts)
+              :to-contain "aggregate expression: 9/10 (90% threshold) PASS")
+      (expect (gate-report verdicts)
+              :to-contain "aggregate branch: 9/10 (90% threshold) PASS")))
 
-  (it "excuses only the exact excluded top-level expression"
-    (let* ((verdict (gate-verdict
-                     (gate-statistics 8 10 *defun-miss* *default-miss*)))
-           (allowance
-             (list (list :file (getf verdict :file) :expression 1 :branch 0))))
+  (it "fails when aggregate expression coverage is below 90 percent"
+    (let ((verdict (gate-verdict (gate-statistics 8 10 9 10))))
+      (expect (gate-status (list verdict)) :to-equal 1)
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate expression: 8/10 (90% threshold) FAIL")
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate branch: 9/10 (90% threshold) PASS")))
+
+  (it "fails when aggregate branch coverage is below 90 percent"
+    (let ((verdict (gate-verdict (gate-statistics 9 10 8 10))))
+      (expect (gate-status (list verdict)) :to-equal 1)
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate expression: 9/10 (90% threshold) PASS")
+      (expect (gate-report (list verdict))
+              :to-contain "aggregate branch: 8/10 (90% threshold) FAIL")))
+
+  (it "removes an excluded form from the expression denominator without crediting it"
+    (let* ((rules (list (second *gate-rules*)))
+           (verdict (gate-verdict
+                     (gate-statistics 8 10 10 10 *defun-miss*) rules)))
+      (expect (list (getf verdict :expression-covered)
+                    (getf verdict :expression-total)
+                    (getf verdict :expression-shortfall))
+              :to-equal (list 8 9 1))
+      (expect (gate-status (list verdict) rules) :to-equal 1)
+      (expect (gate-report (list verdict) rules)
+              :to-contain "aggregate expression: 8/9 (90% threshold) FAIL")))
+
+  (it "excuses only an exact excluded top-level expression"
+    (let* ((rules (list (first *gate-rules*)))
+           (verdict (gate-verdict
+                     (gate-statistics 8 10 9 10 *in-package-miss* *default-miss*)
+                     rules)))
       (expect (getf verdict :expression-shortfall) :to-equal 1)
-      (expect (getf verdict :unexcused) :to-equal (list *default-miss*))
-      (expect (gate-status (list verdict) :rules (list (second *gate-rules*))
-                           :allowance allowance)
-              :to-equal 0)))
+      (expect (getf verdict :unexcused) :to-equal (list *default-miss*))))
 
-  (it "leaves uncovered initform and lambda expressions under excluded forms"
+  (it "leaves nested expressions and branches uncovered under excluded forms"
     (let* ((source
              (format nil "~A~%~A~%~A~%~A~%~A~%~A~%"
-        "(in-package #:cl-user)"
-        "(defparameter *gated* (progn"
-        "  (if *never* (error \"parameter initform\"))"
-        "  (lambda () (if *never* (error \"lambda body\")))))"
-        "(defstruct gated-structure"
-        "  (value (if *never* (error \"structure initform\"))))"))
+                     "(in-package #:cl-user)"
+                     "(defparameter *gated* (progn"
+                     "  (if *never* (error \"parameter initform\"))"
+                     "  (lambda () (if *never* (error \"lambda body\")))))"
+                     "(defstruct gated-structure"
+                     "  (value (if *never* (error \"structure initform\"))))"))
            (forms (cl-yaml-kit/coverage-gate:top-level-forms source))
            (parameter-form (find "defparameter" forms
                                  :key (lambda (form) (getf form :head))
@@ -131,8 +149,7 @@
                  (let ((start (search text source)))
                    (unless start
                      (error "Missing nested fixture text ~S." text))
-                   (let ((location
-                           (gate-location start (+ start (length text)))))
+                   (let ((location (gate-location start (+ start (length text)))))
                      (setf (getf location :kind) kind)
                      location))))
         (let* ((parameter-miss
@@ -145,8 +162,8 @@
                                 (getf structure-form :end)))
                (slot-initform-miss
                  (span-for "(error \"structure initform\")" :expression))
-               (branch-miss (span-for "(if *never* (error \"parameter initform\"))"
-                                      :branch))
+               (branch-miss
+                 (span-for "(if *never* (error \"parameter initform\"))" :branch))
                (statistics
                  (list :pathname #p"/virtual/nested-runtime.lisp"
                        :expression-covered 5 :expression-total 10
@@ -154,66 +171,98 @@
                        :uncovered-forms
                        (list parameter-miss initform-miss lambda-miss
                              structure-miss slot-initform-miss branch-miss)))
-               (rules (list (first *gate-rules*)
-                            '(:head "defparameter" :reason "initform fixture")
+               (rules (list '(:head "defparameter" :reason "initform fixture")
                             '(:head "defstruct" :reason "slot initform fixture")))
-               (verdict
-                 (cl-yaml-kit/coverage-gate:file-verdict statistics source rules)))
-          (expect (getf verdict :expression-shortfall) :to-equal 3)
-          (expect (getf verdict :branch-shortfall) :to-equal 1)
+               (verdict (cl-yaml-kit/coverage-gate:file-verdict
+                         statistics source rules)))
+          (expect (list (getf verdict :expression-total)
+                        (getf verdict :expression-shortfall)
+                        (getf verdict :branch-shortfall))
+                  :to-equal (list 8 3 1))
           (expect (getf verdict :unexcused)
                   :to-equal
                   (list initform-miss lambda-miss slot-initform-miss branch-miss))))))
 
   (it "never excuses a branch miss inside an excluded top-level form"
-    (let* ((branch-miss (gate-location 30 35 :branch))
-           (statistics (gate-statistics 9 9 *defun-miss* branch-miss))
-           (verdict (gate-verdict statistics))
-           (allowance
-             (list (list :file (getf verdict :file) :expression 0 :branch 0))))
+    (let* ((rules (list (second *gate-rules*)))
+           (branch-miss (gate-location 53 63 :branch))
+           (verdict (gate-verdict
+                     (gate-statistics 9 10 8 10 *defun-miss* branch-miss)
+                     rules)))
       (expect (<= (getf *defun-miss* :start)
                   (getf branch-miss :start)
                   (getf branch-miss :end)
                   (getf *defun-miss* :end))
               :to-equal t)
-      (expect (getf verdict :expression-shortfall) :to-equal 0)
-      (expect (getf verdict :branch-shortfall) :to-equal 1)
-      (expect (getf verdict :unexcused) :to-equal (list branch-miss))
-      (expect (gate-status (list verdict) :rules (list (second *gate-rules*))
-                           :allowance allowance)
-              :to-equal 1)))
+      (expect (list (getf verdict :expression-total)
+                    (getf verdict :expression-shortfall)
+                    (getf verdict :branch-shortfall))
+              :to-equal (list 9 0 2))
+      (expect (list (getf verdict :unexcused)
+                    (gate-status (list verdict) rules))
+              :to-equal (list (list branch-miss) 1))))
 
   (it "fails when an exclusion rule excused nothing"
-    (let* ((verdict (gate-verdict (gate-statistics 9 10 *in-package-miss*)))
-           (allowance
-             (list (list :file (getf verdict :file) :expression 0 :branch 0))))
-      (expect (gate-status (list verdict) :rules *gate-rules*
-                           :allowance allowance)
-              :to-equal 1)
-      (expect (gate-report (list verdict) :rules *gate-rules*
-                           :allowance allowance)
+    (let* ((verdict (gate-verdict (gate-statistics 9 10 9 10)))
+           (rules (list (second *gate-rules*))))
+      (expect (gate-status (list verdict) rules) :to-equal 1)
+      (expect (gate-report (list verdict) rules)
               :to-contain "stale exclusion: defun excused nothing")))
 
   (it "fails when no file was measured"
-    (expect (gate-status nil :allowance nil) :to-equal 1))
+    (expect (gate-status nil) :to-equal 1))
 
-  (it "rejects fake 50%/10% coverage through the production gate process"
+  (it "fails when an expected source file was not measured"
+    (let* ((pathname (asdf:system-relative-pathname
+                      "cl-yaml-kit" "t/coverage-gate-test.lisp"))
+           (statistics (gate-statistics 9 10 9 10))
+           (message
+             (handler-case
+                 (progn
+                   (setf (getf statistics :pathname) pathname)
+                   (cl-yaml-kit/coverage-gate:gate-verdicts
+                    (list statistics) nil
+                    :expected-pathnames (list pathname #p"/virtual/missing.lisp"))
+                   "")
+               (error (condition) (princ-to-string condition)))))
+      (expect message :to-contain "missing:")))
+
+  (it "fails when a source file was measured more than once"
+    (let* ((pathname (asdf:system-relative-pathname
+                      "cl-yaml-kit" "t/coverage-gate-test.lisp"))
+           (statistics (gate-statistics 9 10 9 10))
+           (duplicate (copy-list statistics))
+           (message
+             (handler-case
+                 (progn
+                   (setf (getf statistics :pathname) pathname
+                         (getf duplicate :pathname) pathname)
+                   (cl-yaml-kit/coverage-gate:gate-verdicts
+                    (list statistics duplicate) nil
+                    :expected-pathnames (list pathname))
+                   "")
+               (error (condition) (princ-to-string condition)))))
+      (expect message :to-contain "Duplicate measured source files:")))
+
+  (it "rejects fake 50 percent expression and 10 percent branch coverage"
     (multiple-value-bind (output exit-code status)
         (run-coverage-reproduction-process "fake-gate.lisp" :systems (list "cl-yaml-kit"))
-      (expect status :to-equal :fail)
-      (expect exit-code :to-equal 1)
-      (expect output :to-contain "fake coverage: expression 50%, branch 10%")
-      (expect output :to-contain "shortfall changed for src/char-classes.lisp")
-      (expect output :to-contain "coverage gate: FAIL")))
+      (expect (list status exit-code) :to-equal (list :fail 1))
+      (expect (every (lambda (fragment) (search fragment output))
+                     (list "fake coverage: expression 50%, branch 10%"
+                           "aggregate expression:"
+                           "aggregate branch:"
+                           "coverage gate: FAIL"))
+              :to-be-truthy)))
 
   (it "keeps nested runtime expressions uncovered when a synthetic whole-form marker is excluded"
     (multiple-value-bind (output exit-code status)
         (run-coverage-reproduction-process "run.lisp" :systems (list "sb-cover" "cl-weave"))
-      (expect status :to-equal :pass)
-      (expect exit-code :to-equal 0)
-      (expect output :to-contain
-              "synthetic whole-form exclusion leaves nested runtime expressions uncovered: PASS")
-      (expect output :to-contain "coverage exclusion regression: PASS")))
+      (expect (list status exit-code) :to-equal (list :pass 0))
+      (expect (every (lambda (fragment) (search fragment output))
+                     (list "synthetic whole-form exclusion leaves nested runtime expressions uncovered: PASS"
+                           "coverage exclusion regression: PASS"))
+              :to-be-truthy)))
 
   (it "terminates an inline child after timeout"
     (let* ((pid-file
@@ -225,12 +274,13 @@
                      return candidate))
            (child-form
              `(progn
-                (sb-alien:define-alien-routine ("getpid" cl-user::current-pid)
-                    sb-alien:int)
                 (with-open-file (cl-user::stream ,(namestring pid-file)
                                  :direction :output :if-exists :supersede)
-                  (write-line (write-to-string (cl-user::current-pid))
-                              cl-user::stream)
+                  (write-line
+                   (write-to-string
+                    (funcall
+                     (symbol-function (find-symbol "UNIX-GETPID" "SB-UNIX"))))
+                   cl-user::stream)
                   (finish-output cl-user::stream))
                 (write-line "coverage-timeout-stdout" *standard-output*)
                 (finish-output *standard-output*)
@@ -249,10 +299,23 @@
                        (list :condition condition)))))
              (case (first outcome)
                (:condition
-                (let ((message (princ-to-string (second outcome))))
-                  (expect message :to-contain "timed out after")
-                  (expect message :to-contain "coverage-timeout-stdout")
-                  (expect message :to-contain "coverage-timeout-stderr")))
+                (let* ((message (princ-to-string (second outcome)))
+                       (stdout-start (search "stdout:" message))
+                       (stderr-start (search "stderr:" message))
+                       (stdout-marker
+                         (and stdout-start stderr-start
+                              (search "coverage-timeout-stdout" message
+                                      :start2 (+ stdout-start (length "stdout:"))
+                                      :end2 stderr-start)))
+                       (stderr-marker
+                         (and stderr-start
+                              (search "coverage-timeout-stderr" message
+                                      :start2 (+ stderr-start (length "stderr:"))))))
+                  (expect
+                    (list (not (null (search "timed out after" message)))
+                          (not (null stdout-marker))
+                          (not (null stderr-marker)))
+                    :to-equal (list t t t))))
                (:returned
                 (destructuring-bind (output exit-code status) (second outcome)
                   (error "Expected default timeout handling to signal an error, but returned status ~S and exit code ~S.~%Captured stdout/stderr:~%~A"
@@ -271,13 +334,8 @@
         (when (probe-file pid-file)
           (delete-file pid-file)))))
 
-  (it "loads the repository exclusions and per-file allowance"
-    (flet ((data (name)
-             (asdf:system-relative-pathname "cl-yaml-kit"
-                                            (format nil "scripts/~A" name))))
-      (expect (cl-yaml-kit/coverage-gate:read-exclusion-rules
-               (data "coverage-exclusions.sexp"))
-              :to-equal nil)
-      (expect (cl-yaml-kit/coverage-gate:read-allowance
-               (data "coverage-allowance.sexp"))
-              :to-satisfy (function consp)))))
+  (it "loads the repository exclusions"
+    (expect (cl-yaml-kit/coverage-gate:read-exclusion-rules
+             (asdf:system-relative-pathname
+              "cl-yaml-kit" "scripts/coverage-exclusions.sexp"))
+            :to-equal nil)))

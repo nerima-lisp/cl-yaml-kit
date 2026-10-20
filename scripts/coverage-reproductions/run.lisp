@@ -1,11 +1,7 @@
 (unless (find-package "ASDF") (require :asdf))
 
 (unless (find-package "SB-COVER") (require :sb-cover))
-(let* ((script-directory
-          (uiop:pathname-directory-pathname *load-truename*))
-       (root (uiop:pathname-parent-directory-pathname
-              (uiop:pathname-parent-directory-pathname script-directory))))
-  (load (merge-pathnames "scripts/coverage-gate.lisp" root)))
+(load (merge-pathnames "../coverage-gate.lisp" *load-truename*))
 
 (let* ((script-directory (uiop:pathname-directory-pathname *load-truename*))
        (root (uiop:pathname-parent-directory-pathname

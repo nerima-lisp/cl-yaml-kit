@@ -55,6 +55,26 @@
   ("URI escape UTF-8" (format nil "!%C3%A9%20%E2%82%AC%20%F0%9F%98%81~%")
    ((:tag nil "!" "é € 😁" nil nil)))
 )
+(scanner-directive-cases
+  ("reserved directives skip blank and comment gaps"
+   (format nil "%FOO ignored~%~%# first gap~%  # second gap~%%BAR ignored~%---~%")
+   ((:document-start nil nil nil nil nil)))
+  ("recognized directives accept comments and EOF"
+   (format nil "%YAML 1.2 # version~%%TAG ! tag:example.com,2000: # tag")
+   ((:version-directive nil nil nil 1 2)
+    (:tag-directive "tag:example.com,2000:" "!" nil nil nil)))
+  ("primary tag handle carries a suffix"
+   (format nil "!tag:example.com%2C2000:foo~%")
+   ((:tag nil "!" "tag:example.com,2000:foo" nil nil)))
+  ("flow anchor stops at a comma"
+   (format nil "[&a,b]")
+   ((:flow-sequence-start nil nil nil nil nil) (:anchor "a" nil nil nil nil)
+    (:flow-entry nil nil nil nil nil) (:scalar "b" nil nil nil nil)
+    (:flow-sequence-end nil nil nil nil nil)))
+  ("verbatim tag URI includes commas"
+   (format nil "!<tag:example.com,2000:foo> value~%")
+   ((:tag nil "" "tag:example.com,2000:foo" nil nil)
+    (:scalar "value" nil nil nil nil))))
 
 (defmacro scanner-directive-errors (&body cases)
   `(progn ,@(mapcar (lambda (case)
@@ -88,6 +108,11 @@
   ("URI escape surrogate UTF-8" (format nil "!%ED%A0%80~%"))
   ("URI escape out-of-range UTF-8" (format nil "!%F4%90%80%80~%"))
   ("URI escape truncated UTF-8" (format nil "!%E2%82~%")))
+(scanner-directive-errors
+  ("directive name is missing" (format nil "% 1.2~%"))
+  ("YAML directive rejects trailing content" (format nil "%YAML 1.2 extra~%"))
+  ("TAG directive rejects trailing content" (format nil "%TAG !e! tag:example.com,2000: extra~%"))
+  ("reserved directive requires a document boundary" (format nil "%FOO ignored~%value~%")))
 
 (it "maps codec URI failures to parse errors"
   (dolist (text '("%E0%80%80" "%ED%A0%80" "%F4%90%80%80" "%E2%82"
@@ -101,3 +126,10 @@
                    scanner nil (yaml-kit::sc-mark scanner) buffer)
                 (yaml-kit:yaml-parse-error () t))
               :to-be-truthy))))
+(it "stops anchor names before a byte order mark"
+  (let* ((scanner (yaml-kit:make-scanner (format nil "&a~C" #\UFEFF)))
+         (token (yaml-kit::scan-anchor scanner :anchor)))
+    (expect (list (yaml-kit:token-kind token)
+                  (yaml-kit:token-value token)
+                  (yaml-kit::scanner-pos scanner))
+            :to-equal (quote (:anchor "a" 2)))))
