@@ -4,19 +4,20 @@ cl-yaml-kit follows the YAML 1.2.2 pipeline in both directions.
 
 ```text
 characters -> scanner -> tokens -> parser -> events -> composer -> nodes
-             -> constructor -> Common Lisp values
+nodes -> constructor -> Common Lisp values
 Common Lisp values -> representer -> serializer -> emitter -> characters
 ```
 
 The reader stages are owned by the scanner and parser files. `src/events.lisp`
 defines the event contract. `src/composer.lisp` builds representation graphs
-in the node types from `src/nodes.lisp`; schema and constructor files turn
+from the node types in `src/nodes.lisp`; schema and constructor files turn
 those graphs into Common Lisp values. The reverse path is owned by the
 representer, serializer, emitter, and dumper files.
 
 Events model stream, document, sequence, mapping, scalar, and alias actions.
-Every event carries start and end marks. Nodes model scalar, sequence, and
-mapping values and share tag, anchor, style, and source-mark metadata.
+They expose start and end spans. Nodes carry tag, anchor, style, and start and
+end spans where source locations are available. YAML conditions store a
+`cl-parser-kit:diagnostic`, which can carry a span and structured data.
 
 Data values and types live in `data.lisp`, `events.lisp`, `nodes.lisp`, and
 `tokens.lisp`. Schema tables are in `schema.lisp`, and character-class tables
@@ -27,22 +28,3 @@ Event delivery uses continuation-passing style (CPS): each stage accepts the
 next stage as a continuation and sends each produced item to it. This permits
 streaming consumers and keeps parser, composer, and emitter boundaries
 independently testable.
-
-## Performance and coverage policy
-
-`benchmark/run.lisp` generates nine deterministic corpus cases and measures
-the public `yaml-kit:parse-events`, `yaml-kit:parse`, and `yaml-kit:emit` paths.
-Each TSV row reports the case, operation, input size, throughput in MB/s, bytes
-consed, GC time, and a status. Timing uses
-`cl-weave:measure`; warmups and sample counts are controlled by
-`BENCH_WARMUP`, `BENCH_SAMPLES`, and `BENCH_ITERATIONS`. Case sizes are
-controlled by the `BENCH_*` variables in the script. The TSV is observational,
-not a CI timing gate: compare runs only with the same implementation, runtime,
-corpus settings, and machine conditions. Unsupported case/operation pairs are
-reported as `error` rows and do not suppress the remaining measurements.
-
-Coverage is collected by `scripts/run-coverage.lisp`, which forces compilation
-with SB-COVER instrumentation before invoking the suite entry point that the
-plain test run also reaches. `scripts/coverage-gate.lisp` reports per-file and
-aggregate expression and branch coverage. Coverage thresholds are quality
-gates.

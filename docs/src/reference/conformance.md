@@ -1,35 +1,14 @@
 # Conformance
 
-The following values were measured with the yaml-test-suite
-`data-2022-01-17` fixture using the conformance command in
-[Development](../project/development.md). The pinned fixture is also used by
-the repository's `nix flake check` gate.
+The conformance stages use the yaml-test-suite fixture pinned by `flake.nix`.
+Run them with the [test suite](../project/development/testing.md). They cover
+reader events, loaded values, emitted text, and dumper round trips; they do not
+establish full YAML 1.2.2 conformance.
 
-| Stage | Passed | Applicable | Skipped | Excluded |
-| --- | ---: | ---: | ---: | ---: |
-| Reader | 333 | 333 | 0 | 0 |
-| Loader isolated | 231 | 231 | 0 | 0 |
-| Loader end-to-end | 231 | 231 | 0 | 0 |
-| Emitter isolated | 31 | 31 | 0 | 0 |
-| Dumper end-to-end | 204 | 213 | 0 | 9 |
-
-These measurements are not a claim of full YAML 1.2.2 conformance. The
-Dumper end-to-end stage dumps the value represented by `in.json`, parses the
-result, and compares the resulting value with the input model. Its `out.yaml`
-file determines whether the fixture applies; it is not the semantic comparison
-target.
-
-The nine excluded Dumper cases contain non-scalar mapping keys. The loader
-reports `YAML composition; non-scalar mapping key`, so these inputs cannot be
-constructed in the library's value model and cannot be used for a dumper
-round-trip comparison:
-
-- `4fj6`: non-scalar mapping key cannot be represented in the value model.
-- `6bfj`: non-scalar mapping key cannot be represented in the value model.
-- `kk5p`: non-scalar mapping key cannot be represented in the value model.
-- `lx3p`: non-scalar mapping key cannot be represented in the value model.
-- `m5dy`: non-scalar mapping key cannot be represented in the value model.
-- `rzp5`: non-scalar mapping key cannot be represented in the value model.
-- `sbg9`: non-scalar mapping key cannot be represented in the value model.
-- `x38w`: non-scalar mapping key cannot be represented in the value model.
-- `xw4d`: non-scalar mapping key cannot be represented in the value model.
+The dumper end-to-end stage runs only when a fixture contains `out.yaml`; it
+does not read that file's contents. It loads values from `in.yaml`, emits and
+parses them, then compares the round trip with the loaded values. Some dumper
+cases with non-scalar mapping keys are explicitly excluded because the loader
+cannot construct the value model needed for round-trip comparison. The
+excluded case IDs are `4fj6`, `6bfj`, `kk5p`, `lx3p`, `m5dy`, `rzp5`, `sbg9`,
+`x38w`, and `xw4d`.
