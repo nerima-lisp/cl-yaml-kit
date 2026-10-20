@@ -130,15 +130,24 @@
               :to-equal 'yaml-kit:yaml-format-edit-structure-error)))
   (cl-weave:it-each
       ((fffe #xfffe)
-       (ffff #xffff))
-    "rejects YAML noncharacter U+~4,'0X in replacement strings"
+       (ffff #xffff)
+       (high-surrogate #xd800)
+       (low-surrogate #xdfff))
+    "rejects YAML non-scalar U+~4,'0X in replacement strings"
     (name code)
     (declare (ignore name))
-    (expect (format-edit-condition-type
-             (lambda ()
-               (yaml-kit:edit-source (format-edit-lf "value: old") '("value")
-                                     (string (code-char code)))))
-            :to-equal 'yaml-kit:yaml-format-edit-structure-error))
+    (let* ((path '("value"))
+           (condition
+             (format-edit-condition
+              (lambda ()
+                (yaml-kit:edit-source
+                 (format-edit-lf "value: old")
+                 path
+                 (string (code-char code)))))))
+      (expect (type-of condition)
+              :to-equal 'yaml-kit:yaml-format-edit-structure-error)
+      (expect (yaml-kit:yaml-format-edit-structure-error-path condition)
+              :to-equal path)))
   (it "converts invalid octets to a YAML parse condition"
     (let ((octets (coerce #(255 0 1) '(vector (unsigned-byte 8)))))
       (expect (format-edit-condition-type

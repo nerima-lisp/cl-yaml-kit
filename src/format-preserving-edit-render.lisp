@@ -57,23 +57,24 @@
           (subseq text start (1+ end))
           "")))
 
-  (defun %format-edit-check-printable-value (value)
+  (defun %format-edit-check-printable-value (value path)
     (when (and (stringp value)
                (find-if (lambda (character)
                           (let ((code (char-code character)))
-                            (and (not (yaml-printable-p character))
-                                 (<= #xfffe code #xffff))))
+                            (or (<= #xd800 code #xdfff)
+                                (<= #xfffe code #xffff))))
                         value))
       (%format-edit-structure-error
-       nil "U+FFFE and U+FFFF are not allowed in YAML scalar values"))))
+       path
+       "surrogate code points and U+FFFE/U+FFFF are not allowed in YAML scalar values"))))
 
-(defun %format-edit-fragment (value &optional flow-p)
+(defun %format-edit-fragment (value path &optional flow-p)
   (when (or (consp value)
             (yaml-mapping-p value)
             (and (arrayp value) (not (stringp value)))
             (hash-table-p value))
-    (%format-edit-structure-error nil "only scalar values can be set"))
-  (%format-edit-check-printable-value value)
+    (%format-edit-structure-error path "only scalar values can be set"))
+  (%format-edit-check-printable-value value path)
   (let ((fragment
           (%format-edit-trim-layout
            (emit value :default-flow-style :flow))))
@@ -158,7 +159,7 @@
   (values position
           (%format-edit-insertion-text
            text position newline indent
-           (concatenate 'simple-string (%format-edit-fragment component) ": ")
+           (concatenate 'simple-string (%format-edit-fragment component path) ": ")
            fragment)))
 
 (defun %format-edit-sequence-insertion
@@ -181,7 +182,7 @@
   (when (%format-edit-inline-sequence-node-p parent text)
     (%format-edit-structure-error path
                                   "adding to sequence-inline nodes is not supported"))
-  (let ((fragment (%format-edit-fragment value))
+  (let ((fragment (%format-edit-fragment value path))
         (newline (%format-edit-newline text))
         (indent (%format-edit-indent parent text))
         (position (%format-edit-insertion-position parent text)))

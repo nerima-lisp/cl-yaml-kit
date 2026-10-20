@@ -49,9 +49,9 @@
   (%format-edit-check-set-node text node path)
   (let ((replacement
           (%format-edit-fragment
-           value
-           (and parent
-                (eq (format-edit-node-style parent) :flow)))))
+            value path
+            (and parent
+                 (eq (format-edit-node-style parent) :flow)))))
     (%format-edit-finish
      (%format-edit-apply-replacement
       text (format-edit-node-start node) (format-edit-node-end node) replacement)
