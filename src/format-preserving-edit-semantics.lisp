@@ -80,25 +80,10 @@
     (:add
      (%format-edit-semantic-add-child value component replacement error-path))
     (:delete
-     (%format-edit-semantic-delete-child value component error-path))
-    (otherwise
-     (%format-edit-structure-error error-path
-                                   "unknown semantic edit operation"))))
+     (%format-edit-semantic-delete-child value component error-path))))
 
 (defun %format-edit-semantic-change-at
     (value path replacement operation error-path)
-  (when (null path)
-    (return-from %format-edit-semantic-change-at
-      (case operation
-        (:set replacement)
-        (:add
-         (%format-edit-structure-error error-path "cannot add at an empty path"))
-        (:delete
-         (%format-edit-structure-error error-path
-                                       "cannot delete at an empty path"))
-        (otherwise
-         (%format-edit-structure-error error-path
-                                       "unknown semantic edit operation")))))
   (if (null (cdr path))
       (%format-edit-semantic-change-child
        value (car path) replacement operation error-path)
@@ -110,17 +95,12 @@
            (case operation
              (:set "edited path is absent from the original value")
              (:add "an intermediate path component is absent")
-             (:delete "deleted path is absent")
-             (otherwise "unknown semantic edit operation"))))
+             (:delete "deleted path is absent"))))
         (%format-edit-semantic-replace-child
          value (car path)
          (%format-edit-semantic-change-at
           child (cdr path) replacement operation error-path)
          error-path))))
-
-(defun %format-edit-semantic-set-at (value path replacement error-path)
-  (%format-edit-semantic-change-at
-   value path replacement :set error-path))
 
 (defun %format-edit-semantic-sequence-add-child
     (container component child path)
@@ -151,10 +131,6 @@
      (%format-edit-structure-error path
                                    "semantic edit parent is not a collection"))))
 
-(defun %format-edit-semantic-add-at (value path replacement error-path)
-  (%format-edit-semantic-change-at
-   value path replacement :add error-path))
-
 (defun %format-edit-semantic-sequence-delete-child
     (container component path)
   (unless (%format-edit-sequence-index-p component (length container))
@@ -184,10 +160,6 @@
     (otherwise
      (%format-edit-structure-error path
                                    "semantic edit parent is not a collection"))))
-
-(defun %format-edit-semantic-delete-at (value path error-path)
-  (%format-edit-semantic-change-at
-   value path nil :delete error-path))
 
 (defun %format-edit-semantic-equal-p (left right)
   (cond
@@ -225,19 +197,19 @@
 
 (defun %format-edit-semantic-expected (original path value operation document)
   (let ((expected (mapcar #'%format-edit-semantic-copy original)))
-    (unless (and (integerp document) (<= 0 document) (< document (length expected)))
+    (unless (< document (length expected))
       (%format-edit-structure-error path "semantic edit document is absent"))
     (setf (nth document expected)
           (case operation
-            (:set (%format-edit-semantic-set-at
-                   (nth document expected) path value path))
-            (:delete (%format-edit-semantic-delete-at
-                      (nth document expected) path path))
+            (:set
+             (%format-edit-semantic-change-at
+              (nth document expected) path value :set path))
+            (:delete
+             (%format-edit-semantic-change-at
+              (nth document expected) path nil :delete path))
             (:add
-             (%format-edit-semantic-add-at
-              (nth document expected) path value path))
-            (otherwise
-             (%format-edit-structure-error path "unknown semantic edit operation"))))
+             (%format-edit-semantic-change-at
+              (nth document expected) path value :add path))))
     expected))
 
 (defun %format-edit-validate-semantics
