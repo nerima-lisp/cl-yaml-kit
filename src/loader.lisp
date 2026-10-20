@@ -43,9 +43,7 @@
 the YAML lexer. Offsets are zero-based character positions in the decoded input.
 START is inclusive and END is exclusive. Spans include the leading # and comment
 text, but exclude the line break."
-  (let* ((decoded-text (%parser-input-string input max-input-length))
-         (text (with-input-from-string (stream decoded-text)
-                 (%parser-input-string stream max-input-length)))
+  (let* ((text (%parser-input-string input max-input-length))
          (spans nil))
     (let ((*scanner-comment-sink* (lambda (span) (push span spans)))
           (scanner (make-scanner text)))
