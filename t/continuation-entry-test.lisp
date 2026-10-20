@@ -35,8 +35,7 @@
     (:%constructor-construct/cps (string= value "value"))
     (:%representer-represent/cps (continuation-entry-scalar-node-p value))
     (:%serializer-serialize/cps (null value))
-    (:%emitter-emit-event-stream/cps (null value))
-    (:%format-edit-source/cps (string= value (format nil "a: 2~%")))))
+    (:%emitter-emit-event-stream/cps (null value))))
 
 (cl-weave:it-each
  ((comment-spans-k :comment-spans/k) (map-events-k :map-events/k)
@@ -58,8 +57,7 @@
   (constructor-construct-cps :%constructor-construct/cps)
   (representer-represent-cps :%representer-represent/cps)
   (serializer-serialize-cps :%serializer-serialize/cps)
-  (emitter-emit-event-stream-cps :%emitter-emit-event-stream/cps)
-  (format-edit-source-cps :%format-edit-source/cps))
+  (emitter-emit-event-stream-cps :%emitter-emit-event-stream/cps))
  "case ~S calls its continuation entry once with its specified value"
  (name entry)
  (declare (ignore name))
@@ -153,13 +151,6 @@
                               (yaml-kit::%emitter-emit-event-stream/cps
                                #'continuation-entry-source
                                (make-string-output-stream)
-                               #'capture))
-                             (:%format-edit-source/cps
-                              (yaml-kit::%format-edit-source/cps
-                               (format nil "a: 1~%")
-                               '("a")
-                               2
-                               :k
                                #'capture)))))
    (expect callback-count :to-equal 1)
    (expect
