@@ -16,16 +16,11 @@
          (let ((,container ,container-value)
                (,kind ,container-kind))
            (case ,kind ,@clauses)))))
+  (declaim (inline %format-edit-sequence-index-p))
 
-  (defmacro %format-edit-sequence-index-p (index length &optional allow-end)
-    (let ((index-value (gensym "INDEX-"))
-          (length-value (gensym "LENGTH-"))
-          (allow-end-value (gensym "ALLOW-END-")))
-      `(let* ((,index-value ,index)
-              (,length-value ,length)
-              (,allow-end-value ,allow-end))
-         (and (integerp ,index-value)
-              (<= 0 ,index-value)
-              (if ,allow-end-value
-                  (= ,index-value ,length-value)
-                  (< ,index-value ,length-value)))))))
+  (defun %format-edit-sequence-index-p (index length &optional require-end-p)
+    (and (integerp index)
+         (<= 0 index)
+         (if require-end-p
+             (= index length)
+             (< index length)))))
