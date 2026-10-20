@@ -71,15 +71,15 @@
            (type string value))
   (%schema-resolve value (load-time-value (%schema-table :failsafe))))
 
-(defmacro define-schema-resolver (name schema)
-  `(defun ,name (value)
-     (declare (optimize (speed 3) (safety 1))
-              (type string value))
-     (%schema-resolve value (load-time-value (%schema-table ,schema)))))
+(defun %json-kind (value)
+  (declare (optimize (speed 3) (safety 1))
+           (type string value))
+  (%schema-resolve value (load-time-value (%schema-table :json))))
 
-(define-schema-resolver %failsafe-kind :failsafe)
-(define-schema-resolver %json-kind :json)
-(define-schema-resolver %core-kind :core)
+(defun %core-kind (value)
+  (declare (optimize (speed 3) (safety 1))
+           (type string value))
+  (%schema-resolve value (load-time-value (%schema-table :core))))
 
 (defun resolve-plain-scalar-tag (string schema)
   "Resolve plain STRING to its YAML tag under SCHEMA.
