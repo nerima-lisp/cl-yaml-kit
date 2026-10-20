@@ -1,8 +1,5 @@
 (in-package #:yaml-kit)
 
-(defparameter +default-tag-directives+
-  '(("!" . "!") ("!!" . "tag:yaml.org,2002:")))
-
 (defun parser-resource-error (parser name limit actual span)
   (declare (ignore parser))
   (error 'yaml-resource-limit-error :limit-name name :limit limit :actual actual :diagnostic (cl-parser-kit:make-diagnostic :message (format nil "~A limit ~S exceeded (actual ~S)" name limit actual) :span span)))
@@ -33,7 +30,7 @@
        (append-tag-directive parser (token-handle token) (token-value token)
                              nil (token-start-span token)))))
   (let ((span (token-start-span (parser-peek parser))))
-    (dolist (directive +default-tag-directives+)
+    (dolist (directive *default-tag-directives*)
       (append-tag-directive parser (car directive) (cdr directive) t span))
     saw-directive)))
 
