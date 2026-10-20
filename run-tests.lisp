@@ -1,5 +1,15 @@
 ;;;; run-tests.lisp
 (require :asdf)
+(let ((cache-directory
+        (uiop:ensure-directory-pathname
+         (merge-pathnames
+          (format nil "cl-yaml-kit/run-tests-asdf-~D/"
+                  (sb-unix:unix-getpid))
+          (uiop:temporary-directory)))))
+  (ensure-directories-exist cache-directory)
+  (let ((asdf:*user-cache* cache-directory))
+    (asdf:clear-output-translations)
+    (asdf:initialize-output-translations)))
 (defun script-directory ()
   (make-pathname :name nil :type nil
                  :defaults (or *load-truename* *compile-file-truename*
