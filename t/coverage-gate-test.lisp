@@ -219,9 +219,7 @@
                 (cl-yaml-kit/coverage-gate:gate-verdicts
                  (list statistics) nil
                  :expected-pathnames (list pathname #p"/virtual/missing.lisp")))
-              :to-throw
-              (lambda (condition)
-                (search "missing:" (princ-to-string condition))))))
+              :to-throw "missing:")))
 
   (it "fails when a source file was measured more than once"
     (let* ((pathname (asdf:system-relative-pathname
@@ -234,10 +232,7 @@
                 (cl-yaml-kit/coverage-gate:gate-verdicts
                  (list statistics duplicate) nil
                  :expected-pathnames (list pathname)))
-              :to-throw
-              (lambda (condition)
-                (search "Duplicate measured source files:"
-                        (princ-to-string condition))))))
+              :to-throw "Duplicate measured source files:")))
 
   (it "rejects fake 50 percent expression and 10 percent branch coverage"
     (multiple-value-bind (output exit-code status)
