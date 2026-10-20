@@ -2,26 +2,32 @@
 (in-package #:cl-yaml-kit/test)
 (defparameter *invalid-node-slot-value* -1)
 
-(it "expands define-node into a structure definition"
-  (let ((expansion (macroexpand-1
-                    '(yaml-kit::define-node probe-node-contract () "probe"))))
-    (expect (consp expansion) :to-be-truthy)
-    (expect (member (car expansion) '(progn yaml-kit::define-yaml-subtype)) :to-be-truthy))
-  (let* ((name (eval '(yaml-kit::define-node probe-node-contract-eval ((value nil)) "probe")))
-         (find-function
-           (lambda (format-control)
-             (let ((name (format nil format-control name)))
-               (block found
-                 (do-all-symbols (symbol)
-                   (when (and (string= (symbol-name symbol) name)
-                              (fboundp symbol))
-                     (return-from found symbol)))))))
-         (constructor (funcall find-function "MAKE-~A"))
-         (predicate (funcall find-function "~A-P"))
-         (accessor (funcall find-function "~A-VALUE"))
-         (value (funcall (symbol-function constructor) :value 42)))
-    (expect (funcall (symbol-function predicate) value) :to-be-truthy)
-    (expect (funcall (symbol-function accessor) value) :to-equal 42)))
+(progn
+  (it "expands define-node into a structure definition"
+    (let ((expansion (macroexpand-1
+                      '(yaml-kit::define-node probe-node-contract () "probe"))))
+      (expect (consp expansion) :to-be-truthy)
+      (expect (member (car expansion)
+                      '(progn yaml-kit::define-yaml-subtype))
+              :to-be-truthy)))
+  (it "evaluates define-node into a constructor and accessor"
+    (let* ((name
+             (eval '(yaml-kit::define-node
+                     probe-node-contract-eval ((value nil)) "probe")))
+           (find-function
+             (lambda (format-control)
+               (let ((name (format nil format-control name)))
+                 (block found
+                   (do-all-symbols (symbol)
+                     (when (and (string= (symbol-name symbol) name)
+                                (fboundp symbol))
+                       (return-from found symbol)))))))
+           (constructor (funcall find-function "MAKE-~A"))
+           (predicate (funcall find-function "~A-P"))
+           (accessor (funcall find-function "~A-VALUE"))
+           (value (funcall (symbol-function constructor) :value 42)))
+      (expect (funcall (symbol-function predicate) value) :to-be-truthy)
+      (expect (funcall (symbol-function accessor) value) :to-equal 42))))
 (defmacro define-node-contract-tests (name constructor predicate accessors arguments)
   (let ((keys (mapcar (lambda (accessor)
                         (loop for key in arguments by #'cddr
@@ -31,15 +37,19 @@
                                                 :from-end t))
                                 do (return key)))
                       accessors)))
-    `(it ,(format nil "constructs ~A" name)
-       (let ((value (,constructor ,@arguments)))
-         (expect (,predicate value) :to-be-truthy)
-         (expect (typep value ',name) :to-be-truthy)
-         ,@(mapcar (lambda (accessor key)
-                     `(expect (contract-value-equal-p (,accessor value)
-                                     (getf (list ,@arguments) ,key))
-                              :to-be-truthy))
-                   accessors keys)))))
+    `(progn
+       (it ,(format nil "constructs ~A" name)
+         (let ((value (,constructor ,@arguments)))
+           (expect (,predicate value) :to-be-truthy)
+           (expect (typep value ',name) :to-be-truthy)))
+       ,@(mapcar (lambda (accessor key)
+                   `(it ,(format nil "sets ~A via ~A" name accessor)
+                        (let ((value (,constructor ,@arguments)))
+                          (expect (contract-value-equal-p
+                                   (,accessor value)
+                                   (getf (list ,@arguments) ,key))
+                                  :to-be-truthy))))
+                 accessors keys))))
 
 (define-node-contract-tests yaml-kit:scalar-node yaml-kit:make-scalar-node yaml-kit:scalar-node-p
   (yaml-kit:node-tag yaml-kit:node-anchor yaml-kit:node-style
