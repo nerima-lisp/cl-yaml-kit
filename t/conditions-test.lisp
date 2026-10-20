@@ -17,7 +17,7 @@
                       :diagnostic (test-diagnostic
                                    "parse detail" (test-point-span 4 5 6))
                       :context "context")
-      (list #'yaml-kit:yaml-parse-error-context)
+      (list (cons #'yaml-kit:yaml-parse-error-context "context"))
       '("parse detail")))
     (:yaml-compose-error
      (values
@@ -25,8 +25,8 @@
                       :diagnostic (test-diagnostic
                                    "compose detail" (test-point-span 7 8 9))
                       :context "compose" :cause "cause")
-      (list #'yaml-kit:yaml-compose-error-context
-            #'yaml-kit:yaml-compose-error-cause)
+      (list (cons #'yaml-kit:yaml-compose-error-context "compose")
+            (cons #'yaml-kit:yaml-compose-error-cause "cause"))
       '("compose detail")))
     (:yaml-emit-error
      (values
@@ -34,8 +34,8 @@
                       :diagnostic (test-diagnostic
                                    "emit detail" (test-point-span 10 11 12))
                       :context "emit" :cause "cause")
-      (list #'yaml-kit:yaml-emit-error-context
-            #'yaml-kit:yaml-emit-error-cause)
+      (list (cons #'yaml-kit:yaml-emit-error-context "emit")
+            (cons #'yaml-kit:yaml-emit-error-cause "cause"))
       '("emit detail")))
     (:yaml-resource-limit-error
      (values
@@ -43,34 +43,34 @@
                       :diagnostic (test-diagnostic
                                    "resource detail" (test-point-span 13 14 15))
                       :limit-name "depth" :limit 3 :actual 4 :context "resource")
-      (list #'yaml-kit::yaml-resource-limit-error-limit-name
-            #'yaml-kit::yaml-resource-limit-error-limit
-            #'yaml-kit::yaml-resource-limit-error-actual
-            #'yaml-kit::yaml-resource-limit-error-context)
+      (list (cons #'yaml-kit::yaml-resource-limit-error-limit-name "depth")
+            (cons #'yaml-kit::yaml-resource-limit-error-limit 3)
+            (cons #'yaml-kit::yaml-resource-limit-error-actual 4)
+            (cons #'yaml-kit::yaml-resource-limit-error-context "resource"))
       '("resource detail")))
     (:yaml-format-edit-path-error
      (values
       (make-condition 'yaml-kit:yaml-format-edit-path-error
                       :diagnostic (test-diagnostic "path detail")
                       :path '("a") :document 1 :operation :delete)
-      (list #'yaml-kit:yaml-format-edit-path-error-path
-            #'yaml-kit:yaml-format-edit-path-error-document
-            #'yaml-kit:yaml-format-edit-path-error-operation)
+      (list (cons #'yaml-kit:yaml-format-edit-path-error-path '("a"))
+            (cons #'yaml-kit:yaml-format-edit-path-error-document 1)
+            (cons #'yaml-kit:yaml-format-edit-path-error-operation :delete))
       '("path detail")))
     (:yaml-format-edit-structure-error
      (values
       (make-condition 'yaml-kit:yaml-format-edit-structure-error
                       :diagnostic (test-diagnostic "structure detail")
                       :path '("a" 0))
-      (list #'yaml-kit:yaml-format-edit-structure-error-path)
+      (list (cons #'yaml-kit:yaml-format-edit-structure-error-path '("a" 0)))
       '("structure detail")))
     (:yaml-format-edit-anchor-error
      (values
       (make-condition 'yaml-kit:yaml-format-edit-anchor-error
                       :diagnostic (test-diagnostic "anchor detail")
                       :path '("a") :anchor "base")
-      (list #'yaml-kit:yaml-format-edit-anchor-error-path
-            #'yaml-kit:yaml-format-edit-anchor-error-anchor)
+      (list (cons #'yaml-kit:yaml-format-edit-anchor-error-path '("a"))
+            (cons #'yaml-kit:yaml-format-edit-anchor-error-anchor "base"))
       '("anchor detail")))))
 
 (describe "condition contract"
@@ -186,7 +186,9 @@
                      (string= report (cl-parser-kit:diagnostic->string diagnostic))
                      (every (lambda (value) (search value report)) expected))
                 :to-be-truthy)
-        (expect (every (lambda (accessor) (funcall accessor condition))
+        (expect (every (lambda (accessor-expectation)
+                         (equal (funcall (car accessor-expectation) condition)
+                                (cdr accessor-expectation)))
                        accessors)
                 :to-be-truthy)))))
 
