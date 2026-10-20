@@ -23,7 +23,7 @@
                (:file "resource-data")
                (:file "events") (:file "nodes") (:file "conditions")
                (:file "char-classes") (:file "tokens")
-               (:file "scanner-data") (:file "scanner-state")
+               (:file "scanner-data") (:file "scanner-state") (:file "scanner-macros")
                (:file "scanner-directives")
                (:file "scanner-directive-uri")
                (:file "scanner-block-scalars") (:file "scanner-flow-scalars")

@@ -23,8 +23,7 @@
 (defun %reserved-directive-result (s start)
   (cond
     ((sc-check s #\%) nil)
-    ((and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2)
-          (sc-blankz-p s 3))
+    ((%scanner-document-indicator-p s +scanner-document-start-indicator+)
      (let ((document-start (sc-position s)))
        (dotimes (i 3) (sc-skip s))
        (make-scanner-token s :document-start document-start (sc-position s))))
@@ -159,16 +158,21 @@
 (defun scan-tag-uri (s uri-char directive head start)
   (let ((b (make-scan-buffer)) (length (if head (length head) 0)))
     (when head (loop for i from 1 below (length head) do (vector-push-extend (char head i) b)))
-    (loop while (or (sc-alpha-p s) (find (sc-char s) ";/?:@&=+$.!~*'()%_" :test #'char=)
-                    (and uri-char (find (sc-char s) ",[]" :test #'char=))) do
-      (if (and (sc-check s #\%) (sc-hex-p s 1) (sc-hex-p s 2)
-               (< (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2)) #x80))
-          (progn
-            (vector-push-extend
-             (code-char (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2))) b)
-            (dotimes (i 3) (sc-skip s)))
-          (if (sc-check s #\%) (scan-uri-escapes s directive start b) (sc-read s b)))
-      (incf length))
-    (when (zerop length) (sc-error s (if directive "while parsing a %TAG directive"
-                                        "while parsing a tag") start "did not find expected tag URI"))
+    (loop while (or (sc-alpha-p s)
+                    (find (sc-char s) *scanner-uri-reserved-characters* :test #'char=)
+                    (and uri-char
+                         (find (sc-char s) *scanner-uri-flow-characters* :test #'char=)))
+          do (if (and (sc-check s #\%) (sc-hex-p s 1) (sc-hex-p s 2)
+                      (< (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2)) #x80))
+                 (progn
+                   (vector-push-extend
+                    (code-char (+ (* 16 (sc-hex-value s 1)) (sc-hex-value s 2))) b)
+                   (dotimes (i 3) (sc-skip s)))
+                 (if (sc-check s #\%) (scan-uri-escapes s directive start b)
+                     (sc-read s b)))
+          do (incf length))
+    (when (zerop length)
+      (sc-error s (if directive "while parsing a %TAG directive"
+                      "while parsing a tag")
+                start "did not find expected tag URI"))
     (scan-buffer-string b)))

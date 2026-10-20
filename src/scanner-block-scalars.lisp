@@ -12,16 +12,15 @@
                        (sc-space-p s)) do (sc-skip s))
       (let ((column (scanner-column s)))
         (when (> column max-indent) (setf max-indent column))
-        ;; YAML 1.2.2 permits a tab in detected content indentation after
-        ;; the content column is known; only an explicit lower indentation
-        ;; makes a tab an indentation error.
+        ;; YAML 1.2.2 allows tabs once scalar content begins. A tab before
+        ;; the content column is an indentation error.
         (when (and (< column (car indent))
                    (sc-tab-p s))
           (sc-error s "while scanning a block scalar" start-position
                     "found a tab character where an indentation space is expected"))
         (unless (sc-break-p s)
-          ;; The content indentation is the one the first non-empty line uses,
-          ;; so a leading empty line indented further does not belong to it.
+          ;; Use the first non-empty line to detect content indentation. A
+          ;; preceding blank line cannot increase it.
           (when (and (zerop (car indent)) (> max-indent column))
             (sc-error s "while scanning a block scalar" start-position
                       "found a leading empty line indented more than the content"))
@@ -73,9 +72,10 @@
     (scan-block-scalar-breaks s indent-cell trailing-breaks start-position end-cell)
     (loop while (and (= (scanner-column s) (car indent-cell)) (not (sc-z-p s))) do
       (when (and (zerop (scanner-column s))
-                 (or (and (sc-check s #\-) (sc-check s #\- 1) (sc-check s #\- 2))
-                     (and (sc-check s #\.) (sc-check s #\. 1) (sc-check s #\. 2)))
-                 (sc-blankz-p s 3))
+                 (or (%scanner-document-indicator-p
+                      s +scanner-document-start-indicator+)
+                     (%scanner-document-indicator-p
+                      s +scanner-document-end-indicator+)))
         (return))
       (let ((trailing-blank (sc-blank-p s)))
         (if (and (not literal-p) (plusp (fill-pointer leading-break))
