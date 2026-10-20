@@ -118,10 +118,10 @@
     (%fetch-character-token s :value)))
 
 (defun fetch-anchor (s kind)
-  (%fetch-scanned-token (s s) (scan-anchor s kind)))
+  (%fetch-scanned-token s (scan-anchor s kind)))
 
 (defun fetch-tag (s)
-  (%fetch-scanned-token (s s) (scan-tag s)))
+  (%fetch-scanned-token s (scan-tag s)))
 
 (defun fetch-block-scalar (s literal-p)
   (remove-simple-key s)
@@ -129,7 +129,7 @@
   (enqueue-token s (scan-block-scalar s literal-p)))
 
 (defun fetch-flow-scalar (s single-p)
-  (%fetch-scanned-token (s s) (scan-flow-scalar s single-p)))
+  (%fetch-scanned-token s (scan-flow-scalar s single-p)))
 
 (defun fetch-plain-scalar (s)
-  (%fetch-scanned-token (s s) (scan-plain-scalar s)))
+  (%fetch-scanned-token s (scan-plain-scalar s)))

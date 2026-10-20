@@ -14,15 +14,12 @@
         (make-scanner-token ,scanner-var ,kind-var ,start-var
                             (sc-position ,scanner-var))))))
 
-(defmacro %fetch-scanned-token ((scanner scanner-form) token-form)
-  (unless (symbolp scanner)
-    (error "Scanner binding must be a symbol: ~S" scanner))
+(defmacro %fetch-scanned-token (scanner token-form)
   (let ((scanner-var (gensym "SCANNER-")))
-    `(let ((,scanner-var ,scanner-form))
-       (let ((,scanner ,scanner-var))
-         (save-simple-key ,scanner)
-         (setf (scanner-simple-key-allowed ,scanner) nil)
-         (enqueue-token ,scanner ,token-form)))))
+    `(let ((,scanner-var ,scanner))
+       (save-simple-key ,scanner-var)
+       (setf (scanner-simple-key-allowed ,scanner-var) nil)
+       (enqueue-token ,scanner-var ,token-form))))
 
 (defmacro %unroll-indent-and-remove-simple-key (scanner)
   (let ((scanner-var (gensym "SCANNER-")))
@@ -47,21 +44,11 @@
             (,start-var ,start))
        (handler-case
            (progn ,@body)
-         (cl-codec-kit:invalid-leading-byte ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))
-         (cl-codec-kit:invalid-continuation-byte ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))
-         (cl-codec-kit:overlong-sequence ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))
-         (cl-codec-kit:surrogate-code-point ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))
-         (cl-codec-kit:code-point-too-large ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))
-         (cl-codec-kit:truncated-sequence ()
-           (sc-error ,scanner-var "while parsing a tag" ,start-var
-                     "invalid UTF-8 URI escape"))))))
+         ((or cl-codec-kit:invalid-leading-byte
+              cl-codec-kit:invalid-continuation-byte
+              cl-codec-kit:overlong-sequence
+              cl-codec-kit:surrogate-code-point
+              cl-codec-kit:code-point-too-large
+              cl-codec-kit:truncated-sequence) ()
+          (sc-error ,scanner-var "while parsing a tag" ,start-var
+                    "invalid UTF-8 URI escape"))))))
