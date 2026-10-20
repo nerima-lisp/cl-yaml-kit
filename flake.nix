@@ -13,6 +13,7 @@
     cl-regex-kit = {
       url = "github:nerima-lisp/cl-regex-kit/v2.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.cl-parser-kit.follows = "cl-parser-kit";
     };
     cl-codec-kit = {
       url = "github:nerima-lisp/cl-codec-kit/v0.6.0";
