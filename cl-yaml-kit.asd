@@ -91,6 +91,7 @@
                (:file "scanner-fetch-test")
                (:file "parser-test")
                (:file "parser-state-test")
+               (:file "composer-test")
                (:file "loader-contract-helpers-test")
                (:file "loader-test")
                (:file "loader-schema-test")
