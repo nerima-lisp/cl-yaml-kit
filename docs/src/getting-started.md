@@ -3,26 +3,27 @@
 ## Load the system
 
 Make the repository and its dependencies visible to ASDF, then load the
-system:
+system. See [Development](project/development.md) for Nix and manual setup
+instructions.
 
 ```lisp
 (asdf:load-system "cl-yaml-kit")
 ```
 
-The runtime dependencies are `cl-regex-kit` and `cl-codec-kit`. The test system
-additionally depends on `cl-weave` and `cl-json-kit`.
+The runtime dependencies are `cl-regex-kit`, `cl-parser-kit`, and
+`cl-codec-kit`. The test system additionally depends on `cl-weave`,
+`cl-prolog-kit/weave`, and `cl-json-kit`.
 
 ## Parse values
 
 `parse` reads the first YAML document. Mappings default to hash tables and
-sequences to vectors. The Core schema resolves plain `null`, booleans,
-integers, and floats; use `:schema :json` or `:schema :failsafe` to select the
-other implemented schemas.
+sequences to vectors. It accepts a string, an octet vector, or a character
+stream; the examples here use strings. The Core schema resolves plain `null`,
+booleans, integers, and floats; use `:schema :json` or `:schema :failsafe` to
+select the other implemented schemas.
 
 ```lisp
-(let* ((text (format nil "name: Ada~%roles: [admin, reviewer]"))
-       (input (make-array (length text) :element-type 'character
-                          :initial-contents text))
+(let* ((input (format nil "name: Ada~%roles: [admin, reviewer]"))
        (value (yaml-kit:parse input)))
   (list (gethash "name" value)
         (coerce (gethash "roles" value) 'list)))
@@ -32,10 +33,7 @@ other implemented schemas.
 `parse-all` returns a list containing one value for each document:
 
 ```lisp
-(let* ((text (format nil "--- one~%--- two~%"))
-       (input (make-array (length text) :element-type 'character
-                          :initial-contents text)))
-  (yaml-kit:parse-all input))
+(yaml-kit:parse-all (format nil "--- one~%--- two~%"))
 ;; => ("one" "two")
 ```
 
@@ -46,9 +44,10 @@ accepts `:first` or `:last`.
 
 ## Emit values
 
-`emit` returns YAML text. Proper lists and vectors become sequences; hash tables
-and `yaml-mapping` values become mappings. `write-yaml` writes the same output
-to an existing stream and returns the original value.
+`emit` returns YAML text. Proper lists and non-string vectors become sequences;
+hash tables and `yaml-mapping` values become mappings. Strings become YAML
+scalars. `write-yaml` writes the same output to an existing stream and returns
+the original value.
 
 ```lisp
 (yaml-kit:emit #(1 2 3))
@@ -74,17 +73,10 @@ Test them with `yaml-null-p` and `yaml-false-p`.
 event list.
 
 ```lisp
-(let ((text "answer: 42"))
-  (length (yaml-kit:parse-events
-           (make-array (length text) :element-type 'character
-                       :initial-contents text))))
+(length (yaml-kit:parse-events "answer: 42"))
 ;; => 8
 
-(let ((text "answer: 42"))
-  (yaml-kit:emit-events
-   (yaml-kit:parse-events
-    (make-array (length text) :element-type 'character
-                :initial-contents text))))
+(yaml-kit:emit-events (yaml-kit:parse-events "answer: 42"))
 ;; =>
 ;; %TAG !! tag:yaml.org,2002:
 ;; %TAG ! !
@@ -92,11 +84,15 @@ event list.
 ;; answer: 42
 ```
 
+The parsed document-start event includes the default `!!` and `!` tag
+directives, so `emit-events` writes them before the document.
+
 ## Handle errors
 
 Malformed input signals `yaml-parse-error`; representation-graph failures
 signal `yaml-compose-error`; unsupported output signals `yaml-emit-error`.
 Resource exhaustion signals `yaml-resource-limit-error`. These conditions
-inherit from `yaml-kit-error`; the readers exported for individual conditions
-expose structured details. See
+inherit from `yaml-kit-error`. Use `yaml-kit-error-diagnostic` to inspect the
+message and optional span; resource-limit details are available in the
+diagnostic data. See
 [Conditions](reference/conditions.md).

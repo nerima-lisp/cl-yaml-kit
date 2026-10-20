@@ -9,8 +9,9 @@ default options and resource limits.
 ## YAML-to-Lisp value mapping
 
 The following table describes the constructed values for the standard YAML
-tags. A quoted scalar is always a string; implicit typing applies to plain
-scalars according to the selected schema.
+tags. A quoted scalar remains a string unless a compatible explicit scalar tag
+specifies another type; implicit typing applies to plain scalars according to
+the selected schema.
 
 | YAML value | Common Lisp value |
 | --- | --- |
@@ -34,7 +35,7 @@ becomes a vector containing `+yaml-null+`, `+yaml-false+`, `t`, the integer
 
 | Option | Result and key behavior |
 | --- | --- |
-| `:hash-table` (default) | An `equal` hash table. Keys must be scalar Lisp values, strings, or other values accepted by this representation; conses, non-string vectors, and `yaml-mapping` values are rejected with `yaml-compose-error`. |
+| `:hash-table` (default) | An `equal` hash table. Construction signals `yaml-compose-error` for keys that are conses, non-string vectors, or `yaml-mapping` values; other constructed keys are used as hash-table keys. |
 | `:alist` | A proper alist of `(key . value)` pairs in input order. Keys may be non-scalar, and duplicate detection uses `equal`. |
 | `:yaml-mapping` | An ordered `yaml-mapping` whose entries are `(key . value)` pairs. Entries, including duplicate keys and non-scalar keys, are preserved in input order. |
 
@@ -52,13 +53,6 @@ For hash tables and alists, duplicate keys are compared with `equal`:
 `:yaml-mapping` preserves every entry and does not apply this duplicate-key
 filtering. Consequently, use `:hash-table` or `:alist` when duplicate-key
 rejection or first/last selection is required.
-
-Non-scalar keys are therefore representation-dependent. They are valid in the
-composed YAML graph and are accepted by `:alist` and `:yaml-mapping`, but the
-`:hash-table` constructor rejects a cons, a non-string vector, or a
-`yaml-mapping` key with `yaml-compose-error`. This explicit rejection avoids
-silently choosing a structural equality policy for keys that an `equal` hash
-table cannot represent as intended.
 
 ## Schema and implicit scalar typing
 
@@ -81,7 +75,8 @@ scalar tag signals `yaml-compose-error`.
 The default limits and the entry points that use them are listed in the [API
 reference](../reference/api.md). A limit can be changed by passing its keyword
 to the relevant entry point; exceeding one signals
-`yaml-resource-limit-error`. Limits are checked while composing, before the
-representation graph is constructed into final Lisp values. Aliases reuse
-nodes but still count toward the alias-reference and node limits when
-encountered.
+`yaml-resource-limit-error`. Limits are enforced at the parser or composer
+stage listed in the reference. The raw-input length limit is checked before
+decoding. Composer limits are checked before constructing final Lisp values.
+Aliases reuse nodes but still count toward the alias-reference and node
+limits when encountered.
